@@ -7,7 +7,7 @@
 //     With both selected, games also narrow to those where each selected player held one of the types.
 //     With only characters selected, the seats are whoever held those characters.
 
-import { playerKey } from './stats.js';
+import { playerKey, displayName } from './stats.js';
 
 export const TYPES = ['townsfolk', 'outsider', 'minion', 'demon', 'traveller'];
 const rate = (w, n) => (n ? w / n : null);
@@ -77,9 +77,9 @@ export function seatStats(seats) {
     tally(byChar, p.roleId, () => ({ roleId: p.roleId, name: p.roleName, team: p.team, plays: 0, wins: 0 }), p.won);
     const key = playerKey(p);
     if (key) {
-      const r = tally(byPlayer, key, () => ({ key, name: p.username || key, plays: 0, wins: 0, survived: 0 }), p.won);
+      const r = tally(byPlayer, key, () => ({ key, name: displayName(key, p.username), plays: 0, wins: 0, survived: 0 }), p.won);
       if (p.survived) r.survived++;
-      if (p.username) r.name = p.username;
+      r.name = displayName(key, p.username || r.name);
     }
     tally(byScript, g.script.name || 'Unknown script', () => ({ key: g.script.name || 'Unknown script', plays: 0, wins: 0 }), p.won);
     if (g.community) tally(byCommunity, g.community, () => ({ key: g.community, plays: 0, wins: 0 }), p.won);
@@ -157,10 +157,9 @@ export function relations(games, key, minGames = 3) {
     for (const o of g.players) {
       const k = playerKey(o);
       if (!k || k === key || !o.alignment) continue;
-      const r = m.get(k) || { key: k, name: o.username || k, together: 0, same: 0, sameWins: 0, opposite: 0, oppositeWins: 0 };
+      const r = m.get(k) || { key: k, name: displayName(k, o.username), together: 0, same: 0, sameWins: 0, opposite: 0, oppositeWins: 0 };
       r.together++;
       if (o.alignment === me.alignment) { r.same++; if (me.won) r.sameWins++; } else { r.opposite++; if (me.won) r.oppositeWins++; }
-      if (o.username) r.name = o.username;
       m.set(k, r);
     }
   }

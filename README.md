@@ -129,6 +129,7 @@ Clockwise can send every recorded game to one shared place, so everyone sees the
 
 ## Good to know
 
+- **Renamed players:** people often change their botc.app name (sometimes as a joke for one game). Their account stays the same, so their games are always counted together. Everywhere in the stats they're shown under the name they've used most, as a player or storyteller, ignoring names made only of invisible characters. A game's grimoire still shows the name they used in that game.
 - **Where data lives:** games are kept in your browser's extension storage and, when sharing is set up, uploaded to your community's shared Google Sheet. Removing the extension deletes the copy in your browser, so export a JSON backup first if sharing isn't set up.
 - **Starting characters** (e.g. before a Snake Charmer or Pit-Hag swap) are only fully known to the storyteller. As a player, you only get your own starting character.
 - **Hidden votes** (e.g. Organ Grinder) are recorded as "hidden".

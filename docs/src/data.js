@@ -89,7 +89,8 @@ export function mergeGames(local, cache) {
   const deleted = new Set((cache && cache.deleted) || []);
   const out = { ...shared };
   for (const g of Object.values(local || {})) {
-    if (!out[g.id] && !deleted.has(g.id)) out[g.id] = { ...g, pending: !g.syncedAt && !g.id.startsWith('sample-') };
+    // `local`: only in this browser (so editable here without an editor key); `pending`: waiting to upload.
+    if (!out[g.id] && !deleted.has(g.id)) out[g.id] = { ...g, local: true, pending: !g.syncedAt && !g.id.startsWith('sample-') };
   }
   return out;
 }

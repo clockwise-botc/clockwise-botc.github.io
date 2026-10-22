@@ -4,13 +4,50 @@ export const TEAM_ORDER = ['townsfolk', 'outsider', 'minion', 'demon', 'travelle
 const rate = (wins, n) => (n ? wins / n : null);
 export const playerKey = (p) => p.userId || (p.username ? `name:${p.username.toLowerCase()}` : null);
 
+// ---------- names ----------
+// People rename themselves on botc.app (often as a joke for one game), but their account stays the same, so their
+// games are already counted together. Each account is shown under the name it has used most, as a player or a
+// storyteller. Names made only of invisible characters don't count; a tie goes to the most recent game.
+const INVISIBLE = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFEFF\uFFA0]/g;
+export const cleanName = (name) => String(name || '').replace(INVISIBLE, '').trim();
+
+export function displayNames(games) {
+  const counts = new Map(); // key → Map(name → { n, last })
+  for (const g of games) {
+    for (const p of [...(g.players || []), ...(g.storytellers || [])]) {
+      const key = playerKey(p);
+      const name = cleanName(p.username);
+      if (!key || !name) continue;
+      const m = counts.get(key) || new Map();
+      const c = m.get(name) || { n: 0, last: 0 };
+      c.n++;
+      c.last = Math.max(c.last, g.endedAt || 0);
+      m.set(name, c);
+      counts.set(key, m);
+    }
+  }
+  const out = new Map();
+  for (const [key, m] of counts) {
+    const [best] = [...m].sort((a, b) => b[1].n - a[1].n || b[1].last - a[1].last);
+    out.set(key, best[0]);
+  }
+  return out;
+}
+
+// The names the dashboard is currently using (set from all recorded games), for code that only sees some of them.
+let NAMES = null;
+export function useDisplayNames(map) { NAMES = map; }
+export const displayName = (key, fallback) => (NAMES && NAMES.get(key)) || cleanName(fallback) || fallback || key;
+// Everyone who storytold a game, as account keys.
+export const storytellerKeys = (g) => (g.storytellers || []).map(playerKey).filter(Boolean);
+
 export function filterGames(all, f = {}) {
   const since = f.days ? Date.now() - f.days * 864e5 : 0;
   return all
     .filter((g) => (f.includeExcluded || !g.excluded)
       && (!(f.communities && f.communities.length) || f.communities.includes(g.community))
       && (!f.script || g.script.name === f.script)
-      && (!f.storyteller || g.storytellers.some((s) => s.username === f.storyteller))
+      && (!f.storyteller || storytellerKeys(g).includes(f.storyteller))
       && (!f.player || g.players.some((p) => playerKey(p) === f.player))
       && (g.endedAt || 0) >= since)
     .sort((a, b) => b.endedAt - a.endedAt);
@@ -42,7 +79,10 @@ export function overview(games) {
     byCommunity: splitBy(games, (g) => g.community || null).sort((a, b) => b.games - a.games),
     byScript: splitBy(games, (g) => g.script.name || 'Unknown script').sort((a, b) => b.games - a.games),
     byPlayerCount: splitBy(games, (g) => g.playerCount).sort((a, b) => a.key - b.key),
-    byStoryteller: splitBy(games, (g) => g.storytellers.map((s) => s.username).filter(Boolean).join(' & ') || null).sort((a, b) => b.games - a.games),
+    // Grouped by account; `name` is how to show them (co-storytellers joined with "&").
+    byStoryteller: splitBy(games, (g) => storytellerKeys(g).join('|') || null)
+      .map((r) => ({ ...r, name: r.key.split('|').map((k) => displayName(k, (games.flatMap((g) => g.storytellers).find((s) => playerKey(s) === k) || {}).username)).join(' & ') }))
+      .sort((a, b) => b.games - a.games),
   };
 }
 
@@ -96,7 +136,8 @@ export function players(games) {
       const key = playerKey(p);
       if (!key) continue;
       const r = get(key, p.username || key);
-      if (g.endedAt >= r.lastPlayed) { r.lastPlayed = g.endedAt; if (p.username) r.name = p.username; }
+      if (g.endedAt >= r.lastPlayed) r.lastPlayed = g.endedAt;
+      r.name = displayName(key, p.username || r.name);
       r.games++;
       if (p.won) r.wins++;
       if (p.survived) r.survived++;
@@ -121,7 +162,7 @@ export function players(games) {
       }
     }
     for (const s of g.storytellers) {
-      const key = s.userId || (s.username ? `name:${s.username.toLowerCase()}` : null);
+      const key = playerKey(s);
       if (key) get(key, s.username || key).storytold++;
     }
   }

@@ -1,4 +1,4 @@
-import { filterGames, overview, distinct, playerKey } from './stats.js';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js';
 import { predictOutcome, tuneOutcomeModel } from './insights.js';
 import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable } from './insights.js';
 import { communityConfig, communityName, gameCommunity, NONE } from './communities.js';
@@ -67,7 +67,8 @@ function writeHash() {
 }
 
 // ---------- lookups ----------
-let playerNames = new Map();
+let playerNames = new Map(); // account → the name shown (their most-used), for players and storytellers
+let playerKeys = new Set(); // accounts that have played (not only storytold)
 let images = makeImages(null);
 let artAsked = false;
 let roleMeta = {}; // per character: [first night, other nights, reminders, setup, edition], from botc.app
@@ -127,11 +128,10 @@ function frequencyCard(title, sub, rows, linkFn) {
 function storytellerTable(games) {
   const m = new Map();
   for (const g of games) for (const s of g.storytellers) {
-    const key = s.userId || (s.username ? `name:${s.username.toLowerCase()}` : null);
+    const key = playerKey(s);
     if (!key) continue;
-    const r = m.get(key) || { key, name: s.username || key, games: 0 };
+    const r = m.get(key) || { key, name: nameOf(key), games: 0 };
     r.games++;
-    if (s.username) r.name = s.username;
     m.set(key, r);
   }
   return [...m.values()].sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
@@ -162,7 +162,7 @@ function swingCards(base, what, keep = () => true) {
 // Games by other storytellers under the same filters (script, community, period).
 function otherStorytellerGames(st) {
   return filterGames(state.games, { ...state.filters, storyteller: '', days: Number(state.filters.days) || 0 })
-    .filter((g) => !g.storytellers.some((s) => s.username === st));
+    .filter((g) => !storytellerKeys(g).includes(st));
 }
 
 function storytellerCompareCard(st, mine, others) {
@@ -245,10 +245,10 @@ function overallSections(base) {
     ${balanceCard(o)}
     ${playerCountCard(base)}
     ${frequencyCard('Most frequent players', 'Who has played the most games. Click a name to see their stats.', frequent, (r) => playerLink(r.key, r.name))}
-    ${st ? storytellerCompareCard(st, base, others) : frequencyCard('Most frequent storytellers', 'Who has run the most games.', sts, (r) => (playerNames.has(r.key) ? playerLink(r.key, r.name) : esc(r.name)))}
+    ${st ? storytellerCompareCard(nameOf(st), base, others) : frequencyCard('Most frequent storytellers', 'Who has run the most games.', sts, (r) => (playerKeys.has(r.key) ? playerLink(r.key, r.name) : esc(r.name)))}
     ${card('Who wins, by script', '', legendGE() + splitBars(o.byScript, (r) => esc(r.key)))}
     ${card('Who wins, by player count', '', legendGE() + splitBars(o.byPlayerCount, (r) => `${r.key} players`))}
-    ${st ? storytellerCharactersCard(st, base, others) : card('Who wins, by storyteller', '', legendGE() + splitBars(o.byStoryteller.slice(0, 10), (r) => esc(r.key)))}
+    ${st ? storytellerCharactersCard(nameOf(st), base, others) : card('Who wins, by storyteller', '', legendGE() + splitBars(o.byStoryteller.slice(0, 10), (r) => esc(r.name)))}
     ${swingCards(base, 'Characters')}
   </div>`;
 }
@@ -662,8 +662,8 @@ function gamesList(G) {
 }
 
 function gameDetail(g) {
-  // Games everyone sees need the editor key to change; this browser's own not-yet-uploaded games don't.
-  const canEdit = state.shared.canEdit || !!g.pending;
+  // Games everyone sees need the editor key to change; games that are only in this browser don't.
+  const canEdit = state.shared.canEdit || !!g.local;
   const bySeat = new Map(g.players.map((p) => [p.seat, p]));
   const who = (seat, name) => { const p = bySeat.get(seat); const k = p && playerKey(p); return k ? playerLink(k, name || p.username || k) : esc(name || `Seat ${seat}`); };
   const missing = g.players.filter((p) => !p.username);
@@ -742,7 +742,7 @@ function summaryLine(G, base, sel) {
   else if (sel.players.length) parts.push(`with ${who} in the game`);
   else if (sel.characters.length) parts.push(`with ${listWords(sel.characters.map((c) => `<b>${esc(charName(c))}</b>`))} in play`);
   if (sel.types.length && !sel.players.length) parts.push(`looking at ${listWords(sel.types.map((t) => `<b>${esc(teamLabel(t))}</b>`))}`);
-  const scope = [state.filters.communities.map((c) => communityName(state.settings, c)).join(' & '), state.filters.script, state.filters.storyteller && `storyteller ${state.filters.storyteller}`, state.filters.days && `the last ${state.filters.days} days`].filter(Boolean);
+  const scope = [state.filters.communities.map((c) => communityName(state.settings, c)).join(' & '), state.filters.script, state.filters.storyteller && `storyteller ${nameOf(state.filters.storyteller)}`, state.filters.days && `the last ${state.filters.days} days`].filter(Boolean);
   return `<p class="summary">${hasSelection(sel) ? `<b>${G.length}</b> of ${plural(base.length, 'game')}` : `<b>${plural(base.length, 'game')}</b>`}${scope.length ? ` in ${esc(scope.join(' · '))}` : ''}${parts.length ? `, ${parts.join(', ')}` : ''}.</p>`;
 }
 
@@ -845,13 +845,13 @@ function populateFilters() {
   state.filters.communities = state.filters.communities.filter((c) => communityOptions().some((o) => o.value === c));
   $('#community-filter').innerHTML = communityButtons('data-filter-community', state.filters.communities);
   opts('script', distinct(all, (g) => g.script.name), 'All scripts');
-  opts('storyteller', distinct(all, (g) => g.storytellers.map((s) => s.username)), 'All storytellers');
+  opts('storyteller', distinct(all, storytellerKeys).map((k) => ({ value: k, name: nameOf(k) })).sort((a, b) => a.name.localeCompare(b.name)), 'All storytellers', (v) => v.name);
 }
 
 const dropdowns = {};
 function setupDropdowns() {
   const defs = {
-    players: { label: 'Players', nameOf: nameOf, options: () => [...playerNames.entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label)) },
+    players: { label: 'Players', nameOf: nameOf, options: () => [...playerKeys].map((value) => ({ value, label: nameOf(value) })).sort((a, b) => a.label.localeCompare(b.label)) },
     characters: { label: 'Characters', nameOf: charName, options: () => [...charInfo.values()].map((c) => ({ value: c.roleId, label: c.name, sub: teamOne(c.team) })).sort((a, b) => a.label.localeCompare(b.label)) },
     types: { label: 'Character type', nameOf: teamOne, options: () => TYPES.map((t) => ({ value: t, label: teamOne(t) })) },
   };
@@ -958,7 +958,9 @@ async function load() {
     artAsked = true;
     chrome.runtime.sendMessage({ type: 'assets:refresh', force: true }).then((r) => { if (r && !r.ok) { state.artError = r.error || 'unknown error'; render(); } }).catch(() => {});
   }
-  playerNames = new Map(playerTable(state.games).map((p) => [p.key, p.name]));
+  playerNames = displayNames(state.games);
+  useDisplayNames(playerNames);
+  playerKeys = new Set(playerTable(state.games).map((p) => p.key));
   charInfo = new Map(characterTable(state.games, null).map((c) => [c.roleId, c]));
   populateFilters();
   if (!dropdowns.players) setupDropdowns();
@@ -977,7 +979,7 @@ function knownId(name) {
 async function updateGame(id, patch) {
   const game = state.games.find((g) => g.id === id);
   // A game everyone sees: the change goes to the shared store (needs the editor key).
-  if (state.shared.on && game && !game.pending) {
+  if (state.shared.on && game && !game.local) {
     try { await sharedEdit(state.settings, game, patch); } catch (e) { alert(`Couldn't save the change: ${e.message}`); return; }
     if (!WEB) await updateLocal(id, patch, false);
     await syncShared();
@@ -1048,7 +1050,7 @@ document.addEventListener('click', async (e) => {
   if (t.dataset.delete) {
     const id = t.dataset.delete;
     const game = state.games.find((g) => g.id === id);
-    const everyone = state.shared.on && game && !game.pending;
+    const everyone = state.shared.on && game && !game.local;
     if (!confirm(everyone ? 'Delete this game for everyone? It will also stop being recorded again.' : 'Delete this game permanently?')) return;
     if (everyone) { try { await sharedDelete(state.settings, id); } catch (e) { alert(`Couldn't delete it: ${e.message}`); return; } }
     if (!WEB) { const map = await api.get('games', {}); delete map[id]; await api.set('games', map); }

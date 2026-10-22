@@ -10,6 +10,8 @@ Upload `dist/clockwise-<version>.zip` (made by `node scripts/pack.mjs`).
 **Summary** (132 characters max):
 > Records your Blood on the Clocktower games on botc.app and shares them with your community's stats dashboard.
 
+(The summary comes from the extension's manifest, so it's filled in automatically.)
+
 **Description:**
 > Clockwise keeps statistics for a group of friends who play Blood on the Clocktower on botc.app.
 >
@@ -54,7 +56,7 @@ Upload `dist/clockwise-<version>.zip` (made by `node scripts/pack.mjs`).
 **Certify:** ☑ not sold to third parties · ☑ not used or transferred for purposes unrelated to the single purpose ·
 ☑ not used or transferred to determine creditworthiness or for lending.
 
-**Privacy policy URL:** `<your dashboard address>/privacy.html` (for example `https://YOURNAME.github.io/clockwise/privacy.html`)
+**Privacy policy URL:** `https://liatwerber.github.io/clockwise/privacy.html`
 
 ## Distribution tab
 
