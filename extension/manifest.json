@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Clockwise",
+  "version": "3.0.0",
+  "description": "Automatically records your Blood on the Clocktower games on botc.app: winners, characters, players, nominations and deaths.",
+  "permissions": ["storage", "unlimitedStorage", "alarms", "scripting"],
+  "host_permissions": [
+    "https://botc.app/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*"
+  ],
+  "background": { "service_worker": "src/background.js", "type": "module" },
+  "content_scripts": [
+    { "matches": ["https://botc.app/*"], "js": ["src/bridge.js"], "run_at": "document_start" },
+    { "matches": ["https://botc.app/*"], "js": ["src/page-hook.js"], "run_at": "document_idle", "world": "MAIN" }
+  ],
+  "action": {
+    "default_title": "Clockwise",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png" }
+  },
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+}

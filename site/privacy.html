@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clockwise privacy policy</title>
+  <link rel="icon" href="icons/icon-32.png">
+  <link rel="stylesheet" href="fonts/fonts.css">
+  <style>
+    :root { --page: #1a1324; --surface: #261c33; --ink: #f3eadb; --ink-2: #cdbfda; --border: rgba(243, 234, 219, .13); }
+    body { margin: 0; background: var(--page) url("images/background-tile.webp") 0 0 / 627px auto repeat; color: var(--ink); font: 16px/1.6 "Figtree", system-ui, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 40px 20px 64px; }
+    article { background: var(--surface); border: 1.5px solid var(--border); border-radius: 28px; padding: 32px 36px; }
+    h1, h2 { font-family: "Fraunces", Georgia, serif; font-weight: 650; }
+    h1 { font-size: 34px; margin: 0 0 4px; }
+    h2 { font-size: 21px; margin: 28px 0 6px; }
+    p, li { color: var(--ink-2); }
+    a { color: var(--ink); }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; color: var(--ink); text-decoration: none; font: 650 26px "Fraunces", Georgia, serif; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="brand" href="./"><img src="icons/logo-dark.png" alt="" width="36" height="36"> Clockwise</a>
+    <article>
+      <h1>Privacy policy</h1>
+      <p>Clockwise is a browser extension and dashboard that keeps statistics for a group of people who play Blood on the
+        Clocktower together on <a href="https://botc.app">botc.app</a>. It isn't made by or connected with botc.app or
+        The Pandemonium Institute.</p>
+
+      <h2>What the extension records</h2>
+      <p>Only on botc.app, and only Blood on the Clocktower games you are in (playing, storytelling or watching) while the
+        extension is installed. For each game it records what botc.app shows everyone in the room at the end of the game:</p>
+      <ul>
+        <li>the room name, the script, when the game started and ended, and who won;</li>
+        <li>each seat's botc.app username and account ID, character, alignment, and whether and when they died;</li>
+        <li>nominations, votes, dead votes used, the storyteller's reminder tokens and demon bluffs;</li>
+        <li>the storyteller's username, and the username of the person whose extension recorded the game.</li>
+      </ul>
+      <p>It does not read any other website, your browsing history, chat, video, audio, or anything you type.</p>
+
+      <h2>Where it goes</h2>
+      <p>Games are kept in your browser and uploaded to one Google Sheet run by the community's organiser, through a
+        Google Apps Script. If several people record the same game, it is stored once. The extension also downloads
+        botc.app's public character images and fonts so the dashboard can draw the game's tokens.</p>
+
+      <h2>Who can see it</h2>
+      <p>The stats are shown on the community dashboard, which needs the community password. Anyone with the password
+        can see every recorded game, including other players' usernames and statistics. A small number of people with
+        an editor key can correct or delete games. The Google Sheet itself is private to the organiser.</p>
+      <p>Clockwise has no adverts or analytics, and the data is never sold or shared with anyone else.</p>
+
+      <h2>Removing your data</h2>
+      <p>Ask the community's organiser (the person who shared Clockwise with you) to remove games or to stop recording
+        under your name. Uninstalling the extension deletes the copy kept in your browser and stops it recording.</p>
+    </article>
+  </main>
+</body>
+</html>
