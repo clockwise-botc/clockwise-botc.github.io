@@ -4,6 +4,7 @@
 //   edits    game_id | updated_at | json                                fixes made by editors
 //   deleted  game_id | deleted_at                                       so deleted games aren't uploaded again
 //   meta     key | updated_at | parts | data…                           botc.app art info for the website
+//   accounts username_key | username | created_at | updated_at | json  people's accounts (passwords hashed)
 //   games, game_players, nominations, deaths                             tidy tables for working in the Sheet
 
 var CHUNK_ = 45000;
@@ -23,6 +24,7 @@ function sheetStore_() {
   var edits = tab('edits', ['game_id', 'updated_at', 'json']);
   var deleted = tab('deleted', ['game_id', 'deleted_at']);
   var metaSheet = tab('meta', ['key', 'updated_at', 'parts', 'data']);
+  var accountsSheet = tab('accounts', ['username_key', 'username', 'created_at', 'updated_at', 'json']);
 
   // Small index of every record (no game data), read once per request.
   var rows = function (sh, width) {
@@ -36,6 +38,13 @@ function sheetStore_() {
   var gone = {};
   rows(deleted, 2).forEach(function (r) { if (r[0]) gone[r[0]] = Number(r[1]) || 0; });
   var cache = {};
+  var accountRows = null;
+  var loadAccounts = function () {
+    if (accountRows) return accountRows;
+    accountRows = {};
+    rows(accountsSheet, 5).forEach(function (r, i) { if (r[0]) accountRows[r[0]] = { row: i + 2, json: r[4] }; });
+    return accountRows;
+  };
 
   var pack = function (obj) {
     var b64 = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(obj), 'application/json')).getBytes());
@@ -133,6 +142,38 @@ function sheetStore_() {
       var parts = pack(meta);
       writeRow(metaSheet, 2, ['meta', now, parts.length], parts, info && info.parts);
     },
+    // ---------- accounts ----------
+    getAccount: function (k) {
+      var a = loadAccounts()[k];
+      return a && a.json ? JSON.parse(a.json) : null;
+    },
+    putAccount: function (k, acct, now) {
+      var all = loadAccounts();
+      var row = all[k] ? all[k].row : accountsSheet.getLastRow() + 1;
+      var json = JSON.stringify(acct);
+      accountsSheet.getRange(row, 1, 1, 5).setValues([[k, acct.username, acct.created || now, now, json]]);
+      all[k] = { row: row, json: json };
+    },
+    deleteAccount: function (k) {
+      var a = loadAccounts()[k];
+      if (a) { accountsSheet.getRange(a.row, 1, 1, 5).clearContent(); delete accountRows[k]; }
+    },
+    listAccounts: function () {
+      var all = loadAccounts();
+      return Object.keys(all).map(function (k) { return JSON.parse(all[k].json); });
+    },
+    // Signs sign-in tokens. Made once and kept in Script properties.
+    secret: function () {
+      var p = PropertiesService.getScriptProperties();
+      var s = p.getProperty('SESSION_SECRET');
+      if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); p.setProperty('SESSION_SECRET', s); }
+      return s;
+    },
+    hmac: function (key, value) { return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(String(value), String(key))); },
+    randomId: function () { return Utilities.getUuid(); },
+    // Wrong-password counts, kept for up to an hour in Apps Script's cache.
+    getTries: function (k) { var v = CacheService.getScriptCache().get('tries:' + k); return v ? JSON.parse(v) : null; },
+    setTries: function (k, v) { var c = CacheService.getScriptCache(); if (v) c.put('tries:' + k, JSON.stringify(v), 3600); else c.remove('tries:' + k); },
     // Rebuild the tidy tabs' rows for these games (so the Sheet stays handy for your own analysis).
     refreshTables: function (ids) {
       var live = [];

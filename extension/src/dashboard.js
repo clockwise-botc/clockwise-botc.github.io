@@ -8,7 +8,7 @@ import { renderGrimoire } from './grimoire.js';
 import { makeImages } from './images.js';
 import { characterToken, installTokenStyle } from './tokens.js';
 import { multiSelect } from './multiselect.js';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear } from './data.js';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount } from './data.js';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -36,7 +36,8 @@ const state = {
   games: [],
   settings: {},
   // Shared games: is a shared store set up, can we read it (password), can we change it (editor key)?
-  shared: { on: false, hasPassword: false, canEdit: true, status: null, cacheAt: null },
+  shared: { on: false, hasPassword: false, canEdit: true, status: null, cacheAt: null, account: null },
+  signin: { mode: 'signin', open: false }, // the website's sign-in screen: which form, and whether shown on request
 };
 const savePrefs = () => { try { localStorage.setItem('dash.prefs', JSON.stringify({ communities: state.filters.communities })); } catch {} };
 const communityOptions = () => communityConfig(state.settings).communities.map((c) => ({ value: c.id, name: c.name }));
@@ -881,30 +882,61 @@ function addTo(kind, value) {
 
 // ---------- render ----------
 function render() {
-  // The website shows nothing but the sign-in until the community password has been accepted.
-  const gate = WEB && !state.shared.hasPassword;
+  // The website shows nothing but the sign-in until an account or the community password has been accepted.
+  const gate = WEB && (!state.shared.hasPassword || state.signin.open);
+  renderAccountChip();
   document.body.classList.toggle('signed-out', gate);
   if (gate) { $('#filters').hidden = true; $('#view').innerHTML = signInView(); return; }
   document.querySelectorAll('[data-tab]').forEach((b) => { if (b.closest('.tabs')) b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)); });
   $('#filters').hidden = state.tab === 'data';
   const views = { stats: statsView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
   $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab]();
+  // Editors' account list loads the first time Data & settings is opened.
+  if (state.tab === 'data' && state.accounts === undefined && state.shared.on && state.shared.canEdit && creds(state.settings).editorKey) { state.accounts = null; loadAccounts(); }
 }
 
 // ---------- shared games: sign-in and status ----------
 function signInView() {
-  const err = state.shared.status && state.shared.status.error;
+  const st = state.shared.status || {};
+  const mode = state.signin.mode;
+  const tab = (m, label) => `<button type="button" class="toggle" data-signin-mode="${m}" aria-pressed="${mode === m}">${label}</button>`;
+  const remember = '<label class="check"><input type="checkbox" name="remember" checked> Remember on this device</label>';
+  const error = st.error ? `<p class="msg err" role="alert">${esc(st.message || (st.error === 'not-allowed' ? 'That password isn\'t right.' : 'Couldn\'t reach the stats. Try again in a moment.'))}</p>` : '';
+  const forms = {
+    signin: `<form data-signin="signin">
+      <input type="text" name="username" placeholder="Username" autocomplete="username" required autofocus aria-label="Username">
+      <input type="password" name="password" placeholder="Your password" autocomplete="current-password" required aria-label="Your password">
+      ${remember}<button class="btn primary" type="submit">Sign in</button>${error}
+      <p class="sub small">Forgot your password? Ask an editor to set a new one.</p></form>`,
+    signup: `<form data-signin="signup">
+      <input type="text" name="username" placeholder="Choose a username" autocomplete="username" required autofocus aria-label="Username" minlength="2" maxlength="24">
+      <input type="password" name="password" placeholder="Choose a password (8+ characters)" autocomplete="new-password" required minlength="8" aria-label="Choose a password">
+      <input type="password" name="confirm" placeholder="Type it again" autocomplete="new-password" required minlength="8" aria-label="Type the password again">
+      <input type="password" name="community" placeholder="Community password" required aria-label="Community password">
+      ${remember}<button class="btn primary" type="submit">Create account</button>${error}
+      <p class="sub small">The community password proves you're one of us. No email needed.</p></form>`,
+    password: `<form data-signin="password">
+      <input type="password" name="password" placeholder="Community password" autocomplete="current-password" required autofocus aria-label="Community password">
+      ${remember}<button class="btn primary" type="submit">Continue</button>${error}</form>`,
+  };
   return `<div class="signin card">
     <img class="logo" src="icons/logo-dark.png" alt="" width="64" height="64">
     <h2>Clockwise</h2>
-    <p class="sub">Blood on the Clocktower stats for our community. Enter the community password to continue.</p>
-    <form data-signin>
-      <input type="password" name="password" placeholder="Community password" autocomplete="current-password" required autofocus aria-label="Community password">
-      <label class="check"><input type="checkbox" name="remember" checked> Remember on this device</label>
-      <button class="btn primary" type="submit">Continue</button>
-      ${err ? `<p class="msg err" role="alert">${err === 'not-allowed' ? 'That password isn\'t right.' : esc(state.shared.status.message || 'Couldn\'t reach the stats. Try again in a moment.')}</p>` : ''}
-    </form>
+    <p class="sub">Blood on the Clocktower stats for our community.</p>
+    <div class="toggles signin-modes" role="group" aria-label="Sign in or create an account">${tab('signin', 'Sign in')}${tab('signup', 'Create account')}</div>
+    ${forms[mode] || forms.signin}
+    ${mode === 'password' ? '<button type="button" class="linkish" data-signin-mode="signin">Sign in to an account instead</button>' : '<button type="button" class="linkish" data-signin-mode="password">No account? Use the community password</button>'}
+    ${state.signin.open && state.shared.hasPassword ? '<button type="button" class="linkish" data-signin-cancel>Back to the stats</button>' : ''}
   </div>`;
+}
+
+// The signed-in account, top right (website). Clicking it opens Data & settings.
+function renderAccountChip() {
+  const el = $('#account-chip');
+  if (!el) return;
+  const a = WEB && state.shared.account;
+  el.hidden = !a;
+  if (a) el.innerHTML = `<span class="dot" aria-hidden="true"></span>${esc(a.username)}`;
 }
 
 // In the extension: when sharing is set up but this browser can't read the shared games yet.
@@ -943,7 +975,7 @@ async function load() {
   const local = WEB ? {} : await api.get('games', {});
   const c = creds(state.settings);
   const cache = c.url ? await loadShared() : null;
-  state.shared = { ...state.shared, on: !!c.url, hasPassword: !!(c.password || c.editorKey), canEdit: !c.url || !!c.editorKey, cacheAt: cache && cache.at };
+  state.shared = { ...state.shared, on: !!c.url, hasPassword: canReadWith(c), account: c.token ? { username: c.username } : null, canEdit: !c.url || !!c.editorKey, cacheAt: cache && cache.at };
   const map = c.url ? mergeGames(local, cache) : local;
   state.games = Object.values(map).map((g) => ({ ...g, community: gameCommunity(state.settings, g) }));
   state.lastSync = WEB ? null : await api.get('lastSync', null);
@@ -1128,30 +1160,111 @@ if (hasChrome) chrome.runtime.sendMessage({ type: 'assets:refresh' }).catch(() =
 // Live refresh when a new game is captured while the dashboard is open.
 if (hasChrome) chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.games || changes.lastSync || changes.assetMap || changes.roleMeta || changes.sharedCache || changes.settings)) load(); });
 
-// The community password: the website's sign-in, or the extension's "See everyone's games" card.
+// Signing in: an account or the community password (website), or the extension's "See everyone's games" card.
 document.addEventListener('submit', async (e) => {
   const f = e.target;
   if (!f.matches('[data-signin], [data-connect]')) return;
   e.preventDefault();
-  const pw = f.password.value.trim();
+  const mode = f.dataset.signin || 'password';
+  const val = (n) => (f[n] ? f[n].value.trim() : '');
+  const remember = f.remember ? f.remember.checked : true;
+  // Show the problem under the form without redrawing it, so what was typed stays.
+  const fail = (r) => {
+    state.shared.status = { error: r.error || 'failed', message: r.message };
+    let m = f.querySelector('.msg');
+    if (!m) { m = document.createElement('p'); m.className = 'msg err'; m.setAttribute('role', 'alert'); f.querySelector('button[type=submit]').after(m); }
+    m.textContent = r.message || (r.error === 'not-allowed' ? 'That password isn\'t right.' : 'Couldn\'t reach the stats. Try again in a moment.');
+    if (f.matches('[data-connect]')) render();
+  };
   const button = f.querySelector('button[type=submit]');
   button.disabled = true;
-  const r = await checkKey(state.settings, pw).catch((err) => ({ ok: false, error: 'unreachable', message: err.message }));
-  button.disabled = false;
-  if (!(r.ok && r.canRead)) {
-    state.shared.status = r.ok ? { error: 'not-allowed' } : { error: r.error, message: r.message };
-    render();
-    return;
+  try {
+    if (mode === 'signup' && f.password.value !== f.confirm.value) return fail({ error: 'invalid', message: 'The two passwords don\'t match.' });
+    if (mode === 'signin' || mode === 'signup') {
+      const r = mode === 'signin' ? await signIn(state.settings, val('username'), f.password.value) : await signUp(state.settings, val('community'), val('username'), f.password.value);
+      if (!r.ok) return fail(r.error === 'not-allowed' ? { error: 'not-allowed', message: 'That community password isn\'t right.' } : r);
+      webAuth.setAccount(r.token, r.account.username, remember);
+    } else {
+      const pw = val('password');
+      const r = await checkKey(state.settings, pw);
+      if (!(r.ok && r.canRead)) return fail(r.ok ? { error: 'not-allowed', message: 'That password isn\'t right.' } : r);
+      if (WEB) webAuth.set(pw, remember);
+      else await api.set('settings', { ...state.settings, viewPassword: pw });
+    }
+    state.shared.status = null;
+    state.signin.open = false;
+    await load();
+    await syncShared();
+  } catch (err) {
+    fail({ error: 'unreachable', message: err.message });
+  } finally {
+    button.disabled = false;
   }
-  state.shared.status = null;
-  if (WEB) webAuth.set(pw, f.remember ? f.remember.checked : true);
-  else await api.set('settings', { ...state.settings, viewPassword: pw });
-  await load();
-  await syncShared();
 });
 
+document.addEventListener('click', (e) => {
+  const m = e.target.closest('[data-signin-mode]');
+  if (m) { state.signin.mode = m.dataset.signinMode; state.shared.status = null; render(); return; }
+  if (e.target.closest('[data-signin-cancel]')) { state.signin.open = false; state.shared.status = null; render(); return; }
+  if (e.target.closest('[data-open-signin]')) { state.signin = { mode: e.target.closest('[data-open-signin]').dataset.openSignin || 'signin', open: true }; state.shared.status = null; render(); window.scrollTo(0, 0); }
+});
+
+// ---------- your account (website) and editors' account tools ----------
+document.addEventListener('submit', async (e) => {
+  const f = e.target;
+  if (!f.matches('[data-change-password]')) return;
+  e.preventDefault();
+  const say = (text, ok) => { const m = $('#shared-msg'); if (m) { m.className = `msg ${ok ? 'ok' : 'err'}`; m.textContent = text; } };
+  if (f.newPassword.value !== f.confirm.value) return say('The two new passwords don\'t match.', false);
+  const r = await changePassword(state.settings, f.password.value, f.newPassword.value).catch((err) => ({ ok: false, message: err.message }));
+  if (!r.ok) return say(r.message || 'Couldn\'t change it.', false);
+  let remembered = false;
+  try { remembered = !!localStorage.getItem('clockwise.token'); } catch {}
+  webAuth.setAccount(r.token, state.shared.account.username, remembered);
+  f.reset();
+  say('Password changed. Your other devices are signed out.', true);
+});
+
+async function loadAccounts() {
+  const r = await listAccounts(state.settings).catch((err) => ({ ok: false, message: err.message }));
+  state.accounts = r.ok ? r.accounts : { error: r.message || 'Couldn\'t load the accounts.' };
+  if (state.tab === 'data') render();
+}
+
+document.addEventListener('click', async (e) => {
+  const reset = e.target.closest('[data-account-reset]');
+  const del = e.target.closest('[data-account-delete]');
+  if (!reset && !del) return;
+  const name = (reset || del).dataset[reset ? 'accountReset' : 'accountDelete'];
+  const say = (text, ok) => { const m = $('#accounts-msg'); if (m) { m.className = `msg ${ok ? 'ok' : 'err'}`; m.textContent = text; } };
+  if (reset) {
+    const pw = prompt(`New password for ${name} (8+ characters). Tell them what it is; they can change it after signing in.`);
+    if (!pw) return;
+    const r = await resetPassword(state.settings, name, pw).catch((err) => ({ ok: false, message: err.message }));
+    return say(r.ok ? `New password set for ${name}. They've been signed out everywhere.` : r.message || 'Couldn\'t set it.', r.ok);
+  }
+  if (!confirm(`Delete the account "${name}"? Their recorded games stay; only the account goes.`)) return;
+  const r = await deleteAccount(state.settings, name).catch((err) => ({ ok: false, message: err.message }));
+  if (!r.ok) return say(r.message || 'Couldn\'t delete it.', false);
+  await loadAccounts();
+  say(`Deleted ${name}.`, true);
+});
+
+// A password change on another device, or an editor's reset, signs this one out.
+async function checkSignedIn() {
+  if (!state.shared.account) return;
+  const r = await whoAmI(state.settings).catch(() => null);
+  if (r && r.ok && r.signedOut) {
+    webAuth.clearAccount();
+    state.signin = { mode: 'signin', open: false };
+    await load();
+    state.shared.status = { error: 'signed-out', message: 'You were signed out (your password was changed). Please sign in again.' };
+    render();
+  }
+}
+
 // Show what's cached straight away, then download anything new; check again every few minutes.
-load().then(() => syncShared());
+load().then(() => checkSignedIn()).then(() => syncShared());
 setInterval(() => { if (document.visibilityState === 'visible') syncShared(); }, 5 * 60e3);
 
 // Chrome serves this page's files fresh from disk, but keeps running the old background (which records games

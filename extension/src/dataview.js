@@ -65,13 +65,27 @@ function sharedCard(ctx) {
       <input type="password" data-shared-field="editorKey" value="${esc(c.editorKey)}" placeholder="Only if you've been given one" autocomplete="off"></label>`;
   const site = tools.siteUrl();
   if (tools.WEB) {
+    const who = sh.account
+      ? `<p class="sub">Signed in as <b>${esc(sh.account.username)}</b>.</p>
+        <details class="advanced"><summary>Change your password</summary>
+          <form class="form" data-change-password>
+            <input type="password" name="password" placeholder="Current password" autocomplete="current-password" required aria-label="Current password">
+            <input type="password" name="newPassword" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required aria-label="New password">
+            <input type="password" name="confirm" placeholder="New password again" autocomplete="new-password" minlength="8" required aria-label="New password again">
+            <div class="toolbar"><button class="btn primary" type="submit">Change password</button></div>
+            <p class="sub small">This signs you out on your other devices.</p>
+          </form></details>`
+      : `<p class="sub">You're using the community password. With an account you'll get your own settings, like claiming your player.</p>
+        <div class="toolbar"><button class="btn primary" data-open-signin="signup">Create an account</button><button class="btn" data-open-signin="signin">Sign in</button></div>`;
     return `<div class="card">
-      <h3>Signed in</h3>
+      <h3>Your account</h3>
+      ${who}
       <p class="sub">${download}${sh.canEdit && c.editorKey ? ' You can change and delete games.' : ''}</p>
       <div class="form">${editor}
         <div class="toolbar"><button class="btn primary" data-action="save-editor-key">Save editor key</button><button class="btn" data-action="download-now">Download now</button><button class="btn" data-action="sign-out">Sign out</button></div>
         <p class="msg" id="shared-msg"></p></div>
-    </div>`;
+    </div>
+    ${accountsCard(ctx)}`;
   }
   const pending = state.games.filter((g) => g.pending).length;
   const ls = state.lastSync;
@@ -95,6 +109,22 @@ function sharedCard(ctx) {
         <div class="toolbar"><button class="btn" data-action="save-advanced">Save</button></div>
       </div>
     </details>
+  </div>`;
+}
+
+// Editors: everyone's accounts, with a way to set a new password (for someone who forgot theirs) or delete one.
+function accountsCard({ state, tools }) {
+  if (!(state.shared.on && state.shared.canEdit && tools.creds(state.settings).editorKey)) return '';
+  const list = state.accounts;
+  const rows = !list ? '<p class="sub">Loading…</p>' : list.error ? `<p class="sub err">${esc(list.error)}</p>` : !list.length ? '<p class="sub">Nobody has made an account yet.</p>'
+    : `<table class="accounts"><thead><tr><th>Username</th><th>Created</th><th></th></tr></thead><tbody>${list.map((a) => `<tr>
+        <td>${esc(a.username)}</td><td class="muted">${fmtDate(a.created)}</td>
+        <td class="num"><button class="btn small" data-account-reset="${esc(a.username)}">Set new password</button> <button class="btn small danger" data-account-delete="${esc(a.username)}">Delete</button></td></tr>`).join('')}</tbody></table>`;
+  return `<div class="card">
+    <h3>Accounts</h3>
+    <p class="sub">Only editors see this. If someone forgets their password, set a new one here and tell them what it is; they can change it afterwards.</p>
+    ${rows}
+    <p class="msg" id="accounts-msg"></p>
   </div>`;
 }
 

@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import vm from 'node:vm';
 import zlib from 'node:zlib';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -32,13 +33,31 @@ export function memoryStore() {
     putMeta: (m, now) => { meta = clone(m); metaAt = now; },
     refreshTables: () => {},
     count: () => records.size,
+    ...accountStore(),
   };
   return store;
 }
 
+// Accounts for the in-memory store (the Sheet store has its own, in sheets-store.js).
+function accountStore() {
+  const accounts = new Map(), tries = new Map();
+  const secret = crypto.randomBytes(16).toString('hex');
+  return {
+    getAccount: (k) => (accounts.has(k) ? JSON.parse(JSON.stringify(accounts.get(k))) : null),
+    putAccount: (k, a) => { accounts.set(k, JSON.parse(JSON.stringify(a))); },
+    deleteAccount: (k) => { accounts.delete(k); },
+    listAccounts: () => [...accounts.values()].map((a) => JSON.parse(JSON.stringify(a))),
+    secret: () => secret,
+    hmac: (key, value) => crypto.createHmac('sha256', String(key)).update(String(value)).digest('base64url'),
+    randomId: () => crypto.randomUUID(),
+    getTries: (k) => tries.get(k) || null,
+    setTries: (k, v) => { if (v) tries.set(k, v); else tries.delete(k); },
+  };
+}
+
 export function loadBackend(store = memoryStore()) {
   const code = fs.readFileSync(path.join(root, 'google-sheets/Code.gs'), 'utf8');
-  const ctx = vm.createContext({ console, JSON, Math, Date, Object, Array, String, Number });
+  const ctx = vm.createContext({ console, JSON, Math, Date, Object, Array, String, Number, encodeURIComponent, decodeURIComponent });
   vm.runInContext(code, ctx);
   // Exercise the real tidy-table code too, so a bad record can't break the Sheet.
   store.refreshTables = (ids) => { store.tables = ctx.toTables(ids.map((id) => store.getRecord(id)).filter(Boolean), {}); };
@@ -67,8 +86,11 @@ export function loadSheetsBackend() {
     return sh;
   };
   const blob = (bytes, type) => ({ bytes: Buffer.from(bytes), type, getBytes: () => Buffer.from(bytes), getDataAsString: () => Buffer.from(bytes).toString('utf8') });
+  const props = new Map(), cacheMap = new Map();
   const ctx = vm.createContext({
-    console, JSON, Math, Date, Object, Array, String, Number,
+    console, JSON, Math, Date, Object, Array, String, Number, encodeURIComponent, decodeURIComponent,
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) || null, setProperty: (k, v) => props.set(k, v) }) },
+    CacheService: { getScriptCache: () => ({ get: (k) => cacheMap.get(k) || null, put: (k, v) => cacheMap.set(k, v), remove: (k) => cacheMap.delete(k) }) },
     SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: (n) => sheets.get(n) || null, insertSheet: makeSheet }), flush: () => {} },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
     Utilities: {
@@ -77,6 +99,9 @@ export function loadSheetsBackend() {
       ungzip: (b) => blob(zlib.gunzipSync(b.bytes), 'application/octet-stream'),
       base64Encode: (bytes) => Buffer.from(bytes).toString('base64'),
       base64Decode: (s) => [...Buffer.from(s, 'base64')],
+      base64EncodeWebSafe: (bytes) => Buffer.from(bytes).toString('base64url'),
+      computeHmacSha256Signature: (value, key) => [...crypto.createHmac('sha256', key).update(value, 'utf8').digest()],
+      getUuid: () => crypto.randomUUID(),
     },
   });
   vm.runInContext(fs.readFileSync(path.join(root, 'google-sheets/Code.gs'), 'utf8'), ctx);

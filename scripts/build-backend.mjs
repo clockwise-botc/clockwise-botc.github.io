@@ -14,6 +14,7 @@ const parts = [
   ['extension/src/communities.js', script],
   ['extension/src/tables.js', script],
   ['backend/server.js', read],
+  ['backend/accounts.js', read],
   ['backend/sheets-store.js', read],
   ['backend/main.js', read],
 ];

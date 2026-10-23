@@ -20,8 +20,9 @@ export async function call(url, body) {
 
 // Brings a local copy of the shared games up to date: only what changed since the last download.
 // cache: { games: {id: game}, since, meta, at } — kept in chrome.storage (extension) or IndexedDB (website).
-export async function pull(url, key, cache) {
-  const res = await call(url, { action: 'read', key, since: cache && cache.since ? cache.since : 0 });
+// auth: { key } (community password or editor key) and/or { token } (a signed-in account).
+export async function pull(url, auth, cache) {
+  const res = await call(url, { action: 'read', ...auth, since: cache && cache.since ? cache.since : 0 });
   if (!res.ok) return { ok: false, error: res.error, message: res.message, cache };
   const next = { games: { ...((cache && cache.games) || {}) }, since: res.now, meta: (cache && cache.meta) || null, at: Date.now() };
   for (const g of res.games || []) next.games[g.id] = g;
@@ -30,7 +31,7 @@ export async function pull(url, key, cache) {
   return { ok: true, cache: next, changed: (res.games || []).length + (res.deleted || []).length, canEdit: !!res.canEdit };
 }
 
-export const ping = (url, key) => call(url, { action: 'ping', key });
+export const ping = (url, key, token) => call(url, { action: 'ping', key, token });
 
 // An editor's fix to a shared game. Turns a dashboard patch into the store's edit fields.
 export function editPatch(game, patch) {

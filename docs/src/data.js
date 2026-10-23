@@ -49,20 +49,28 @@ export async function cacheClear() {
 }
 
 // ---------- the website's sign-in ----------
-// "Remember on this device" keeps the password in localStorage; otherwise only for this browser tab.
+// "Remember on this device" keeps the password / sign-in in localStorage; otherwise only for this browser tab.
+const stored = (k) => { try { return sessionStorage.getItem(k) || localStorage.getItem(k) || ''; } catch { return ''; } };
+const forget = (...keys) => { try { for (const k of keys) { sessionStorage.removeItem(k); localStorage.removeItem(k); } } catch {} };
 export const webAuth = {
-  get: () => { try { return sessionStorage.getItem('clockwise.password') || localStorage.getItem('clockwise.password') || ''; } catch { return ''; } },
+  get: () => stored('clockwise.password'),
   set: (pw, remember) => { try { (remember ? localStorage : sessionStorage).setItem('clockwise.password', pw); } catch {} },
-  clear: () => { try { sessionStorage.removeItem('clockwise.password'); localStorage.removeItem('clockwise.password'); localStorage.removeItem('clockwise.editorKey'); } catch {} },
+  account: () => ({ token: stored('clockwise.token'), username: stored('clockwise.username') }),
+  setAccount: (token, username, remember) => { forget('clockwise.token', 'clockwise.username'); try { const s = remember ? localStorage : sessionStorage; s.setItem('clockwise.token', token); s.setItem('clockwise.username', username); } catch {} },
+  clearAccount: () => forget('clockwise.token', 'clockwise.username'),
+  clear: () => forget('clockwise.password', 'clockwise.editorKey', 'clockwise.token', 'clockwise.username'),
   editorKey: () => { try { return localStorage.getItem('clockwise.editorKey') || ''; } catch { return ''; } },
   setEditorKey: (k) => { try { k ? localStorage.setItem('clockwise.editorKey', k) : localStorage.removeItem('clockwise.editorKey'); } catch {} },
 };
 
 // ---------- credentials ----------
 export function creds(settings = {}) {
-  if (WEB) return { url: WEB.backendUrl, password: webAuth.get(), editorKey: webAuth.editorKey() };
-  return { url: settings.backendUrl || BACKEND_URL, password: settings.viewPassword || '', editorKey: settings.editorKey || '' };
+  if (WEB) { const a = webAuth.account(); return { url: WEB.backendUrl, password: webAuth.get(), editorKey: webAuth.editorKey(), token: a.token, username: a.username }; }
+  return { url: settings.backendUrl || BACKEND_URL, password: settings.viewPassword || '', editorKey: settings.editorKey || '', token: settings.accountToken || '', username: settings.accountName || '' };
 }
+// What to send to read games: an account if signed in, else the community password (or editor key).
+export const readAuth = (c) => ({ token: c.token || undefined, key: c.password || c.editorKey || undefined });
+export const canReadWith = (c) => !!(c.token || c.password || c.editorKey);
 export const siteUrl = () => (WEB ? location.href.split('#')[0] : SITE_URL);
 
 // ---------- reading ----------
@@ -71,9 +79,9 @@ export const loadShared = cacheGet;
 // Download what changed. Returns { ok, changed, error } and saves the cache.
 export async function refreshShared(settings) {
   const c = creds(settings);
-  if (!c.url || !(c.password || c.editorKey)) return { ok: false, error: 'no-password' };
+  if (!c.url || !canReadWith(c)) return { ok: false, error: 'no-password' };
   const before = await cacheGet();
-  const res = await pull(c.url, c.password || c.editorKey, before);
+  const res = await pull(c.url, readAuth(c), before);
   if (!res.ok) return res;
   // Remember deleted ids, so this browser's own copy of a deleted game isn't shown again.
   const removed = before ? Object.keys(before.games || {}).filter((id) => !res.cache.games[id]) : [];
@@ -101,6 +109,17 @@ export async function checkKey(settings, key) {
   if (!c.url) return { ok: false, error: 'no-backend' };
   return ping(c.url, key);
 }
+
+// ---------- accounts ----------
+const accountCall = (settings, body) => { const c = creds(settings); return c.url ? call(c.url, body) : Promise.resolve({ ok: false, error: 'no-backend' }); };
+export const signUp = (settings, communityPassword, username, password) => accountCall(settings, { action: 'signup', key: communityPassword, username, password });
+export const signIn = (settings, username, password) => accountCall(settings, { action: 'signin', username, password });
+// Still signed in? (A password change elsewhere, or an editor's reset, signs this device out.)
+export const whoAmI = (settings) => { const c = creds(settings); return c.token ? accountCall(settings, { action: 'ping', token: c.token }) : Promise.resolve(null); };
+export const changePassword = (settings, password, newPassword) => accountCall(settings, { action: 'change-password', token: creds(settings).token, password, newPassword });
+export const listAccounts = (settings) => accountCall(settings, { action: 'accounts', key: creds(settings).editorKey });
+export const resetPassword = (settings, username, newPassword) => accountCall(settings, { action: 'reset-password', key: creds(settings).editorKey, username, newPassword });
+export const deleteAccount = (settings, username) => accountCall(settings, { action: 'delete-account', key: creds(settings).editorKey, username });
 
 // ---------- editing (editor key) ----------
 export async function sharedEdit(settings, game, patch) {

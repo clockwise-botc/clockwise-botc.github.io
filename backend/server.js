@@ -15,14 +15,19 @@ var EDITABLE_ = ['community', 'communityManual', 'excluded', 'notes', 'storytell
 function handle_(body, store, keys, now) {
   var key = String((body && body.key) || '');
   var is = function (k) { return !!k && key === k; };
-  var canRead = is(keys.view) || is(keys.editor);
+  // A signed-in account can read, like the community password (accounts are only created with it).
+  var account = body && body.token ? accountFromToken_(store, body.token, now) : null;
+  var canRead = is(keys.view) || is(keys.editor) || !!account;
   var canWrite = is(keys.write) || is(keys.editor);
   var canEdit = is(keys.editor);
   var deny = function (what) { return { ok: false, error: 'not-allowed', message: 'That key or password can\'t ' + what + '.' }; };
 
+  var accountReply = body && body.action ? handleAccount_(body, store, { viewKey: is(keys.view) || is(keys.editor), canRead: canRead, canEdit: canEdit, account: account }, now) : null;
+  if (accountReply) return accountReply;
+
   switch (body && body.action) {
     case 'ping':
-      return { ok: true, canRead: canRead, canWrite: canWrite, canEdit: canEdit, now: now };
+      return { ok: true, canRead: canRead, canWrite: canWrite, canEdit: canEdit, now: now, account: account ? publicAccount_(account) : null, signedOut: !!(body.token && !account) };
 
     case 'record': {
       if (!canWrite) return deny('upload games');
