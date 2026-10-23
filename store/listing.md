@@ -56,7 +56,7 @@ Upload `dist/clockwise-<version>.zip` (made by `node scripts/pack.mjs`).
 **Certify:** ☑ not sold to third parties · ☑ not used or transferred for purposes unrelated to the single purpose ·
 ☑ not used or transferred to determine creditworthiness or for lending.
 
-**Privacy policy URL:** `https://liatwerber.github.io/clockwise/privacy.html`
+**Privacy policy URL:** `https://clockwise-botc.github.io/privacy.html`
 
 ## Distribution tab
 
