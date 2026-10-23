@@ -5,6 +5,9 @@
 // Passwords are stored salted and hashed (repeated HMAC-SHA256). Signing in returns a token that's checked on
 // each request; changing or resetting a password bumps a version number, which signs out every other device.
 // After 10 wrong passwords an account is locked for 15 minutes.
+//
+// Claims: someone says which player in the games is them ({ player, name, at }). People are trusted to pick
+// themselves; only one account can claim a given player, and editors can remove a claim that's wrong.
 
 var TOKEN_DAYS_ = 180;
 var HASH_ROUNDS_ = 400;
@@ -34,7 +37,17 @@ function hashPassword_(store, password, salt) {
 }
 
 function publicAccount_(acct) {
-  return { username: acct.username, created: acct.created, profile: acct.profile || {} };
+  return { username: acct.username, created: acct.created, profile: acct.profile || {}, claim: acct.claim || null };
+}
+
+// The account (other than `exceptKey`) that has already claimed this player, if any.
+function claimOwner_(store, player, exceptKey) {
+  var all = store.listAccounts();
+  for (var i = 0; i < all.length; i++) {
+    var a = all[i];
+    if (a.claim && a.claim.player === player && accountKey_(a.username) !== exceptKey) return a;
+  }
+  return null;
 }
 
 // Token: username key, time issued and password version, signed with the store's secret.
@@ -103,6 +116,31 @@ function handleAccount_(body, store, who, now) {
       if (bad2) return { ok: false, error: 'invalid', message: bad2 };
       var next = setPassword_(store, me, body.newPassword, now);
       return { ok: true, token: makeToken_(store, next, now) };
+    }
+
+    case 'claim': {
+      var mine = who.account;
+      if (!mine) return { ok: false, error: 'signed-out' };
+      var player = String(body.player || '').trim();
+      if (!player || player.length > 120) return { ok: false, error: 'invalid', message: 'Pick a player from the list.' };
+      var myKey = accountKey_(mine.username);
+      if (claimOwner_(store, player, myKey)) return { ok: false, error: 'taken', message: 'Someone else has already claimed that player. Ask an editor if that\'s wrong.' };
+      var claimed = Object.assign({}, mine, { claim: { player: player, name: String(body.name || '').slice(0, 60), at: now } });
+      store.batch(function () { store.putAccount(myKey, claimed, now); });
+      return { ok: true, account: publicAccount_(claimed) };
+    }
+
+    case 'unclaim':
+    case 'remove-claim': {
+      // Your own claim, or (editors) anyone's.
+      var target = body.action === 'unclaim' ? who.account : who.canEdit ? store.getAccount(accountKey_(body.username)) : null;
+      if (body.action === 'unclaim' && !target) return { ok: false, error: 'signed-out' };
+      if (body.action === 'remove-claim' && !who.canEdit) return deny('Only editors can remove someone else\'s player.');
+      if (!target) return { ok: false, error: 'not-found', message: 'There\'s no account with that username.' };
+      var unclaimed = Object.assign({}, target);
+      delete unclaimed.claim;
+      store.batch(function () { store.putAccount(accountKey_(unclaimed.username), unclaimed, now); });
+      return { ok: true, account: publicAccount_(unclaimed) };
     }
 
     case 'accounts':

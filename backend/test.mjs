@@ -269,6 +269,27 @@ check('accounts: passwords are stored hashed, not as typed', () => {
   assert.ok(!raw.includes('correct horse'));
 });
 
+check('claims: count straight away; one account per player; editors can remove them', () => {
+  const { handle: raw } = loadBackend();
+  const handle = (body, k, now = 2000) => raw(body, k, now);
+  const a = signup(raw, 'oddish', 'correct horse');
+  const b = signup(raw, 'wren', 'another one');
+  assert.equal(handle({ action: 'claim', player: 'u-1' }, keys).error, 'signed-out', 'needs an account');
+  assert.equal(handle({ action: 'claim', token: a.token, player: '' }, keys).error, 'invalid');
+  const c = handle({ action: 'claim', token: a.token, player: 'u-1', name: 'liatfiat' }, keys);
+  assert.deepEqual(c.account.claim, { player: 'u-1', name: 'liatfiat', at: 2000 });
+  assert.equal(handle({ action: 'me', token: a.token }, keys).account.claim.player, 'u-1');
+  assert.equal(handle({ action: 'ping', token: a.token }, keys).account.claim.player, 'u-1');
+  assert.equal(handle({ action: 'claim', token: b.token, player: 'u-1' }, keys).error, 'taken', 'oddish already has u-1');
+  assert.equal(handle({ action: 'claim', token: a.token, player: 'u-1' }, keys).ok, true, 'claiming your own again is fine');
+  const listed = handle({ action: 'accounts', key: 'editor-key' }, keys).accounts.find((x) => x.username === 'oddish');
+  assert.equal(listed.claim.player, 'u-1', 'editors see claims');
+  assert.equal(handle({ action: 'remove-claim', token: b.token, username: 'oddish' }, keys).ok, false, 'only editors remove other people\'s');
+  assert.equal(handle({ action: 'remove-claim', key: 'editor-key', username: 'oddish' }, keys).account.claim, null);
+  assert.equal(handle({ action: 'claim', token: b.token, player: 'u-1' }, keys).ok, true, 'free again once removed');
+  assert.equal(handle({ action: 'unclaim', token: b.token }, keys).account.claim, null);
+});
+
 check('every sample game uploads and builds the Sheet tables', () => {
   const { handle, store } = loadBackend();
   const r = handle({ action: 'record', key: 'write-key', games }, keys);

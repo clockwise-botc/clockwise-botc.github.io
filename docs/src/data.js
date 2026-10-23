@@ -120,6 +120,9 @@ export const changePassword = (settings, password, newPassword) => accountCall(s
 export const listAccounts = (settings) => accountCall(settings, { action: 'accounts', key: creds(settings).editorKey });
 export const resetPassword = (settings, username, newPassword) => accountCall(settings, { action: 'reset-password', key: creds(settings).editorKey, username, newPassword });
 export const deleteAccount = (settings, username) => accountCall(settings, { action: 'delete-account', key: creds(settings).editorKey, username });
+export const claimPlayer = (settings, player, name) => accountCall(settings, { action: 'claim', token: creds(settings).token, player, name });
+export const unclaimPlayer = (settings) => accountCall(settings, { action: 'unclaim', token: creds(settings).token });
+export const removeClaim = (settings, username) => accountCall(settings, { action: 'remove-claim', key: creds(settings).editorKey, username });
 
 // ---------- editing (editor key) ----------
 export async function sharedEdit(settings, game, patch) {

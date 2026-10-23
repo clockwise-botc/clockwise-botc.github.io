@@ -8,7 +8,7 @@ import { renderGrimoire } from './grimoire.js';
 import { makeImages } from './images.js';
 import { characterToken, installTokenStyle } from './tokens.js';
 import { multiSelect } from './multiselect.js';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount } from './data.js';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim } from './data.js';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -37,6 +37,8 @@ const state = {
   settings: {},
   // Shared games: is a shared store set up, can we read it (password), can we change it (editor key)?
   shared: { on: false, hasPassword: false, canEdit: true, status: null, cacheAt: null, account: null },
+  profile: undefined, // the signed-in account as the store has it (e.g. their claimed player); undefined until checked
+  claimPick: null, // the player picked in "Your player" before pressing Claim
   signin: { mode: 'signin', open: false }, // the website's sign-in screen: which form, and whether shown on request
 };
 const savePrefs = () => { try { localStorage.setItem('dash.prefs', JSON.stringify({ communities: state.filters.communities })); } catch {} };
@@ -45,7 +47,7 @@ const communityOptions = () => communityConfig(state.settings).communities.map((
 const communityButtons = (attr, on, extra = '') => communityOptions().map((o) => `<button class="toggle" ${attr}="${esc(extra + o.value)}" aria-pressed="${on.includes(o.value)}">${esc(o.name)}</button>`).join('');
 const $ = (sel) => document.querySelector(sel);
 const ctx = { state, api, load: () => load(), communityOptions,
-  tools: { WEB, creds, siteUrl, checkKey, webAuth, cacheClear, syncShared: () => syncShared() },
+  tools: { WEB, creds, siteUrl, checkKey, webAuth, cacheClear, syncShared: () => syncShared(), nameOf: (key, fallback) => (playerNames.has(key) ? playerNames.get(key) : fallback || key), playerChoices: () => playerChoices() },
   // For Data & settings: is botc.app's token art in use, and if not, why.
   art: () => ({ loaded: !!images.tokenStyle, fonts: document.documentElement.classList.contains('token-font'), roles: Object.keys(roleMeta).length, error: state.artError || (images.styleError || '') }) };
 
@@ -75,6 +77,14 @@ let artAsked = false;
 let roleMeta = {}; // per character: [first night, other nights, reminders, setup, edition], from botc.app
 let charInfo = new Map();
 const nameOf = (key) => playerNames.get(key) || key;
+// Everyone who has played, for "Your player": [{ key, name }] by name, with a number added when two share a name.
+function playerChoices() {
+  const list = [...playerKeys].map((key) => ({ key, name: nameOf(key) })).filter((x) => x.name);
+  list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const seen = new Map();
+  for (const x of list) { const n = (seen.get(x.name.toLowerCase()) || 0) + 1; seen.set(x.name.toLowerCase(), n); if (n > 1) x.name = `${x.name} (${n})`; }
+  return list;
+}
 const charName = (id) => (charInfo.get(id) || {}).name || id;
 // "the Scarlet Woman", "the Scarlet Woman or the Imp"
 const asChars = (ids) => { const w = ids.map((id) => `the ${charName(id)}`); return w.length <= 1 ? w.join('') : `${w.slice(0, -1).join(', ')} or ${w[w.length - 1]}`; };
@@ -891,6 +901,7 @@ function render() {
   const views = { stats: statsView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
   $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab]();
   // Editors' account list loads the first time Data & settings is opened.
+  mountClaimPicker();
   if (state.tab === 'data' && state.accounts === undefined && state.shared.on && state.shared.canEdit && creds(state.settings).editorKey) { state.accounts = null; loadAccounts(); }
 }
 
@@ -1170,6 +1181,7 @@ document.addEventListener('submit', async (e) => {
       const r = mode === 'signin' ? await signIn(state.settings, val('username'), f.password.value) : await signUp(state.settings, val('community'), val('username'), f.password.value);
       if (!r.ok) return fail(r.error === 'not-allowed' ? { error: 'not-allowed', message: 'That community password isn\'t right.' } : r);
       webAuth.setAccount(r.token, r.account.username, remember);
+      state.profile = r.account;
     } else {
       const pw = val('password');
       const r = await checkKey(state.settings, pw);
@@ -1253,10 +1265,58 @@ document.addEventListener('click', async (e) => {
   say(`Deleted ${name}.`, true);
 });
 
+// "Your player": pick yourself from the players (the same dropdown as the filters, one choice), or take it back.
+function mountClaimPicker() {
+  const root = $('[data-claim-picker]');
+  if (!root) return;
+  const choices = playerChoices();
+  const names = new Map(choices.map((x) => [x.key, x.name]));
+  multiSelect(root, { label: 'Your name in the games', single: true, options: () => choices.map((x) => ({ value: x.key, label: x.name })),
+    selected: () => (state.claimPick ? [state.claimPick] : []), nameOf: (k) => names.get(k) || k,
+    onChange: (values) => { state.claimPick = values[0] || null; const m = $('#claim-msg'); if (m) m.textContent = ''; } });
+}
+
+const claimError = (r) => (r.error === 'unknown-action' ? 'The shared store needs updating before this works.' : r.message || 'Couldn\'t do that. Try again in a moment.');
+
+document.addEventListener('click', async (e) => {
+  const claim = e.target.closest('[data-claim]');
+  const un = e.target.closest('[data-unclaim]');
+  const remove = e.target.closest('[data-claim-remove]');
+  const say = (text) => { const m = $('#claim-msg'); if (m) { m.className = 'msg err'; m.textContent = text; } };
+  if (claim) {
+    const pick = playerChoices().find((x) => x.key === state.claimPick);
+    if (!pick) return say('Pick yourself from the list first.');
+    claim.disabled = true;
+    const r = await claimPlayer(state.settings, pick.key, pick.name).catch((err) => ({ ok: false, message: err.message }));
+    claim.disabled = false;
+    if (!r.ok) return say(claimError(r));
+    state.profile = r.account;
+    state.claimPick = null;
+    render();
+  } else if (un) {
+    un.disabled = true;
+    const r = await unclaimPlayer(state.settings).catch((err) => ({ ok: false, message: err.message }));
+    un.disabled = false;
+    if (!r.ok) return say(claimError(r));
+    state.profile = r.account;
+    render();
+  } else if (remove) {
+    const name = remove.dataset.claimRemove;
+    if (!confirm(`Remove ${name}'s player? They can pick again.`)) return;
+    remove.disabled = true;
+    const r = await removeClaim(state.settings, name).catch((err) => ({ ok: false, message: err.message }));
+    if (r.ok && state.shared.account && r.account.username.toLowerCase() === state.shared.account.username.toLowerCase()) state.profile = r.account;
+    await loadAccounts();
+    const m = $('#accounts-msg');
+    if (m) { m.className = `msg ${r.ok ? 'ok' : 'err'}`; m.textContent = r.ok ? `Removed ${name}'s player.` : claimError(r); }
+  }
+});
+
 // A password change on another device, or an editor's reset, signs this one out.
 async function checkSignedIn() {
   if (!state.shared.account) return;
   const r = await whoAmI(state.settings).catch(() => null);
+  if (r && r.ok && r.account) { state.profile = r.account; if (state.tab === 'data') render(); }
   if (r && r.ok && r.signedOut) {
     webAuth.clearAccount();
     state.signin = { mode: 'signin', open: false };

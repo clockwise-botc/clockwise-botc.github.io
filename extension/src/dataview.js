@@ -83,6 +83,7 @@ function sharedCard(ctx) {
     return `<div class="card account">
       <h3>Your account</h3>
       ${who}
+      ${sh.account ? playerSection(ctx) : ''}
       ${st.error ? `<p class="sub">${download}</p>` : ''}
       <div class="form">${editor}${sh.canEdit && c.editorKey ? '<p class="sub small">You can change and delete games.</p>' : ''}
         <div class="toolbar"><button class="btn primary" data-action="save-editor-key">Save editor key</button></div>
@@ -116,19 +117,44 @@ function sharedCard(ctx) {
 }
 
 // Editors: everyone's accounts, with a way to set a new password (for someone who forgot theirs) or delete one.
+// "Your player": which player in the games is you. People pick themselves; editors can remove a wrong claim.
+function playerSection({ state, tools }) {
+  const pl = state.profile;
+  const claim = pl && pl.claim;
+  const head = (hint) => `<div class="field-head">Your player <span class="hint">${hint}</span></div>`;
+  let body;
+  if (pl === undefined) body = head('Loading…');
+  else if (claim) {
+    body = `${head('This is you in the games.')}
+      <p class="claim-line"><b>${esc(tools.nameOf(claim.player, claim.name))}</b></p>
+      <div class="toolbar"><button class="btn" type="button" data-unclaim>Not you? Remove</button></div>`;
+  } else {
+    body = `${head('Which player in the games is you?')}
+      <div class="toolbar claim-form"><div class="claim-picker" data-claim-picker></div><button class="btn primary" type="button" data-claim>Claim</button></div>`;
+  }
+  return `<div class="player-claim">${body}<p class="msg" id="claim-msg"></p></div>`;
+}
+
 function accountsCard({ state, tools }) {
   if (!(state.shared.on && state.shared.canEdit && tools.creds(state.settings).editorKey)) return '';
   const list = state.accounts;
   const rows = !list ? '<p class="sub">Loading…</p>' : list.error ? `<p class="sub err">${esc(list.error)}</p>` : !list.length ? '<p class="sub">Nobody has made an account yet.</p>'
-    : `<table class="accounts"><thead><tr><th>Username</th><th>Created</th><th></th></tr></thead><tbody>${list.map((a) => `<tr>
-        <td>${esc(a.username)}</td><td class="muted">${fmtDate(a.created)}</td>
-        <td class="num"><button class="btn small" data-account-reset="${esc(a.username)}">Set new password</button> <button class="btn small danger" data-account-delete="${esc(a.username)}">Delete</button></td></tr>`).join('')}</tbody></table>`;
-  return `<div class="card">
+    : `<table class="accounts"><thead><tr><th>Username</th><th>Player</th><th></th></tr></thead><tbody>${list.map((a) => `<tr>
+        <td>${esc(a.username)}<div class="joined">Joined ${fmtDate(a.created)}</div></td><td>${claimCell(a, tools)}</td>
+        <td class="num"><div class="acct-actions"><button class="btn small" data-account-reset="${esc(a.username)}">Set new password</button><button class="btn small danger" data-account-delete="${esc(a.username)}">Delete</button></div></td></tr>`).join('')}</tbody></table>`;
+  return `<div class="card span-all">
     <h3>Accounts</h3>
-    <p class="sub">Only editors see this. If someone forgets their password, set a new one here and tell them what it is; they can change it afterwards.</p>
+    <p class="sub">Only editors see this. If someone forgets their password, set a new one here and tell them what it is; they can change it afterwards. If someone claimed the wrong player, remove it and they can pick again.</p>
     ${rows}
     <p class="msg" id="accounts-msg"></p>
   </div>`;
+}
+
+// An account's claimed player, for editors, who can remove one that's wrong.
+function claimCell(a, tools) {
+  const c = a.claim;
+  if (!c) return '<span class="muted">None</span>';
+  return `${esc(tools.nameOf(c.player, c.name))} <button class="btn small" data-claim-remove="${esc(a.username)}">Remove</button>`;
 }
 
 function communitiesCard({ state, communityOptions }) {
