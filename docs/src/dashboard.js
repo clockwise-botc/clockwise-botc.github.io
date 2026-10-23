@@ -882,9 +882,8 @@ function addTo(kind, value) {
 
 // ---------- render ----------
 function render() {
-  // The website shows nothing but the sign-in until an account or the community password has been accepted.
+  // The website shows nothing but the sign-in until someone signs in (or an older visit saved the community password).
   const gate = WEB && (!state.shared.hasPassword || state.signin.open);
-  renderAccountChip();
   document.body.classList.toggle('signed-out', gate);
   if (gate) { $('#filters').hidden = true; $('#view').innerHTML = signInView(); return; }
   document.querySelectorAll('[data-tab]').forEach((b) => { if (b.closest('.tabs')) b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)); });
@@ -907,17 +906,13 @@ function signInView() {
       <input type="text" name="username" placeholder="Username" autocomplete="username" required autofocus aria-label="Username">
       <input type="password" name="password" placeholder="Your password" autocomplete="current-password" required aria-label="Your password">
       ${remember}<button class="btn primary" type="submit">Sign in</button>${error}
-      <p class="sub small">Forgot your password? Ask an editor to set a new one.</p></form>`,
+      <p class="sub">Forgot your password? Ask an editor to set a new one.</p></form>`,
     signup: `<form data-signin="signup">
       <input type="text" name="username" placeholder="Choose a username" autocomplete="username" required autofocus aria-label="Username" minlength="2" maxlength="24">
       <input type="password" name="password" placeholder="Choose a password (8+ characters)" autocomplete="new-password" required minlength="8" aria-label="Choose a password">
       <input type="password" name="confirm" placeholder="Type it again" autocomplete="new-password" required minlength="8" aria-label="Type the password again">
       <input type="password" name="community" placeholder="Community password" required aria-label="Community password">
-      ${remember}<button class="btn primary" type="submit">Create account</button>${error}
-      <p class="sub small">The community password proves you're one of us. No email needed.</p></form>`,
-    password: `<form data-signin="password">
-      <input type="password" name="password" placeholder="Community password" autocomplete="current-password" required autofocus aria-label="Community password">
-      ${remember}<button class="btn primary" type="submit">Continue</button>${error}</form>`,
+      ${remember}<button class="btn primary" type="submit">Create account</button>${error}</form>`,
   };
   return `<div class="signin card">
     <img class="logo" src="icons/logo-dark.png" alt="" width="64" height="64">
@@ -925,19 +920,10 @@ function signInView() {
     <p class="sub">Blood on the Clocktower stats for our community.</p>
     <div class="toggles signin-modes" role="group" aria-label="Sign in or create an account">${tab('signin', 'Sign in')}${tab('signup', 'Create account')}</div>
     ${forms[mode] || forms.signin}
-    ${mode === 'password' ? '<button type="button" class="linkish" data-signin-mode="signin">Sign in to an account instead</button>' : '<button type="button" class="linkish" data-signin-mode="password">No account? Use the community password</button>'}
     ${state.signin.open && state.shared.hasPassword ? '<button type="button" class="linkish" data-signin-cancel>Back to the stats</button>' : ''}
   </div>`;
 }
 
-// The signed-in account, top right (website). Clicking it opens Data & settings.
-function renderAccountChip() {
-  const el = $('#account-chip');
-  if (!el) return;
-  const a = WEB && state.shared.account;
-  el.hidden = !a;
-  if (a) el.innerHTML = `<span class="dot" aria-hidden="true"></span>${esc(a.username)}`;
-}
 
 // In the extension: when sharing is set up but this browser can't read the shared games yet.
 function connectCard() {
@@ -1160,7 +1146,7 @@ if (hasChrome) chrome.runtime.sendMessage({ type: 'assets:refresh' }).catch(() =
 // Live refresh when a new game is captured while the dashboard is open.
 if (hasChrome) chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.games || changes.lastSync || changes.assetMap || changes.roleMeta || changes.sharedCache || changes.settings)) load(); });
 
-// Signing in: an account or the community password (website), or the extension's "See everyone's games" card.
+// Signing in to an account or creating one (website), or the extension's "See everyone's games" card (community password).
 document.addEventListener('submit', async (e) => {
   const f = e.target;
   if (!f.matches('[data-signin], [data-connect]')) return;
@@ -1214,7 +1200,8 @@ document.addEventListener('submit', async (e) => {
   const f = e.target;
   if (!f.matches('[data-change-password]')) return;
   e.preventDefault();
-  const say = (text, ok) => { const m = $('#shared-msg'); if (m) { m.className = `msg ${ok ? 'ok' : 'err'}`; m.textContent = text; } };
+  // Problems show inside the form; "changed" shows under the buttons once the form closes.
+  const say = (text, ok) => { const m = ok ? $('#pw-msg') : f.querySelector('.msg'); if (m) { m.className = `msg ${ok ? 'ok' : 'err'}`; m.textContent = text; } };
   if (f.newPassword.value !== f.confirm.value) return say('The two new passwords don\'t match.', false);
   const r = await changePassword(state.settings, f.password.value, f.newPassword.value).catch((err) => ({ ok: false, message: err.message }));
   if (!r.ok) return say(r.message || 'Couldn\'t change it.', false);
@@ -1222,6 +1209,8 @@ document.addEventListener('submit', async (e) => {
   try { remembered = !!localStorage.getItem('clockwise.token'); } catch {}
   webAuth.setAccount(r.token, state.shared.account.username, remembered);
   f.reset();
+  f.hidden = true;
+  f.closest('.card').querySelector('[data-pw-open]').hidden = false;
   say('Password changed. Your other devices are signed out.', true);
 });
 
@@ -1230,6 +1219,20 @@ async function loadAccounts() {
   state.accounts = r.ok ? r.accounts : { error: r.message || 'Couldn\'t load the accounts.' };
   if (state.tab === 'data') render();
 }
+
+// "Change password" opens the form in place; Cancel closes and clears it.
+document.addEventListener('click', (e) => {
+  const openBtn = e.target.closest('[data-pw-open]');
+  const cancel = e.target.closest('[data-pw-cancel]');
+  if (!openBtn && !cancel) return;
+  const card = (openBtn || cancel).closest('.card');
+  const form = card.querySelector('[data-change-password]');
+  if (cancel) form.reset();
+  form.hidden = !!cancel;
+  card.querySelector('[data-pw-open]').hidden = !cancel;
+  for (const m of [$('#pw-msg'), form.querySelector('.msg')]) if (m) m.textContent = '';
+  if (openBtn) form.querySelector('input').focus();
+});
 
 document.addEventListener('click', async (e) => {
   const reset = e.target.closest('[data-account-reset]');

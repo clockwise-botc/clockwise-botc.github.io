@@ -61,28 +61,31 @@ function sharedCard(ctx) {
   const download = sh.hasPassword
     ? (st.error ? `<span class="err">Couldn't download the latest games: ${esc(st.message || st.error)}.</span>` : `Everyone's games, last downloaded ${when(sh.cacheAt)}.`)
     : 'Enter the community password to see everyone\'s games.';
-  const editor = `<label>Editor key <span class="muted">(lets you fix or delete games for everyone)</span>
-      <input type="password" data-shared-field="editorKey" value="${esc(c.editorKey)}" placeholder="Only if you've been given one" autocomplete="off"></label>`;
+  // Editor keys look like cw-edit- plus 20 letters and numbers.
+  const editor = `<label class="key-field">Editor key <span class="hint">Lets you fix or delete games for everyone.</span>
+      <input type="password" data-shared-field="editorKey" value="${esc(c.editorKey)}" placeholder="cw-edit-XXXXXXXXXXXXXXXXXXXX" autocomplete="off"></label>`;
   const site = tools.siteUrl();
   if (tools.WEB) {
     const who = sh.account
       ? `<p class="sub">Signed in as <b>${esc(sh.account.username)}</b>.</p>
-        <details class="advanced"><summary>Change your password</summary>
-          <form class="form" data-change-password>
-            <input type="password" name="password" placeholder="Current password" autocomplete="current-password" required aria-label="Current password">
-            <input type="password" name="newPassword" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required aria-label="New password">
-            <input type="password" name="confirm" placeholder="New password again" autocomplete="new-password" minlength="8" required aria-label="New password again">
-            <div class="toolbar"><button class="btn primary" type="submit">Change password</button></div>
-            <p class="sub small">This signs you out on your other devices.</p>
-          </form></details>`
+        <div class="toolbar account-row"><button class="btn" type="button" data-pw-open>Change password</button><button class="btn" data-action="sign-out">Sign out</button></div>
+        <p class="msg" id="pw-msg" role="status"></p>
+        <form class="form change-pw" data-change-password hidden>
+          <div class="field-head">Change password <span class="hint">Saving signs you out on your other devices.</span></div>
+          <input type="password" name="password" placeholder="Current password" autocomplete="current-password" required aria-label="Current password">
+          <input type="password" name="newPassword" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required aria-label="New password">
+          <input type="password" name="confirm" placeholder="New password again" autocomplete="new-password" minlength="8" required aria-label="New password again">
+          <div class="toolbar"><button class="btn primary" type="submit">Save new password</button><button class="btn" type="button" data-pw-cancel>Cancel</button></div>
+          <p class="msg" role="alert"></p>
+        </form>`
       : `<p class="sub">You're using the community password. With an account you'll get your own settings, like claiming your player.</p>
-        <div class="toolbar"><button class="btn primary" data-open-signin="signup">Create an account</button><button class="btn" data-open-signin="signin">Sign in</button></div>`;
-    return `<div class="card">
+        <div class="toolbar account-row"><button class="btn primary" data-open-signin="signup">Create an account</button><button class="btn" data-open-signin="signin">Sign in</button><button class="btn" data-action="sign-out">Sign out</button></div>`;
+    return `<div class="card account">
       <h3>Your account</h3>
       ${who}
-      <p class="sub">${download}${sh.canEdit && c.editorKey ? ' You can change and delete games.' : ''}</p>
-      <div class="form">${editor}
-        <div class="toolbar"><button class="btn primary" data-action="save-editor-key">Save editor key</button><button class="btn" data-action="download-now">Download now</button><button class="btn" data-action="sign-out">Sign out</button></div>
+      ${st.error ? `<p class="sub">${download}</p>` : ''}
+      <div class="form">${editor}${sh.canEdit && c.editorKey ? '<p class="sub small">You can change and delete games.</p>' : ''}
+        <div class="toolbar"><button class="btn primary" data-action="save-editor-key">Save editor key</button></div>
         <p class="msg" id="shared-msg"></p></div>
     </div>
     ${accountsCard(ctx)}`;
@@ -95,7 +98,7 @@ function sharedCard(ctx) {
     ${sh.on ? `<p class="sub">Games recorded in this browser are uploaded to your community's shared stats, so everyone sees the same dashboard. ${upload}</p>
       <p class="sub">${download}${site ? ` Everyone can also see it at <a href="${esc(site)}" target="_blank" rel="noopener">the community dashboard</a>.` : ''}</p>
       <div class="form">
-        <label>Community password <input type="password" data-shared-field="viewPassword" value="${esc(c.password)}" placeholder="The password your community shared" autocomplete="off"></label>
+        <label class="key-field">Community password <input type="password" data-shared-field="viewPassword" value="${esc(c.password)}" placeholder="The password your community shared" autocomplete="off"></label>
         ${editor}
         <div class="toolbar"><button class="btn primary" data-action="save-shared">Save</button><button class="btn" data-action="upload-now">Upload now</button><button class="btn" data-action="download-now">Download now</button></div>
         <p class="msg" id="shared-msg"></p>
