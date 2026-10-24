@@ -8,6 +8,9 @@
 //
 // Claims: someone says which player in the games is them ({ player, name, at }). People are trusted to pick
 // themselves; only one account can claim a given player, and editors can remove a claim that's wrong.
+//
+// Private stats (profile.private): the claimed player's page is hidden from everyone else on the dashboards.
+// They still count everywhere else, rankings included. Every read lists the private players.
 
 var TOKEN_DAYS_ = 180;
 var HASH_ROUNDS_ = 400;
@@ -38,6 +41,11 @@ function hashPassword_(store, password, salt) {
 
 function publicAccount_(acct) {
   return { username: acct.username, created: acct.created, profile: acct.profile || {}, claim: acct.claim || null };
+}
+
+// Players whose accounts keep their stats private.
+function privatePlayers_(store) {
+  return store.listAccounts().filter(function (a) { return a.claim && a.profile && a.profile.private; }).map(function (a) { return a.claim.player; });
 }
 
 // The account (other than `exceptKey`) that has already claimed this player, if any.
@@ -128,6 +136,13 @@ function handleAccount_(body, store, who, now) {
       var claimed = Object.assign({}, mine, { claim: { player: player, name: String(body.name || '').slice(0, 60), at: now } });
       store.batch(function () { store.putAccount(myKey, claimed, now); });
       return { ok: true, account: publicAccount_(claimed) };
+    }
+
+    case 'set-private': {
+      if (!who.account) return { ok: false, error: 'signed-out' };
+      var priv = Object.assign({}, who.account, { profile: Object.assign({}, who.account.profile || {}, { private: !!body.private }) });
+      store.batch(function () { store.putAccount(accountKey_(priv.username), priv, now); });
+      return { ok: true, account: publicAccount_(priv) };
     }
 
     case 'unclaim':

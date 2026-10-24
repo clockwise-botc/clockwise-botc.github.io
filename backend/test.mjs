@@ -290,6 +290,23 @@ check('claims: count straight away; one account per player; editors can remove t
   assert.equal(handle({ action: 'unclaim', token: b.token }, keys).account.claim, null);
 });
 
+check('private stats: reads list the private players; only with a claim', () => {
+  const { handle: raw } = loadBackend();
+  const handle = (body, k, now = 2000) => raw(body, k, now);
+  const a = signup(raw, 'oddish', 'correct horse');
+  const b = signup(raw, 'wren', 'another one');
+  assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, keys).privatePlayers, []);
+  assert.equal(handle({ action: 'set-private', private: true }, keys).error, 'signed-out');
+  assert.equal(handle({ action: 'set-private', token: a.token, private: true }, keys).account.profile.private, true);
+  assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, keys).privatePlayers, [], 'no claim yet, so nothing to hide');
+  handle({ action: 'claim', token: a.token, player: 'u-1' }, keys);
+  handle({ action: 'claim', token: b.token, player: 'u-2' }, keys);
+  assert.deepEqual(handle({ action: 'read', token: b.token }, keys).privatePlayers, ['u-1']);
+  assert.equal(handle({ action: 'me', token: a.token }, keys).account.profile.private, true, 'the setting comes back with the account');
+  handle({ action: 'set-private', token: a.token, private: false }, keys);
+  assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, keys).privatePlayers, []);
+});
+
 check('every sample game uploads and builds the Sheet tables', () => {
   const { handle, store } = loadBackend();
   const r = handle({ action: 'record', key: 'write-key', games }, keys);

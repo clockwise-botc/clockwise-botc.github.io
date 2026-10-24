@@ -19,12 +19,13 @@ export async function call(url, body) {
 }
 
 // Brings a local copy of the shared games up to date: only what changed since the last download.
-// cache: { games: {id: game}, since, meta, at } — kept in chrome.storage (extension) or IndexedDB (website).
+// cache: { games: {id: game}, since, meta, at, privatePlayers } — kept in chrome.storage (extension) or IndexedDB (website).
 // auth: { key } (community password or editor key) and/or { token } (a signed-in account).
 export async function pull(url, auth, cache) {
   const res = await call(url, { action: 'read', ...auth, since: cache && cache.since ? cache.since : 0 });
   if (!res.ok) return { ok: false, error: res.error, message: res.message, cache };
-  const next = { games: { ...((cache && cache.games) || {}) }, since: res.now, meta: (cache && cache.meta) || null, at: Date.now() };
+  const next = { games: { ...((cache && cache.games) || {}) }, since: res.now, meta: (cache && cache.meta) || null, at: Date.now(),
+    privatePlayers: Array.isArray(res.privatePlayers) ? res.privatePlayers : (cache && cache.privatePlayers) || [] };
   for (const g of res.games || []) next.games[g.id] = g;
   for (const id of res.deleted || []) delete next.games[id];
   if (res.meta) next.meta = res.meta;

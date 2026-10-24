@@ -86,9 +86,11 @@ export async function refreshShared(settings) {
   // Remember deleted ids, so this browser's own copy of a deleted game isn't shown again.
   const removed = before ? Object.keys(before.games || {}).filter((id) => !res.cache.games[id]) : [];
   res.cache.deleted = [...new Set([...((before && before.deleted) || []), ...removed])];
+  // Who keeps their stats private can change without any game changing.
+  const privacy = JSON.stringify((before && before.privatePlayers) || []) !== JSON.stringify(res.cache.privatePlayers);
   if (res.changed || !before) await cacheSet(res.cache);
-  else await cacheSet({ ...before, since: res.cache.since, at: res.cache.at });
-  return { ok: true, changed: res.changed, canEdit: res.canEdit };
+  else await cacheSet({ ...before, since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers });
+  return { ok: true, changed: res.changed + (privacy ? 1 : 0), canEdit: res.canEdit };
 }
 
 // Everyone's games, plus this browser's own games that haven't reached the shared store yet.
@@ -122,6 +124,7 @@ export const resetPassword = (settings, username, newPassword) => accountCall(se
 export const deleteAccount = (settings, username) => accountCall(settings, { action: 'delete-account', key: creds(settings).editorKey, username });
 export const claimPlayer = (settings, player, name) => accountCall(settings, { action: 'claim', token: creds(settings).token, player, name });
 export const unclaimPlayer = (settings) => accountCall(settings, { action: 'unclaim', token: creds(settings).token });
+export const setPrivate = (settings, on) => accountCall(settings, { action: 'set-private', token: creds(settings).token, private: on });
 export const removeClaim = (settings, username) => accountCall(settings, { action: 'remove-claim', key: creds(settings).editorKey, username });
 
 // ---------- editing (editor key) ----------

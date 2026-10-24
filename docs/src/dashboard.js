@@ -2,13 +2,13 @@ import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNam
 import { predictOutcome, tuneOutcomeModel } from './insights.js';
 import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable } from './insights.js';
 import { communityConfig, communityName, gameCommunity, NONE } from './communities.js';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar } from './ui.js';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar } from './ui.js';
 import { renderData, handleDataClick, handleImport } from './dataview.js';
 import { renderGrimoire } from './grimoire.js';
 import { makeImages } from './images.js';
 import { characterToken, installTokenStyle } from './tokens.js';
 import { multiSelect } from './multiselect.js';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim } from './data.js';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate } from './data.js';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -77,6 +77,16 @@ let artAsked = false;
 let roleMeta = {}; // per character: [first night, other nights, reminders, setup, edition], from botc.app
 let charInfo = new Map();
 const nameOf = (key) => playerNames.get(key) || key;
+// Private stats: these players' pages are hidden from everyone but themselves. They still count everywhere else, and
+// their names show, just not as links to their page.
+let privatePlayers = new Set();
+const myPlayer = () => (state.profile && state.profile.claim ? state.profile.claim.player : null);
+const isHidden = (key) => privatePlayers.has(key) && key !== myPlayer();
+const playerLink = (key, name) => (isHidden(key) ? esc(name) : uiPlayerLink(key, name));
+const privateNotice = () => {
+  const hidden = state.sel.players.filter(isHidden);
+  return hidden.length ? `<div class="card empty"><h2>${esc(listWords(hidden.map(nameOf)))} ${hidden.length > 1 ? 'keep their' : 'keeps their'} stats private</h2><p>Their games still count in everyone else's stats. Remove them from the filter to carry on.</p></div>` : '';
+};
 // Everyone who has played, for "Your player": [{ key, name }] by name, with a number added when two share a name.
 function playerChoices() {
   const list = [...playerKeys].map((key) => ({ key, name: nameOf(key) })).filter((x) => x.name);
@@ -765,11 +775,13 @@ function gamesView() {
   if (!state.games.length) return noGames();
   const base = baseGames();
   const G = selectGames(base, state.sel);
+  if (privateNotice()) return privateNotice();
   return `${summaryLine(G, base, state.sel)}${G.length ? gamesList(G) : '<div class="card empty"><h2>No games match</h2><p>Try removing a filter.</p></div>'}`;
 }
 
 function statsView() {
   if (!state.games.length) return `<div class="empty card"><h2>No games recorded yet</h2><p>Keep botc.app open in a tab while you play. Each game is saved automatically when the storyteller reveals the grimoire.</p><p class="muted">Already have data? Import it from Data &amp; settings.</p></div>`;
+  if (privateNotice()) return privateNotice();
   const base = baseGames();
   const sel = state.sel;
   const G = selectGames(base, sel);
@@ -862,7 +874,7 @@ function populateFilters() {
 const dropdowns = {};
 function setupDropdowns() {
   const defs = {
-    players: { label: 'Players', nameOf: nameOf, options: () => [...playerKeys].map((value) => ({ value, label: nameOf(value) })).sort((a, b) => a.label.localeCompare(b.label)) },
+    players: { label: 'Players', nameOf: nameOf, options: () => [...playerKeys].filter((k) => !isHidden(k)).map((value) => ({ value, label: nameOf(value) })).sort((a, b) => a.label.localeCompare(b.label)) },
     characters: { label: 'Characters', nameOf: charName, options: () => [...charInfo.values()].map((c) => ({ value: c.roleId, label: c.name, sub: teamOne(c.team) })).sort((a, b) => a.label.localeCompare(b.label)) },
     types: { label: 'Character type', nameOf: teamOne, options: () => TYPES.map((t) => ({ value: t, label: teamOne(t) })) },
   };
@@ -987,6 +999,7 @@ async function load() {
     artAsked = true;
     chrome.runtime.sendMessage({ type: 'assets:refresh', force: true }).then((r) => { if (r && !r.ok) { state.artError = r.error || 'unknown error'; render(); } }).catch(() => {});
   }
+  privatePlayers = new Set((cache && cache.privatePlayers) || []);
   playerNames = displayNames(state.games);
   useDisplayNames(playerNames);
   playerKeys = new Set(playerTable(state.games).map((p) => p.key));
@@ -1276,6 +1289,18 @@ function mountClaimPicker() {
     onChange: (values) => { state.claimPick = values[0] || null; const m = $('#claim-msg'); if (m) m.textContent = ''; } });
 }
 
+// "Keep my stats private".
+document.addEventListener('change', async (e) => {
+  const box = e.target.closest('[data-private]');
+  if (!box) return;
+  box.disabled = true;
+  const r = await setPrivate(state.settings, box.checked).catch((err) => ({ ok: false, message: err.message }));
+  box.disabled = false;
+  if (!r.ok) { box.checked = !box.checked; const m = $('#claim-msg'); if (m) { m.className = 'msg err'; m.textContent = claimError(r); } return; }
+  state.profile = r.account;
+  const m = $('#claim-msg'); if (m) { m.className = 'msg ok'; m.textContent = box.checked ? 'Your stats are private now.' : 'Your stats are visible to everyone again.'; }
+});
+
 const claimError = (r) => (r.error === 'unknown-action' ? 'The shared store needs updating before this works.' : r.message || 'Couldn\'t do that. Try again in a moment.');
 
 document.addEventListener('click', async (e) => {
@@ -1316,7 +1341,7 @@ document.addEventListener('click', async (e) => {
 async function checkSignedIn() {
   if (!state.shared.account) return;
   const r = await whoAmI(state.settings).catch(() => null);
-  if (r && r.ok && r.account) { state.profile = r.account; if (state.tab === 'data') render(); }
+  if (r && r.ok && r.account) { state.profile = r.account; renderPickers(); render(); }
   if (r && r.ok && r.signedOut) {
     webAuth.clearAccount();
     state.signin = { mode: 'signin', open: false };

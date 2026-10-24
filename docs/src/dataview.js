@@ -85,7 +85,13 @@ function sharedCard(ctx) {
       ${who}
       ${sh.account ? playerSection(ctx) : ''}
       ${st.error ? `<p class="sub">${download}</p>` : ''}
-      <div class="form">${editor}${sh.canEdit && c.editorKey ? '<p class="sub small">You can change and delete games.</p>' : ''}
+    </div>
+    <div class="card editor-card">
+      <h3>Editor key</h3>
+      <p class="sub">Lets you fix or delete games for everyone.</p>
+      <div class="form">
+        <input type="password" data-shared-field="editorKey" value="${esc(c.editorKey)}" placeholder="cw-edit-XXXXXXXXXXXXXXXXXXXX" autocomplete="off" aria-label="Editor key">
+        ${sh.canEdit && c.editorKey ? '<p class="sub small">You can change and delete games.</p>' : ''}
         <div class="toolbar"><button class="btn primary" data-action="save-editor-key">Save editor key</button></div>
         <p class="msg" id="shared-msg"></p></div>
     </div>
@@ -125,9 +131,11 @@ function playerSection({ state, tools }) {
   let body;
   if (pl === undefined) body = head('Loading…');
   else if (claim) {
+    const priv = !!(pl.profile && pl.profile.private);
     body = `${head('This is you in the games.')}
-      <p class="claim-line"><b>${esc(tools.nameOf(claim.player, claim.name))}</b></p>
-      <div class="toolbar"><button class="btn" type="button" data-unclaim>Not you? Remove</button></div>`;
+      <div class="claim-line"><b>${esc(tools.nameOf(claim.player, claim.name))}</b><button class="btn small" type="button" data-unclaim>Not you? Remove</button></div>
+      <label class="private-check"><span>Keep my stats private <span class="hint">Only you can see your player page.</span></span>
+        <span class="switch"><input type="checkbox" role="switch" data-private ${priv ? 'checked' : ''}><span class="knob" aria-hidden="true"></span></span></label>`;
   } else {
     body = `${head('Which player in the games is you?')}
       <div class="toolbar claim-form"><div class="claim-picker" data-claim-picker></div><button class="btn primary" type="button" data-claim>Claim</button></div>`;

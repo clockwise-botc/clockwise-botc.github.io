@@ -506,14 +506,27 @@ form.change-pw .field-head { margin-bottom: -7px; }
 form.change-pw .toolbar, form.change-pw .msg { margin: 0; }
 .card.account h3 { margin-bottom: 14px; }
 .card.account .account-row { margin-bottom: 26px; }
-.card.account .form .toolbar { margin-bottom: 0; }
-.card.account #shared-msg:empty { display: none; }
+.card.account > :last-child { margin-bottom: 0; }
+.editor-card .form .toolbar { margin-bottom: 0; }
+.editor-card #shared-msg:empty { display: none; }
 .player-claim { margin-bottom: 26px; display: grid; gap: 12px; }
 .player-claim .field-head .hint { margin-bottom: 0; }
 .player-claim .msg:empty { display: none; }
 .player-claim .msg, .player-claim .toolbar, .claim-line { margin: 0; }
 .claim-picker { flex: 1; min-width: 180px; }
-.claim-line { font-size: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.private-check { margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 16px; font-size: 14px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.private-check .hint { display: block; margin-top: 2px; font-weight: 400; color: var(--muted); }
+/* An on/off switch: the change takes effect straight away, no Save needed. */
+.switch { position: relative; display: inline-block; width: 40px; height: 24px; flex: none; }
+.switch input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.switch .knob { position: absolute; inset: 0; border-radius: 999px; background: var(--surface-2); border: 1.5px solid var(--border); transition: background .15s, border-color .15s; pointer-events: none; }
+.switch .knob::after { content: ""; position: absolute; top: 2.5px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink-2); transition: transform .15s, background .15s; }
+.switch input:checked + .knob { background: var(--accent); border-color: var(--accent); }
+.switch input:checked + .knob::after { transform: translateX(15px); background: #fff; }
+.switch input:focus-visible + .knob { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+.switch input:disabled + .knob { opacity: .6; }
+.claim-line { font-size: 15px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.claim-line .btn { margin: 0; }
 
 #pw-msg { margin: -14px 0 22px; }
 #pw-msg:empty, form.change-pw .msg:empty { display: none; }
