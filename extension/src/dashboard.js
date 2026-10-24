@@ -874,7 +874,9 @@ function populateFilters() {
 const dropdowns = {};
 function setupDropdowns() {
   const defs = {
-    players: { label: 'Players', nameOf: nameOf, options: () => [...playerKeys].filter((k) => !isHidden(k)).map((value) => ({ value, label: nameOf(value) })).sort((a, b) => a.label.localeCompare(b.label)) },
+    // Your own player (if you've claimed one) comes first.
+    players: { label: 'Players', nameOf: nameOf, options: () => [...playerKeys].filter((k) => !isHidden(k)).map((value) => ({ value, label: nameOf(value), sub: value === myPlayer() ? 'You' : '' }))
+      .sort((a, b) => (b.value === myPlayer()) - (a.value === myPlayer()) || a.label.localeCompare(b.label)) },
     characters: { label: 'Characters', nameOf: charName, options: () => [...charInfo.values()].map((c) => ({ value: c.roleId, label: c.name, sub: teamOne(c.team) })).sort((a, b) => a.label.localeCompare(b.label)) },
     types: { label: 'Character type', nameOf: teamOne, options: () => TYPES.map((t) => ({ value: t, label: teamOne(t) })) },
   };
