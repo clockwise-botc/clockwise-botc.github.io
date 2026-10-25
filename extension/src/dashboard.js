@@ -37,7 +37,7 @@ const state = {
   settings: {},
   // Shared games: is a shared store set up, can we read it (password), can we change it (editor key)?
   shared: { on: false, hasPassword: false, canEdit: true, status: null, cacheAt: null, account: null },
-  profile: WEB && webAuth.account().token ? webAuth.profile() : undefined, // the signed-in account as the store has it (claimed player, own communities); undefined until checked
+  profile: !WEB || webAuth.account().token ? webAuth.profile() : undefined, // the signed-in account as the store has it (claimed player, own communities); undefined until checked
   claimPick: null, // the player picked in "Your player" before pressing Claim
   signin: { mode: 'signin', open: false }, // the website's sign-in screen: which form, and whether shown on request
 };
@@ -46,13 +46,32 @@ const communityOptions = () => communityConfig(state.settings).communities.map((
 // On the website your own communities are only for filtering; a game itself goes under Escape or Rhap.
 const gameCommunityOptions = () => (WEB ? communityOptions().filter((o) => DEFAULTS.communities.some((d) => d.id === o.value)) : communityOptions());
 // The signed-in account (website): remembered on this device, and its own communities join Escape and Rhap.
-function setProfile(p) { state.profile = p; webAuth.setProfile(p); }
+function setProfile(p) {
+  state.profile = p;
+  webAuth.setProfile(p);
+  // The extension records with your own communities too (the popup and background read them from settings).
+  if (!WEB && p && JSON.stringify(p.communities || []) !== JSON.stringify(state.settings.accountCommunities || [])) {
+    state.settings = { ...state.settings, accountCommunities: p.communities || [] };
+    api.set('settings', state.settings);
+  }
+}
+// Where the sign-in lives: the website keeps it in this browser's storage; the extension in its settings (shared
+// with the popup, where people sign in).
+async function keepToken(token) {
+  if (WEB) { let remembered = false; try { remembered = !!localStorage.getItem('clockwise.token'); } catch {} webAuth.setAccount(token, state.shared.account.username, remembered); return; }
+  state.settings = { ...state.settings, accountToken: token };
+  await api.set('settings', state.settings);
+}
+async function forgetAccount() {
+  webAuth.clearAccount();
+  if (!WEB) { state.settings = { ...state.settings, accountToken: '', accountName: '', accountCommunities: [] }; await api.set('settings', state.settings); }
+}
 const withMyCommunities = (settings) => (WEB ? { ...settings, communities: [...DEFAULTS.communities, ...((state.profile && state.profile.communities) || [])] } : settings);
 // On/off buttons for picking communities; `on` is the list of ids that are switched on.
 const communityButtons = (attr, on, extra = '', options = communityOptions()) => options.map((o) => `<button class="toggle" ${attr}="${esc(extra + o.value)}" aria-pressed="${on.includes(o.value)}">${esc(o.name)}</button>`).join('');
 const $ = (sel) => document.querySelector(sel);
 const ctx = { state, api, load: () => load(), communityOptions,
-  tools: { WEB, creds, siteUrl, checkKey, webAuth, cacheClear, syncShared: () => syncShared(), nameOf: (key, fallback) => (playerNames.has(key) ? playerNames.get(key) : fallback || key), playerChoices: () => playerChoices() },
+  tools: { WEB, creds, siteUrl, checkKey, webAuth, cacheClear, forgetAccount: () => forgetAccount(), syncShared: () => syncShared(), nameOf: (key, fallback) => (playerNames.has(key) ? playerNames.get(key) : fallback || key), playerChoices: () => playerChoices() },
   // For Data & settings: is botc.app's token art in use, and if not, why.
   art: () => ({ loaded: !!images.tokenStyle, fonts: document.documentElement.classList.contains('token-font'), roles: Object.keys(roleMeta).length, error: state.artError || (images.styleError || '') }) };
 
@@ -982,8 +1001,7 @@ function connectCard() {
     return st && st.error ? `<p class="sync-note err">Couldn't update everyone's games: ${esc(st.message || st.error)}. Showing what was downloaded ${state.shared.cacheAt ? `on ${fmtDate(state.shared.cacheAt)} ${fmtTime(state.shared.cacheAt)}` : 'before'}.</p>` : '';
   }
   return `<div class="card connect"><div><h3>See everyone's games</h3>
-    <p class="sub">${st && st.error === 'not-allowed' ? 'That password wasn\'t right. ' : ''}Enter your community's password to see the games everyone has recorded. Until then this shows only the games recorded in this browser.</p></div>
-    <form data-connect><input type="password" name="password" placeholder="Community password" aria-label="Community password" required><button class="btn primary" type="submit">Connect</button></form></div>`;
+    <p class="sub">Click the Clockwise icon in Chrome's toolbar and sign in to see the games everyone has recorded. You only need to do it once. Until then this shows only the games recorded in this browser.</p></div></div>`;
 }
 
 // Download what's new from the shared store; the dashboard redraws if anything changed.
@@ -1007,6 +1025,7 @@ async function syncShared() {
 
 async function load() {
   state.settings = withMyCommunities(await api.get('settings', {}));
+  if (!WEB && !state.settings.accountToken) state.profile = undefined;
   const local = WEB ? {} : await api.get('games', {});
   const c = creds(state.settings);
   const cache = c.url ? await loadShared() : null;
@@ -1194,7 +1213,17 @@ window.addEventListener('hashchange', () => { state.sel = readHash(); state.tab 
 if (hasChrome) chrome.runtime.sendMessage({ type: 'assets:refresh' }).catch(() => {});
 
 // Live refresh when a new game is captured while the dashboard is open.
-if (hasChrome) chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.games || changes.lastSync || changes.assetMap || changes.roleMeta || changes.sharedCache || changes.settings)) load(); });
+if (hasChrome) chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  // Signed in or out in the popup: who you are decides which games you get, so start the download afresh.
+  const s = changes.settings;
+  if (s && ((s.oldValue || {}).accountName || '') !== ((s.newValue || {}).accountName || '') && !WEB) {
+    state.profile = undefined;
+    cacheClear().then(load).then(() => checkSignedIn()).then(() => syncShared());
+    return;
+  }
+  if (changes.games || changes.lastSync || changes.assetMap || changes.roleMeta || changes.sharedCache || changes.settings) load();
+});
 
 // Signing in to an account or creating one (website), or the extension's "See everyone's games" card (community password).
 document.addEventListener('submit', async (e) => {
@@ -1256,9 +1285,7 @@ document.addEventListener('submit', async (e) => {
   if (f.newPassword.value !== f.confirm.value) return say('The two new passwords don\'t match.', false);
   const r = await changePassword(state.settings, f.password.value, f.newPassword.value).catch((err) => ({ ok: false, message: err.message }));
   if (!r.ok) return say(r.message || 'Couldn\'t change it.', false);
-  let remembered = false;
-  try { remembered = !!localStorage.getItem('clockwise.token'); } catch {}
-  webAuth.setAccount(r.token, state.shared.account.username, remembered);
+  await keepToken(r.token);
   f.reset();
   f.hidden = true;
   f.closest('.card').querySelector('[data-pw-open]').hidden = false;
@@ -1415,9 +1442,11 @@ document.addEventListener('click', async (e) => {
 async function checkSignedIn() {
   if (!state.shared.account) return;
   const r = await whoAmI(state.settings).catch(() => null);
+  // The store renews a sign-in that's been in use a while: keep the fresh one, where the old one was kept.
+  if (r && r.ok && r.token) await keepToken(r.token);
   if (r && r.ok && r.account) { setProfile(r.account); await load(); }
   if (r && r.ok && r.signedOut) {
-    webAuth.clearAccount();
+    await forgetAccount();
     state.signin = { mode: 'signin', open: false };
     await load();
     state.shared.status = { error: 'signed-out', message: 'You were signed out (your password was changed). Please sign in again.' };

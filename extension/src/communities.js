@@ -19,8 +19,13 @@ export const DEFAULTS = {
 const norm = (room) => String(room || '').trim().toLowerCase();
 
 export function communityConfig(settings = {}) {
+  const base = Array.isArray(settings.communities) ? settings.communities : DEFAULTS.communities;
+  // Your own communities, from the account you're signed in to in the extension (made on the website). They're
+  // marked `own` so the Communities card in Data & settings, which edits this browser's list, leaves them out.
+  const own = (Array.isArray(settings.accountCommunities) ? settings.accountCommunities : [])
+    .filter((c) => c && c.id && !base.some((b) => b.id === c.id)).map((c) => ({ ...c, own: true }));
   return {
-    communities: Array.isArray(settings.communities) ? settings.communities : DEFAULTS.communities,
+    communities: [...base, ...own],
     fallback: settings.fallbackCommunity !== undefined ? settings.fallbackCommunity : DEFAULTS.fallbackCommunity,
     overrides: settings.roomCommunity || {},
   };

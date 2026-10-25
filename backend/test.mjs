@@ -375,6 +375,18 @@ check("reminder tokens: the storyteller's own recording wins, whichever arrives 
   assert.deepEqual(remindersOf(both).slice(0, 3), ['Poisoned+sus', 'I think demon', 'Safe']);
 });
 
+check('sign-ins renew themselves while used', () => {
+  const { handle } = loadBackend();
+  const a = signup(handle, 'oddish', 'correct horse', 'view-pass', 1000);
+  assert.equal(handle({ action: 'ping', token: a.token }, keys, 1000 + 864e5).token, undefined, 'a day old: no need');
+  const later = 1000 + 100 * 864e5;
+  const renewed = handle({ action: 'ping', token: a.token }, keys, later).token;
+  assert.ok(renewed && renewed !== a.token, 'a week or more: a fresh one');
+  const muchLater = later + 170 * 864e5; // 270 days after signing up: the old token has expired, the renewed one hasn't
+  assert.equal(handle({ action: 'ping', token: a.token }, keys, muchLater).signedOut, true);
+  assert.equal(handle({ action: 'ping', token: renewed }, keys, muchLater).account.username, 'oddish');
+});
+
 check('every sample game uploads and builds the Sheet tables', () => {
   const { handle, store } = loadBackend();
   const r = handle({ action: 'record', key: 'write-key', games }, keys);

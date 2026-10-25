@@ -1,14 +1,12 @@
-// The "Data & settings" view: export/import, Google Sheets, communities, stored data.
+// The "Data & settings" view: export (and import), your account and communities, the editor key; in the extension
+// also this browser's uploads and stored games, and its Escape & Rhap rooms.
 import { toTables, toCSV, COLUMNS } from './tables.js';
 import { communityConfig, communityName, slug, NONE } from './communities.js';
-import { esc, fmtDate, fmtTime } from './ui.js';
+import { esc, fmtDate, fmtTime, plural } from './ui.js';
 
 export function renderData(ctx, filteredGames) {
   const { state } = ctx;
-  const all = state.games;
-  const s = state.settings;
-  const ls = state.lastSync;
-  const samples = all.filter((g) => g.id.startsWith('sample-')).length;
+  const samples = state.games.filter((g) => g.id.startsWith('sample-')).length;
   return `<div class="grid two">
     <div class="card">
       <h3>Export</h3>
@@ -26,17 +24,7 @@ export function renderData(ctx, filteredGames) {
       <p class="msg" id="import-msg"></p>`}
     </div>
     ${sharedCard(ctx)}
-    ${ctx.tools.WEB ? '' : `${communitiesCard(ctx)}
-    <div class="card">
-      <h3>Stored data</h3>
-      <p class="sub">${all.length} games stored in this browser (${all.filter((g) => g.excluded).length} excluded). Data stays on this computer unless you export it or turn on Sheets sync.</p>
-      ${artLine(ctx)}
-      <div class="toolbar">
-        ${samples ? `<button class="btn" data-action="delete-sample">Remove sample data (${samples} games)</button>` : ''}
-        <button class="btn danger" data-action="delete-all">Delete all games…</button>
-        <button class="btn" data-action="reload-art">Reload artwork from botc.app</button>
-      </div>
-    </div>`}
+    ${ctx.tools.WEB ? '' : `${thisBrowserCard(ctx, samples)}${roomsCard(ctx)}`}
   </div>`;
 }
 
@@ -50,8 +38,8 @@ function artLine({ art }) {
   return `<p class="sub" id="art-status">${status}</p>`;
 }
 
-// Sharing: everyone's games in one place. In the extension: uploads, the community password and editor key.
-// On the website: sign-out and the editor key.
+// Your account, your communities, the editor key (and, for editors, everyone's accounts): the same on the website
+// and in the extension, where you sign in from the popup.
 function sharedCard(ctx) {
   const { state, tools } = ctx;
   const sh = state.shared;
@@ -61,69 +49,43 @@ function sharedCard(ctx) {
   const download = sh.hasPassword
     ? (st.error ? `<span class="err">Couldn't download the latest games: ${esc(st.message || st.error)}.</span>` : `Everyone's games, last downloaded ${when(sh.cacheAt)}.`)
     : 'Enter the community password to see everyone\'s games.';
-  // Editor keys look like cw-edit- plus 20 letters and numbers.
-  const editor = `<label class="key-field">Editor key <span class="hint">Lets you fix or delete games for everyone.</span>
-      <input type="password" data-shared-field="editorKey" value="${esc(c.editorKey)}" placeholder="cw-edit-XXXXXXXXXXXXXXXXXXXX" autocomplete="off"></label>`;
-  const site = tools.siteUrl();
-  if (tools.WEB) {
-    const who = sh.account
-      ? `<p class="sub">Signed in as <b>${esc(sh.account.username)}</b>.</p>
-        <div class="toolbar account-row"><button class="btn" type="button" data-pw-open data-opens="pw">Change password</button><button class="btn" data-action="sign-out">Sign out</button></div>
-        <p class="msg" id="pw-msg" role="status"></p>
-        <form class="form change-pw" data-change-password data-keep="pw" hidden>
-          <div class="field-head">Change password <span class="hint">Saving signs you out on your other devices.</span></div>
-          <input type="password" name="password" placeholder="Current password" autocomplete="current-password" required aria-label="Current password">
-          <input type="password" name="newPassword" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required aria-label="New password">
-          <input type="password" name="confirm" placeholder="New password again" autocomplete="new-password" minlength="8" required aria-label="New password again">
-          <div class="toolbar"><button class="btn primary" type="submit">Save new password</button><button class="btn" type="button" data-pw-cancel>Cancel</button></div>
-          <p class="msg" role="alert"></p>
-        </form>`
-      : `<p class="sub">You're using the community password. With an account you'll get your own settings, like claiming your player.</p>
-        <div class="toolbar account-row"><button class="btn primary" data-open-signin="signup">Create an account</button><button class="btn" data-open-signin="signin">Sign in</button><button class="btn" data-action="sign-out">Sign out</button></div>`;
-    return `<div class="card account">
-      <h3>Your account</h3>
-      ${who}
-      ${sh.account ? playerSection(ctx) : ''}
-      ${st.error ? `<p class="sub">${download}</p>` : ''}
-    </div>
-    ${sh.account ? myCommunitiesCard(ctx) : ''}
-    <div class="card editor-card">
-      <h3>Editor key</h3>
-      <p class="sub">Lets you fix or delete games for everyone.</p>
-      <div class="form">
-        <input type="password" data-shared-field="editorKey" value="${esc(c.editorKey)}" placeholder="cw-edit-XXXXXXXXXXXXXXXXXXXX" autocomplete="off" aria-label="Editor key">
-        ${sh.canEdit && c.editorKey ? '<p class="sub small">You can change and delete games.</p>' : ''}
-        <div class="toolbar"><button class="btn primary" data-action="save-editor-key">Save editor key</button></div>
-        <p class="msg" id="shared-msg"></p></div>
-    </div>
-    ${accountsCard(ctx)}`;
+  if (!tools.WEB && !sh.account) {
+    return `<div class="card account"><h3>Your account</h3>
+      <p class="sub">${sh.on ? 'Not signed in. Click the Clockwise icon in Chrome\'s toolbar to sign in; you only need to do it once.' : 'This copy of Clockwise isn\'t set up to share games, so they stay in this browser.'}</p></div>`;
   }
-  const pending = state.games.filter((g) => g.pending).length;
-  const ls = state.lastSync;
-  const upload = !sh.on ? '' : `${pending ? `${pending} game${pending === 1 ? '' : 's'} waiting to upload. ` : 'All your games are uploaded. '}${ls ? (ls.ok ? `Last upload ${when(ls.at)}.` : `<span class="err">Last upload failed: ${esc(ls.error)}</span>`) : ''}`;
-  return `<div class="card">
-    <h3>Shared games</h3>
-    ${sh.on ? `<p class="sub">Games recorded in this browser are uploaded to your community's shared stats, so everyone sees the same dashboard. ${upload}</p>
-      <p class="sub">${download}${site ? ` Everyone can also see it at <a href="${esc(site)}" target="_blank" rel="noopener">the community dashboard</a>.` : ''}</p>
-      <div class="form">
-        <label class="key-field">Community password <input type="password" data-shared-field="viewPassword" value="${esc(c.password)}" placeholder="The password your community shared" autocomplete="off"></label>
-        ${editor}
-        <div class="toolbar"><button class="btn primary" data-action="save-shared">Save</button><button class="btn" data-action="upload-now">Upload now</button><button class="btn" data-action="download-now">Download now</button></div>
-        <p class="msg" id="shared-msg"></p>
-      </div>`
-    : '<p class="sub">This copy of Clockwise isn\'t set up to share games, so they stay in this browser.</p>'}
-    <details class="advanced"><summary>Advanced</summary>
-      <p class="sub">For testing a different shared store. Leave empty to use the built-in one.</p>
-      <div class="form">
-        <label>Shared store address <input type="url" data-shared-field="backendUrl" value="${esc(state.settings.backendUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec"></label>
-        <label>Upload key <input type="password" data-shared-field="writeKey" value="${esc(state.settings.writeKey || '')}" autocomplete="off"></label>
-        <div class="toolbar"><button class="btn" data-action="save-advanced">Save</button></div>
-      </div>
-    </details>
-  </div>`;
+  const who = sh.account
+    ? `<p class="sub">Signed in as <b>${esc(sh.account.username)}</b>.</p>
+      <div class="toolbar account-row"><button class="btn" type="button" data-pw-open data-opens="pw">Change password</button><button class="btn" data-action="sign-out">Sign out</button></div>
+      <p class="msg" id="pw-msg" role="status"></p>
+      <form class="form change-pw" data-change-password data-keep="pw" hidden>
+        <div class="field-head">Change password <span class="hint">Saving signs you out on your other devices.</span></div>
+        <input type="password" name="password" placeholder="Current password" autocomplete="current-password" required aria-label="Current password">
+        <input type="password" name="newPassword" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required aria-label="New password">
+        <input type="password" name="confirm" placeholder="New password again" autocomplete="new-password" minlength="8" required aria-label="New password again">
+        <div class="toolbar"><button class="btn primary" type="submit">Save new password</button><button class="btn" type="button" data-pw-cancel>Cancel</button></div>
+        <p class="msg" role="alert"></p>
+      </form>`
+    : `<p class="sub">You're using the community password. With an account you'll get your own settings, like claiming your player.</p>
+      <div class="toolbar account-row"><button class="btn primary" data-open-signin="signup">Create an account</button><button class="btn" data-open-signin="signin">Sign in</button><button class="btn" data-action="sign-out">Sign out</button></div>`;
+  return `<div class="card account">
+    <h3>Your account</h3>
+    ${who}
+    ${sh.account ? playerSection(ctx) : ''}
+    ${st.error ? `<p class="sub">${download}</p>` : ''}
+  </div>
+  ${sh.account ? myCommunitiesCard(ctx) : ''}
+  <div class="card editor-card">
+    <h3>Editor key</h3>
+    <p class="sub">Lets you fix or delete games for everyone.</p>
+    <div class="form">
+      <input type="password" data-shared-field="editorKey" value="${esc(c.editorKey)}" placeholder="cw-edit-XXXXXXXXXXXXXXXXXXXX" autocomplete="off" aria-label="Editor key">
+      ${sh.canEdit && c.editorKey ? '<p class="sub small">You can change and delete games.</p>' : ''}
+      <div class="toolbar"><button class="btn primary" data-action="save-editor-key">Save editor key</button></div>
+      <p class="msg" id="shared-msg"></p></div>
+  </div>
+  ${accountsCard(ctx)}`;
 }
 
-// Editors: everyone's accounts, with a way to set a new password (for someone who forgot theirs) or delete one.
 // "Your player": which player in the games is you. People pick themselves; editors can remove a wrong claim.
 function playerSection({ state, tools }) {
   const pl = state.profile;
@@ -142,6 +104,60 @@ function playerSection({ state, tools }) {
       <div class="toolbar claim-form"><div class="claim-picker" data-claim-picker></div><button class="btn primary" type="button" data-claim>Claim</button></div>`;
   }
   return `<div class="player-claim">${body}<p class="msg" id="claim-msg"></p></div>`;
+}
+
+// Extension only: what this browser records and uploads, its copy of the games, and botc.app's artwork.
+function thisBrowserCard(ctx, samples) {
+  const { state } = ctx;
+  const sh = state.shared;
+  const when = (ms) => (ms ? `${fmtDate(ms)} ${fmtTime(ms)}` : 'not yet');
+  const pending = state.games.filter((g) => g.pending).length;
+  const ls = state.lastSync;
+  const upload = !sh.on ? 'Sharing isn\'t set up in this copy, so games stay here.'
+    : `Games you record are uploaded to the shared stats. ${pending ? `${plural(pending, 'game')} waiting to upload.` : 'All uploaded.'} ${ls ? (ls.ok ? `Last upload ${when(ls.at)}.` : `<span class="err">Last upload failed: ${esc(ls.error)}</span>`) : ''}`;
+  return `<div class="card this-browser">
+    <h3>This browser</h3>
+    <p class="sub">${upload}</p>
+    ${artLine(ctx)}
+    <div class="toolbar">
+      ${sh.on ? '<button class="btn" data-action="upload-now">Upload now</button>' : ''}
+      <button class="btn" data-action="reload-art">Reload artwork from botc.app</button>
+      ${samples ? `<button class="btn" data-action="delete-sample">Remove sample data (${samples} games)</button>` : ''}
+      <button class="btn danger" data-action="delete-all">Delete this browser's games…</button>
+    </div>
+    <p class="msg" id="browser-msg"></p>
+    <details class="advanced"><summary>Advanced</summary>
+      <p class="sub">For testing a different shared store. Leave empty to use the built-in one.</p>
+      <div class="form">
+        <label>Shared store address <input type="url" data-shared-field="backendUrl" value="${esc(state.settings.backendUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec"></label>
+        <label>Upload key <input type="password" data-shared-field="writeKey" value="${esc(state.settings.writeKey || '')}" autocomplete="off"></label>
+        <div class="toolbar"><button class="btn" data-action="save-advanced">Save</button></div>
+      </div>
+    </details>
+  </div>`;
+}
+
+// Extension only: which rooms are Escape and which Rhap, for the games this browser records.
+function roomsCard({ state }) {
+  const cfg = communityConfig(state.settings);
+  const local = cfg.communities.filter((c) => !c.own);
+  const builtIn = (c) => ['escape', 'rhap'].includes(c.id);
+  const overrides = Object.entries(cfg.overrides);
+  return `<div class="card">
+    <h3>Escape &amp; Rhap rooms</h3>
+    <p class="sub">Which rooms are Escape and which are Rhap, for games recorded in this browser. Any other room gets the default below. You can also change a room from the popup while you play. Your own communities are under Your communities.</p>
+    <div class="form" id="communities">
+      ${local.map((c) => `<div class="community-row room-row" data-id="${esc(c.id)}">
+        <input type="hidden" class="c-name" value="${esc(c.name)}"><span class="room-name">${esc(c.name)}</span>
+        <input type="text" class="c-rooms" value="${esc((c.rooms || []).join(', '))}" placeholder="Rooms, separated by commas" aria-label="${esc(c.name)} rooms">
+        ${builtIn(c) ? '' : '<button class="btn small danger" data-action="remove-community">Remove</button>'}
+      </div>`).join('')}
+      <div class="field"><span class="field-label">Every other room is (click again to switch off)</span>
+        <div class="toggles" id="fallback-community">${local.map((c) => `<button class="toggle" data-fallback="${esc(c.id)}" aria-pressed="${cfg.fallback === c.id}">${esc(c.name)}</button>`).join('')}</div></div>
+      ${overrides.length ? `<div><span class="muted">Rooms you've set by hand:</span> ${overrides.map(([room, id]) => `<span class="pill">${esc(room)} → ${id === NONE ? 'switched off' : esc(communityName(state.settings, id))} <button class="linkish" data-clear-room="${esc(room)}" aria-label="Clear">×</button></span>`).join(' ')}</div>` : ''}
+      <div class="toolbar"><button class="btn primary" data-action="save-communities">Save rooms</button><span class="msg" id="communities-msg"></span></div>
+    </div>
+  </div>`;
 }
 
 // Your own communities (website): only you see them. Games you record in their rooms are filed there.
@@ -185,27 +201,6 @@ function claimCell(a, tools) {
   const c = a.claim;
   if (!c) return '<span class="muted">None</span>';
   return `${esc(tools.nameOf(c.player, c.name))} <button class="btn small" data-claim-remove="${esc(a.username)}">Remove</button>`;
-}
-
-function communitiesCard({ state, communityOptions }) {
-  const cfg = communityConfig(state.settings);
-  const overrides = Object.entries(cfg.overrides);
-  return `<div class="card">
-    <h3>Communities</h3>
-    <p class="sub">Every game is tagged with a community so you can filter stats by group. A room listed here always belongs to that community; any other room gets the default below. You can change a room's community from the extension popup while you play, or fix a single game from the games list on the dashboard.</p>
-    <div class="form" id="communities">
-      ${cfg.communities.map((c) => `<div class="toolbar community-row" data-id="${esc(c.id)}" style="margin:0">
-        <input type="text" class="c-name" value="${esc(c.name)}" placeholder="Name" style="width:130px">
-        <input type="text" class="c-rooms" value="${esc((c.rooms || []).join(', '))}" placeholder="Rooms (comma separated)" style="flex:1;min-width:160px">
-        <button class="btn danger" data-action="remove-community">Remove</button>
-      </div>`).join('')}
-      <div><button class="btn" data-action="add-community">+ Add community</button></div>
-      <div class="field"><span class="field-label">Every other room belongs to (click again to switch off)</span>
-        <div class="toggles" id="fallback-community">${communityOptions().map((o) => `<button class="toggle" data-fallback="${esc(o.value)}" aria-pressed="${cfg.fallback === o.value}">${esc(o.name)}</button>`).join('')}</div></div>
-      ${overrides.length ? `<div><span class="muted">Rooms you've set by hand:</span> ${overrides.map(([room, id]) => `<span class="pill">${esc(room)} → ${id === NONE ? 'switched off' : esc(communityName(state.settings, id))} <button class="linkish" data-clear-room="${esc(room)}" aria-label="Clear">×</button></span>`).join(' ')}</div>` : ''}
-      <div class="toolbar"><button class="btn primary" data-action="save-communities">Save communities</button><span class="msg" id="communities-msg"></span></div>
-    </div>
-  </div>`;
 }
 
 function readCommunities() {
@@ -321,10 +316,11 @@ export async function handleImport(file, ctx) {
 
 async function sharedAction(a, ctx) {
   const { state, api, load, tools } = ctx;
-  const msg = document.querySelector('#shared-msg');
+  const msg = document.querySelector(a === 'upload-now' ? '#browser-msg' : '#shared-msg');
   const say = (text, ok) => { if (msg) { msg.className = `msg ${ok === undefined ? '' : ok ? 'ok' : 'err'}`; msg.textContent = text; } };
   const field = (f) => { const el = document.querySelector(`[data-shared-field="${f}"]`); return el ? el.value.trim() : undefined; };
   if (a === 'sign-out') {
+    if (!tools.WEB) await tools.forgetAccount();
     tools.webAuth.clear();
     await tools.cacheClear();
     location.reload();

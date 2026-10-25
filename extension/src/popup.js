@@ -1,4 +1,6 @@
 import { communityConfig, communityForRoom, automaticCommunity, isManual, communityName, NONE } from './communities.js';
+import { call } from './shared.js';
+import { BACKEND_URL, SITE_URL } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -25,11 +27,83 @@ async function showCommunity(room) {
   } else if (isManual(settings, room)) {
     note.innerHTML = `Set by you${auto ? ` (automatic: ${esc(autoName)})` : ''}. <button class="linkish" id="reset">Use automatic</button>`;
   } else {
-    note.textContent = 'Chosen automatically from the room name. Click it to switch it off, or pick the other community.';
+    note.textContent = `Chosen automatically from the room name. Click it to switch it off, or pick ${cfg.communities.length > 2 ? 'another' : 'the other'} community.`;
   }
+  const chosen = cfg.communities.find((c) => c.id === current);
+  if (chosen && chosen.own) note.insertAdjacentHTML('beforeend', ' Only the people who recorded games here will see them.');
   const reset = $('reset');
   if (reset) reset.addEventListener('click', () => choose(room, null));
   $('community-box').hidden = false;
+}
+
+// ---------- signing in ----------
+// Everyone signs in (or creates an account) the first time they open the popup; the sign-in is kept and renews
+// itself, so they don't have to again. (Without a shared store, as in tests, there's nothing to sign in to.)
+let currentRoom = null;
+const getSettings = async () => (await chrome.storage.local.get('settings')).settings || {};
+const saveSettings = async (patch) => chrome.storage.local.set({ settings: { ...(await getSettings()), ...patch } });
+const storeUrl = (s) => s.backendUrl || BACKEND_URL;
+// signedOutAt: when, so the website (which shares the sign-in) follows a sign-out rather than signing back in.
+const signedOut = () => ({ accountToken: '', accountName: '', accountCommunities: [], signedOutAt: Date.now() });
+const signedIn = (r, token) => ({ accountToken: token || r.token, accountName: r.account.username, accountCommunities: r.account.communities || [], signedOutAt: 0 });
+
+async function needsSignIn() {
+  const s = await getSettings();
+  return !!storeUrl(s) && !s.accountToken;
+}
+
+async function showAccount() {
+  const s = await getSettings();
+  $('acct-in').hidden = !s.accountToken;
+  $('acct-name').textContent = s.accountName || '';
+  if (currentRoom) await showCommunity(currentRoom);
+}
+
+// Is the saved sign-in still good (a password change elsewhere signs you out)? Picks up communities changed on the
+// website, and a renewed sign-in when the store hands one back.
+async function refreshAccount() {
+  const s = await getSettings();
+  if (!s.accountToken || !storeUrl(s)) return;
+  const r = await call(storeUrl(s), { action: 'ping', token: s.accountToken }).catch(() => null);
+  if (!r || !r.ok) return;
+  if (r.signedOut) { await saveSettings(signedOut()); return start(); }
+  if (r.account) await saveSettings(signedIn(r, r.token || s.accountToken));
+  await showAccount();
+}
+
+let setGateMode = () => {};
+function setupGate() {
+  const form = $('signin');
+  let mode = 'signin';
+  setGateMode = (m) => {
+    mode = m;
+    document.querySelectorAll('[data-gate-mode]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.gateMode === m)));
+    form.querySelectorAll('[data-signup]').forEach((el) => { el.hidden = mode !== 'signup'; el.required = mode === 'signup'; });
+    form.querySelector('[data-signin-only]').hidden = mode === 'signup';
+    form.elements.password.placeholder = mode === 'signup' ? 'Choose a password (8+ characters)' : 'Password';
+    form.elements.username.placeholder = mode === 'signup' ? 'Choose a username' : 'Username';
+    $('gate-submit').textContent = mode === 'signup' ? 'Create account' : 'Sign in';
+    $('signin-msg').textContent = '';
+  };
+  document.querySelectorAll('[data-gate-mode]').forEach((b) => b.addEventListener('click', () => setGateMode(b.dataset.gateMode)));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = form.elements;
+    if (mode === 'signup' && f.password.value !== f.confirm.value) { $('signin-msg').textContent = 'The two passwords don\'t match.'; return; }
+    const button = $('gate-submit');
+    button.disabled = true;
+    const s = await getSettings();
+    const body = mode === 'signup'
+      ? { action: 'signup', key: f.community.value, username: f.username.value.trim(), password: f.password.value }
+      : { action: 'signin', username: f.username.value.trim(), password: f.password.value };
+    const r = await call(storeUrl(s), body).catch((err) => ({ ok: false, message: err.message }));
+    button.disabled = false;
+    if (!r.ok) { $('signin-msg').textContent = r.error === 'not-allowed' ? 'That community password isn\'t right.' : r.message || 'Couldn\'t sign in. Try again in a moment.'; return; }
+    await saveSettings(signedIn(r));
+    form.reset();
+    start();
+  });
+  $('signout').addEventListener('click', async () => { await saveSettings(signedOut()); start(); });
 }
 
 async function choose(room, choice) {
@@ -62,13 +136,23 @@ function show(kind, text) {
   $('status').textContent = text;
 }
 
-(async () => {
+// Show the sign-in, or (signed in) the recording status for the open botc.app tab.
+async function start() {
+  const gate = await needsSignIn();
+  $('gate').hidden = !gate;
+  $('main').hidden = gate;
+  if (gate) { $('signin').reset(); setGateMode('signin'); $('signin').elements.username.focus(); return; }
+  await showMain();
+}
+
+async function showMain() {
   const { games = {} } = await chrome.storage.local.get('games');
   const list = Object.values(games).sort((a, b) => b.endedAt - a.endedAt);
   $('games').textContent = list.length;
   $('games-label').textContent = list.length === 1 ? 'game recorded' : 'games recorded';
   $('last').textContent = list[0] ? `${list[0].winner === 'evil' ? 'Evil' : 'Good'} won` : '–';
-  $('open').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') }));
+  await showAccount();
+  refreshAccount();
 
   const tabs = await chrome.tabs.query({ url: 'https://botc.app/*' });
   if (!tabs.length) return show('', 'botc.app is not open. Open it to start recording.');
@@ -79,7 +163,7 @@ function show(kind, text) {
   const live = results.map((r) => r && r.status).filter((s) => s && s.attached);
   const best = live.find((s) => s.inGame) || live.find((s) => s.room) || live[0];
 
-  if (best && best.room) await showCommunity(best.room);
+  if (best && best.room) { currentRoom = best.room; await showCommunity(best.room); }
 
   if (best) {
     if (!best.loggedIn) return show('', 'botc.app is open — log in to record games.');
@@ -92,4 +176,9 @@ function show(kind, text) {
   }
   const err = (results.find((r) => r && r.error) || {}).error || '';
   show('err', `Couldn’t connect to the botc.app tab. Reload it and try again.${err ? ` (${err})` : ''}`);
-})();
+}
+
+// The dashboard is the community website (signed in for you; see site-sync.js).
+$('open').addEventListener('click', () => chrome.tabs.create({ url: SITE_URL || chrome.runtime.getURL('dashboard.html') }));
+setupGate();
+start();

@@ -35,8 +35,13 @@ const DEFAULTS = {
 const norm = (room) => String(room || '').trim().toLowerCase();
 
 function communityConfig(settings = {}) {
+  const base = Array.isArray(settings.communities) ? settings.communities : DEFAULTS.communities;
+  // Your own communities, from the account you're signed in to in the extension (made on the website). They're
+  // marked `own` so the Communities card in Data & settings, which edits this browser's list, leaves them out.
+  const own = (Array.isArray(settings.accountCommunities) ? settings.accountCommunities : [])
+    .filter((c) => c && c.id && !base.some((b) => b.id === c.id)).map((c) => ({ ...c, own: true }));
   return {
-    communities: Array.isArray(settings.communities) ? settings.communities : DEFAULTS.communities,
+    communities: [...base, ...own],
     fallback: settings.fallbackCommunity !== undefined ? settings.fallbackCommunity : DEFAULTS.fallbackCommunity,
     overrides: settings.roomCommunity || {},
   };
@@ -248,7 +253,10 @@ function handle_(body, store, keys, now) {
 
   switch (body && body.action) {
     case 'ping':
-      return { ok: true, canRead: canRead, canWrite: canWrite, canEdit: canEdit, now: now, account: account ? publicAccount_(account) : null, signedOut: !!(body.token && !account) };
+      var pong = { ok: true, canRead: canRead, canWrite: canWrite, canEdit: canEdit, now: now, account: account ? publicAccount_(account) : null, signedOut: !!(body.token && !account) };
+      var renewed = renewedToken_(store, account, body.token, now);
+      if (renewed) pong.token = renewed;
+      return pong;
 
     case 'record': {
       if (!canWrite) return deny('upload games');
@@ -506,6 +514,14 @@ function makeToken_(store, acct, now) {
   var k = accountKey_(acct.username);
   var body = [k, now, acct.pwv || 1].join('|');
   return encodeURIComponent(k) + '.' + now + '.' + (acct.pwv || 1) + '.' + store.hmac(store.secret(), body);
+}
+
+// Sign-ins renew themselves: a token more than a week old gets a fresh one back from ping, so someone who keeps
+// using Clockwise stays signed in (until they change their password, which signs other devices out).
+var RENEW_AFTER_MS_ = 7 * 864e5;
+function renewedToken_(store, acct, token, now) {
+  var issued = Number(String(token || '').split('.')[1]) || 0;
+  return acct && now - issued > RENEW_AFTER_MS_ ? makeToken_(store, acct, now) : undefined;
 }
 
 function accountFromToken_(store, token, now) {

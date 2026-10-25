@@ -35,11 +35,43 @@
     .stat b { display: block; font-size: 22px; font-weight: 700; }
     #open { font: inherit; font-weight: 700; padding: 10px; border-radius: 999px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
     #open:hover { filter: brightness(1.08); }
+    .choices { flex-wrap: wrap; border-radius: 22px; }
+    #main { display: grid; gap: 12px; }
+    .account { font-size: 13px; color: var(--ink-2); }
+    .account b { color: var(--ink); }
+    .gate { display: grid; gap: 12px; }
+    .gate p { margin: 0; }
+    .gate form { display: grid; gap: 8px; }
+    .gate input { font: inherit; font-size: 14px; padding: 10px 14px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--card); color: var(--ink); outline: none; }
+    .gate input:focus { border-color: var(--accent); }
+    .btn { font: inherit; font-weight: 700; padding: 10px 16px; border-radius: 999px; border: 0; cursor: pointer; }
+    .btn.primary { background: var(--accent); color: #fff; }
+    .btn:disabled { opacity: .6; }
+    .msg { color: var(--rec); font-size: 12.5px; }
+    .msg:empty { display: none; }
+    .small { font-size: 12.5px; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="brand"><img class="logo" src="icons/logo-dark.png" alt="" width="30" height="30"><h1 aria-label="Clockwise"><span aria-hidden="true">Clockw<span class="i-dot">ı</span>se</span></h1></div>
+    <!-- First use: sign in (or create an account) once; the extension stays signed in after that. -->
+    <div class="gate" id="gate" hidden>
+      <p class="muted">Sign in once to start. You'll stay signed in on this browser.</p>
+      <div class="choices" role="group" aria-label="Sign in or create an account">
+        <button class="choice" data-gate-mode="signin" aria-pressed="true">Sign in</button><button class="choice" data-gate-mode="signup" aria-pressed="false">Create account</button>
+      </div>
+      <form id="signin">
+        <input name="username" placeholder="Username" autocomplete="username" required aria-label="Username">
+        <input name="password" type="password" placeholder="Password" autocomplete="current-password" required aria-label="Password">
+        <input name="confirm" type="password" placeholder="Password again" autocomplete="new-password" aria-label="Password again" data-signup hidden>
+        <input name="community" type="password" placeholder="Community password" aria-label="Community password" data-signup hidden>
+        <button type="submit" class="btn primary" id="gate-submit">Sign in</button>
+        <span class="msg" id="signin-msg" role="alert"></span>
+        <span class="muted small" data-signin-only>Forgot your password? Ask an editor to set a new one.</span>
+      </form>
+    </div>
+    <div id="main" hidden>
     <div class="status"><span class="dot" id="dot"></span><span id="status">Checking…</span></div>
     <div class="community" id="community-box" hidden>
       <label>Community for room “<span id="room"></span>”</label>
@@ -51,6 +83,8 @@
       <div class="stat"><b id="last">–</b><span class="muted">last game</span></div>
     </div>
     <button id="open">Open dashboard</button>
+    <div class="account" id="acct-in" hidden>Signed in as <b id="acct-name"></b> · <button class="linkish" id="signout">Sign out</button></div>
+    </div>
   </div>
   <script type="module" src="src/popup.js"></script>
 </body>

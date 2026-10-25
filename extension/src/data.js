@@ -56,9 +56,10 @@ export const webAuth = {
   get: () => stored('clockwise.password'),
   set: (pw, remember) => { try { (remember ? localStorage : sessionStorage).setItem('clockwise.password', pw); } catch {} },
   account: () => ({ token: stored('clockwise.token'), username: stored('clockwise.username') }),
-  setAccount: (token, username, remember) => { forget('clockwise.token', 'clockwise.username'); try { const s = remember ? localStorage : sessionStorage; s.setItem('clockwise.token', token); s.setItem('clockwise.username', username); } catch {} },
-  clearAccount: () => forget('clockwise.token', 'clockwise.username', 'clockwise.profile'),
-  clear: () => forget('clockwise.password', 'clockwise.editorKey', 'clockwise.token', 'clockwise.username', 'clockwise.profile'),
+  setAccount: (token, username, remember) => { forget('clockwise.token', 'clockwise.username', 'clockwise.signedOutAt'); try { const s = remember ? localStorage : sessionStorage; s.setItem('clockwise.token', token); s.setItem('clockwise.username', username); } catch {} },
+  // Signing out leaves the time, so the extension (which shares the sign-in) signs out too rather than back in.
+  clearAccount: () => { forget('clockwise.token', 'clockwise.username', 'clockwise.profile'); try { localStorage.setItem('clockwise.signedOutAt', String(Date.now())); } catch {} },
+  clear: () => { forget('clockwise.password', 'clockwise.editorKey', 'clockwise.token', 'clockwise.username', 'clockwise.profile'); try { localStorage.setItem('clockwise.signedOutAt', String(Date.now())); } catch {} },
   // The account as the store last described it (claimed player, own communities), so the page is right before it asks.
   profile: () => { try { return JSON.parse(localStorage.getItem('clockwise.profile')) || undefined; } catch { return undefined; } },
   setProfile: (p) => { try { localStorage.setItem('clockwise.profile', JSON.stringify(p)); } catch {} },

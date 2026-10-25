@@ -1,23 +1,66 @@
 {
   "manifest_version": 3,
   "name": "Clockwise",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "Records your Blood on the Clocktower games on botc.app and shares them with your community's stats dashboard.",
-  "permissions": ["storage", "unlimitedStorage", "alarms", "scripting"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "alarms",
+    "scripting"
+  ],
   "host_permissions": [
     "https://botc.app/*",
     "https://script.google.com/*",
     "https://script.googleusercontent.com/*"
   ],
-  "background": { "service_worker": "src/background.js", "type": "module" },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
   "content_scripts": [
-    { "matches": ["https://botc.app/*"], "js": ["src/bridge.js"], "run_at": "document_start" },
-    { "matches": ["https://botc.app/*"], "js": ["src/page-hook.js"], "run_at": "document_idle", "world": "MAIN" }
+    {
+      "matches": [
+        "https://botc.app/*"
+      ],
+      "js": [
+        "src/bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://botc.app/*"
+      ],
+      "js": [
+        "src/page-hook.js"
+      ],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://clockwise-botc.github.io/*"
+      ],
+      "js": [
+        "src/site-sync.js"
+      ],
+      "run_at": "document_start"
+    }
   ],
   "action": {
     "default_title": "Clockwise",
     "default_popup": "popup.html",
-    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png" }
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
   },
-  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }

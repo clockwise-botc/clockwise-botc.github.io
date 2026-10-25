@@ -27,7 +27,10 @@ function handle_(body, store, keys, now) {
 
   switch (body && body.action) {
     case 'ping':
-      return { ok: true, canRead: canRead, canWrite: canWrite, canEdit: canEdit, now: now, account: account ? publicAccount_(account) : null, signedOut: !!(body.token && !account) };
+      var pong = { ok: true, canRead: canRead, canWrite: canWrite, canEdit: canEdit, now: now, account: account ? publicAccount_(account) : null, signedOut: !!(body.token && !account) };
+      var renewed = renewedToken_(store, account, body.token, now);
+      if (renewed) pong.token = renewed;
+      return pong;
 
     case 'record': {
       if (!canWrite) return deny('upload games');

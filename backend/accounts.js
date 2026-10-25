@@ -65,6 +65,14 @@ function makeToken_(store, acct, now) {
   return encodeURIComponent(k) + '.' + now + '.' + (acct.pwv || 1) + '.' + store.hmac(store.secret(), body);
 }
 
+// Sign-ins renew themselves: a token more than a week old gets a fresh one back from ping, so someone who keeps
+// using Clockwise stays signed in (until they change their password, which signs other devices out).
+var RENEW_AFTER_MS_ = 7 * 864e5;
+function renewedToken_(store, acct, token, now) {
+  var issued = Number(String(token || '').split('.')[1]) || 0;
+  return acct && now - issued > RENEW_AFTER_MS_ ? makeToken_(store, acct, now) : undefined;
+}
+
 function accountFromToken_(store, token, now) {
   var parts = String(token || '').split('.');
   if (parts.length !== 4) return null;

@@ -1,4 +1,4 @@
-import { communityForRoom, withRoomChoice } from './communities.js';
+import { communityForRoom, withRoomChoice, isManual } from './communities.js';
 import { BACKEND_URL, WRITE_KEY } from './config.js';
 import { call } from './shared.js';
 
@@ -26,8 +26,11 @@ async function upsertGame(game) {
     const prev = games[game.id];
     // A community picked for this game in the dashboard wins; otherwise use the room's community.
     const community = prev && prev.communityManual ? prev.community : communityForRoom(settings, game.room);
+    // Picked by hand (for this game, or for its room in the popup): the shared store then won't refile it under one
+    // of your own communities by room.
+    const communityChosen = !!(prev && (prev.communityManual || prev.communityChosen)) || isManual(settings, game.room);
     // Keep the user's own edits (exclusion, notes) when the same game is re-captured.
-    games[game.id] = { ...game, community, communityManual: !!(prev && prev.communityManual), excluded: prev ? !!prev.excluded : false, notes: prev ? prev.notes || '' : '', syncedAt: null };
+    games[game.id] = { ...game, community, communityChosen, communityManual: !!(prev && prev.communityManual), excluded: prev ? !!prev.excluded : false, notes: prev ? prev.notes || '' : '', syncedAt: null };
     await chrome.storage.local.set({ games });
   });
   syncPending().catch(recordSyncError);

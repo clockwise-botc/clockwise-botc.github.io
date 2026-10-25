@@ -509,6 +509,12 @@ form.change-pw .toolbar, form.change-pw .msg { margin: 0; }
 .card.account > :last-child { margin-bottom: 0; }
 .editor-card .form .toolbar { margin-bottom: 0; }
 .my-communities .form .toolbar { margin-bottom: 0; }
+.room-row { display: grid; grid-template-columns: 70px 1fr auto; gap: 10px; align-items: center; }
+.room-row .room-name { font-weight: 600; font-size: 14px; color: var(--ink-2); }
+.room-row .btn { margin: 0; }
+.this-browser .toolbar { margin-bottom: 0; }
+.this-browser #browser-msg { margin: 10px 0 0; }
+.this-browser #browser-msg:empty { display: none; }
 .my-communities #mc-msg { margin: 12px 0 0; }
 .my-communities #mc-msg:empty { display: none; }
 .my-community { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--grid); font-size: 15px; }
