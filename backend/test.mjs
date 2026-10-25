@@ -348,6 +348,33 @@ check('your communities: games only you filed are just for their recorders; Esca
   assert.deepEqual(ids(handle({ action: 'read', key: 'view-pass' })), ['escape:1', 'thursday:1', 'thursday:2', 'thursday:3'], 'no communities → all public again');
 });
 
+check("reminder tokens: the storyteller's own recording wins, whichever arrives first", () => {
+  const remindersOf = (g) => g.players.map((p) => (p.reminders || []).map((r) => r.name).join('+'));
+  const base = clone(games[0]);
+  base.players.forEach((p) => { p.reminders = []; });
+  base.players[0].reminders = [{ role: 'poisoner', name: 'Poisoned' }];
+  // The storyteller's grimoire: one Poisoned token. A player kept their own notes too, and joined earlier.
+  const st = { ...clone(base), capturedBy: { userId: 'u-st', username: 'st', asStoryteller: true }, joinedAtPhase: 2 };
+  const player = { ...clone(base), capturedBy: { userId: 'u-p', username: 'p', asStoryteller: false }, joinedAtPhase: 0 };
+  player.players[1].reminders = [{ role: null, name: 'I think demon' }];
+  player.players[0].reminders.push({ role: null, name: 'sus' });
+  const expected = remindersOf(st);
+  for (const order of [[player, st], [st, player]]) {
+    const { handle } = loadBackend();
+    order.forEach((g) => handle({ action: 'record', key: 'write-key', games: [g] }, keys));
+    const got = handle({ action: 'read', key: 'view-pass' }, keys).games[0];
+    assert.deepEqual(remindersOf(got), expected, `order: ${order.map((g) => g.capturedBy.username).join(' then ')}`);
+    assert.equal(got.joinedAtPhase, 0, "the player's fuller recording is still the main one");
+  }
+  // Two players, no storyteller: the fuller recording's tokens, gaps filled from the other (as before).
+  const { handle } = loadBackend();
+  const p2 = { ...clone(base), capturedBy: { userId: 'u-q', username: 'q' }, joinedAtPhase: 3 };
+  p2.players[2].reminders = [{ role: 'monk', name: 'Safe' }];
+  handle({ action: 'record', key: 'write-key', games: [player, p2] }, keys);
+  const both = handle({ action: 'read', key: 'view-pass' }, keys).games[0];
+  assert.deepEqual(remindersOf(both).slice(0, 3), ['Poisoned+sus', 'I think demon', 'Safe']);
+});
+
 check('every sample game uploads and builds the Sheet tables', () => {
   const { handle, store } = loadBackend();
   const r = handle({ action: 'record', key: 'write-key', games }, keys);

@@ -351,7 +351,7 @@ function handle_(body, store, keys, now) {
 function cleanGame_(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || /^sample-/.test(raw.id)) return null;
   var g = JSON.parse(JSON.stringify(raw));
-  ['syncedAt', 'excluded', 'notes', 'communityManual', 'filedBy', 'recorders'].forEach(function (f) { delete g[f]; });
+  ['syncedAt', 'excluded', 'notes', 'communityManual', 'filedBy', 'recorders', 'remindersFrom'].forEach(function (f) { delete g[f]; });
   var botcArt = function (u) { return typeof u === 'string' && /^https:\/\/botc\.app\/assets\//.test(u); };
   (g.players || []).forEach(function (p) {
     if (botcArt(p.icon)) delete p.icon;
@@ -382,7 +382,7 @@ function better_(a, b) {
 
 // Two recordings of one game → one record: the more complete one, with gaps filled from the other.
 function mergeGame_(stored, incoming) {
-  if (!stored) return Object.assign({}, incoming, { recorders: recorderList_([], incoming), filedBy: withFiling_({}, incoming) });
+  if (!stored) return Object.assign({}, incoming, { recorders: recorderList_([], incoming), filedBy: withFiling_({}, incoming), remindersFrom: byStoryteller_(incoming) ? 'storyteller' : undefined });
   var main = better_(incoming, stored) ? incoming : stored;
   var other = main === incoming ? stored : incoming;
   var out = JSON.parse(JSON.stringify(main));
@@ -396,6 +396,15 @@ function mergeGame_(stored, incoming) {
     });
     if (!(p.reminders || []).length && (o.reminders || []).length) p.reminders = o.reminders;
   });
+  // Reminder tokens: the storyteller's own recording has their grimoire as it was; a player's can include notes
+  // they kept for themselves. Once a storyteller's recording is in, its tokens stay, whatever arrives later.
+  var stCopy = byStoryteller_(incoming) ? incoming : (stored.remindersFrom === 'storyteller' || byStoryteller_(stored)) ? stored : null;
+  if (stCopy) {
+    var stSeat = {};
+    (stCopy.players || []).forEach(function (p) { stSeat[p.seat] = p; });
+    (out.players || []).forEach(function (p) { p.reminders = ((stSeat[p.seat] || {}).reminders || []).slice(); });
+    out.remindersFrom = 'storyteller';
+  }
   if (!(out.storytellers || []).some(function (s) { return s.username; }) && (other.storytellers || []).length) out.storytellers = other.storytellers;
   ['bluffs', 'fabled', 'background'].forEach(function (k) {
     var empty = !out[k] || (Array.isArray(out[k]) && !out[k].length);
@@ -407,6 +416,8 @@ function mergeGame_(stored, incoming) {
   out.filedBy = withFiling_(filedBy_(stored), incoming);
   return out;
 }
+
+function byStoryteller_(g) { return !!(g && g.capturedBy && g.capturedBy.asStoryteller); }
 
 function recorderList_(list, g) {
   var name = g && g.capturedBy && (g.capturedBy.username || g.capturedBy.userId);
