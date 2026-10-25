@@ -40,7 +40,7 @@ export function memoryStore() {
 
 // Accounts for the in-memory store (the Sheet store has its own, in sheets-store.js).
 function accountStore() {
-  const accounts = new Map(), tries = new Map();
+  const accounts = new Map(), tries = new Map(), values = new Map();
   const secret = crypto.randomBytes(16).toString('hex');
   return {
     getAccount: (k) => (accounts.has(k) ? JSON.parse(JSON.stringify(accounts.get(k))) : null),
@@ -52,6 +52,8 @@ function accountStore() {
     randomId: () => crypto.randomUUID(),
     getTries: (k) => tries.get(k) || null,
     setTries: (k, v) => { if (v) tries.set(k, v); else tries.delete(k); },
+    getValue: (k) => (values.has(k) ? values.get(k) : null),
+    setValue: (k, v) => { values.set(k, String(v)); },
   };
 }
 

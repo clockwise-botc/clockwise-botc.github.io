@@ -24,12 +24,13 @@ export async function call(url, body) {
 export async function pull(url, auth, cache) {
   const res = await call(url, { action: 'read', ...auth, since: cache && cache.since ? cache.since : 0 });
   if (!res.ok) return { ok: false, error: res.error, message: res.message, cache };
-  const next = { games: { ...((cache && cache.games) || {}) }, since: res.now, meta: (cache && cache.meta) || null, at: Date.now(),
+  // full: who sees what changed, so this is everything you can see now. hidden: games you can no longer see.
+  const next = { games: res.full ? {} : { ...((cache && cache.games) || {}) }, since: res.now, meta: (cache && cache.meta) || null, at: Date.now(),
     privatePlayers: Array.isArray(res.privatePlayers) ? res.privatePlayers : (cache && cache.privatePlayers) || [] };
   for (const g of res.games || []) next.games[g.id] = g;
-  for (const id of res.deleted || []) delete next.games[id];
+  for (const id of [...(res.deleted || []), ...(res.hidden || [])]) delete next.games[id];
   if (res.meta) next.meta = res.meta;
-  return { ok: true, cache: next, changed: (res.games || []).length + (res.deleted || []).length, canEdit: !!res.canEdit };
+  return { ok: true, cache: next, changed: (res.games || []).length + (res.deleted || []).length + (res.hidden || []).length + (res.full ? 1 : 0), deletedIds: res.deleted || [], canEdit: !!res.canEdit };
 }
 
 export const ping = (url, key, token) => call(url, { action: 'ping', key, token });

@@ -317,14 +317,24 @@ function handle_(body, store, keys, now) {
     case 'read': {
       if (!canRead) return deny('see games');
       var since = Number(body.since) || 0;
-      var out = [];
+      // Who sees what changed since then (someone's communities or claim): send everything again.
+      var full = since > 0 && since < visibilityAt_(store);
+      if (full) since = 0;
+      var out = [], hidden = [];
       var ids = store.changedSince(since);
       var recs = store.getRecords(ids);
-      ids.forEach(function (id) { if (recs[id]) out.push(withEdits_(recs[id], store.getEdit(id))); });
+      var byPlayer = accountsByPlayer_(store);
+      var viewer = account && account.claim ? account.claim.player : null;
+      ids.forEach(function (id) {
+        if (!recs[id]) return;
+        var seen = viewGame_(recs[id], store.getEdit(id), byPlayer, viewer);
+        if (seen) out.push(seen); else hidden.push(id);
+      });
       var metaInfo = store.getMetaInfo();
       return {
-        ok: true, now: now, since: since,
+        ok: true, now: now, since: since, full: full,
         games: out,
+        hidden: hidden,
         deleted: store.deletedSince(since),
         meta: metaInfo && metaInfo.at > since ? store.getMeta() : null,
         privatePlayers: privatePlayers_(store),
@@ -341,7 +351,7 @@ function handle_(body, store, keys, now) {
 function cleanGame_(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || /^sample-/.test(raw.id)) return null;
   var g = JSON.parse(JSON.stringify(raw));
-  ['syncedAt', 'excluded', 'notes', 'communityManual'].forEach(function (f) { delete g[f]; });
+  ['syncedAt', 'excluded', 'notes', 'communityManual', 'filedBy', 'recorders'].forEach(function (f) { delete g[f]; });
   var botcArt = function (u) { return typeof u === 'string' && /^https:\/\/botc\.app\/assets\//.test(u); };
   (g.players || []).forEach(function (p) {
     if (botcArt(p.icon)) delete p.icon;
@@ -372,7 +382,7 @@ function better_(a, b) {
 
 // Two recordings of one game → one record: the more complete one, with gaps filled from the other.
 function mergeGame_(stored, incoming) {
-  if (!stored) return Object.assign({}, incoming, { recorders: recorderList_([], incoming) });
+  if (!stored) return Object.assign({}, incoming, { recorders: recorderList_([], incoming), filedBy: withFiling_({}, incoming) });
   var main = better_(incoming, stored) ? incoming : stored;
   var other = main === incoming ? stored : incoming;
   var out = JSON.parse(JSON.stringify(main));
@@ -394,6 +404,7 @@ function mergeGame_(stored, incoming) {
   // A community the recorder picked for this game in the extension's popup beats the automatic one.
   if (incoming.communityChosen && incoming.community) out.community = incoming.community;
   out.recorders = recorderList_(stored.recorders || recorderList_([], stored), incoming);
+  out.filedBy = withFiling_(filedBy_(stored), incoming);
   return out;
 }
 
@@ -461,7 +472,7 @@ function hashPassword_(store, password, salt) {
 }
 
 function publicAccount_(acct) {
-  return { username: acct.username, created: acct.created, profile: acct.profile || {}, claim: acct.claim || null };
+  return { username: acct.username, created: acct.created, profile: acct.profile || {}, claim: acct.claim || null, communities: acct.communities || [] };
 }
 
 // Players whose accounts keep their stats private.
@@ -555,8 +566,17 @@ function handleAccount_(body, store, who, now) {
       var myKey = accountKey_(mine.username);
       if (claimOwner_(store, player, myKey)) return { ok: false, error: 'taken', message: 'Someone else has already claimed that player. Ask an editor if that\'s wrong.' };
       var claimed = Object.assign({}, mine, { claim: { player: player, name: String(body.name || '').slice(0, 60), at: now } });
-      store.batch(function () { store.putAccount(myKey, claimed, now); });
+      store.batch(function () { store.putAccount(myKey, claimed, now); bumpVisibility_(store, now); });
       return { ok: true, account: publicAccount_(claimed) };
+    }
+
+    case 'save-communities': {
+      if (!who.account) return { ok: false, error: 'signed-out' };
+      var cleaned = cleanCommunities_(body.communities);
+      if (cleaned.error) return { ok: false, error: 'invalid', message: cleaned.error };
+      var withComms = Object.assign({}, who.account, { communities: cleaned.communities });
+      store.batch(function () { store.putAccount(accountKey_(withComms.username), withComms, now); bumpVisibility_(store, now); });
+      return { ok: true, account: publicAccount_(withComms) };
     }
 
     case 'set-private': {
@@ -575,7 +595,7 @@ function handleAccount_(body, store, who, now) {
       if (!target) return { ok: false, error: 'not-found', message: 'There\'s no account with that username.' };
       var unclaimed = Object.assign({}, target);
       delete unclaimed.claim;
-      store.batch(function () { store.putAccount(accountKey_(unclaimed.username), unclaimed, now); });
+      store.batch(function () { store.putAccount(accountKey_(unclaimed.username), unclaimed, now); bumpVisibility_(store, now); });
       return { ok: true, account: publicAccount_(unclaimed) };
     }
 
@@ -612,6 +632,109 @@ function setPassword_(store, acct, password, now) {
   var next = Object.assign({}, acct, { salt: salt, hash: hashPassword_(store, password, salt), pwv: (acct.pwv || 1) + 1 });
   store.batch(function () { store.putAccount(accountKey_(acct.username), next, now); });
   return next;
+}
+
+// ----- backend/visibility.js -----
+// Who sees which game, and personal communities.
+//
+// Each recorder files a game under a community: whatever their extension picked when they recorded it
+// (filedBy: { recorder's botc.app id: { c: community, chosen } }). Someone signed in can also make their own
+// communities on the website, each a list of rooms; a game they recorded in one of those rooms is filed there
+// instead, unless they picked a community for it by hand in the extension.
+//
+// A game is shown to everyone if anyone filed it under Escape or Rhap (or an editor did). Otherwise only the
+// people who recorded it get it, and "who recorded it" means the accounts that claimed those players.
+//
+// Changing your communities or your claim can change what other people see, so it bumps a stamp; a read from
+// before the stamp gets everything again (full: true) rather than only what changed.
+
+var PUBLIC_COMMUNITIES_ = ['escape', 'rhap'];
+var MAX_COMMUNITIES_ = 20;
+var MAX_ROOMS_ = 50;
+
+var roomKey_ = function (room) { return String(room || '').trim().toLowerCase(); };
+
+function recorderId_(g) {
+  return g && g.capturedBy ? String(g.capturedBy.userId || g.capturedBy.username || '') : '';
+}
+
+// Records saved before filedBy existed: the one recording that's stored.
+function filedBy_(rec) {
+  if (rec.filedBy) return rec.filedBy;
+  var out = {}, id = recorderId_(rec);
+  if (id) out[id] = { c: rec.community || null, chosen: !!rec.communityChosen };
+  return out;
+}
+
+function withFiling_(filedBy, incoming) {
+  var out = Object.assign({}, filedBy || {});
+  var id = recorderId_(incoming);
+  if (id) out[id] = { c: incoming.community || null, chosen: !!incoming.communityChosen };
+  return out;
+}
+
+// { player id: account } for accounts that have claimed a player.
+function accountsByPlayer_(store) {
+  var map = {};
+  store.listAccounts().forEach(function (a) { if (a.claim && a.claim.player) map[a.claim.player] = a; });
+  return map;
+}
+
+function personalCommunity_(acct, room) {
+  var r = roomKey_(room);
+  var list = (acct && acct.communities) || [];
+  for (var i = 0; i < list.length; i++) if ((list[i].rooms || []).some(function (x) { return roomKey_(x) === r; })) return list[i].id;
+  return null;
+}
+
+// The game as this viewer sees it, or null if they can't. `viewer` is the viewer's claimed player id (or null).
+function viewGame_(rec, edit, byPlayer, viewer) {
+  var g = withEdits_(rec, edit);
+  var filings = {};
+  var fb = filedBy_(rec);
+  Object.keys(fb).forEach(function (id) {
+    var f = fb[id] || {};
+    var mine = f.chosen ? null : personalCommunity_(byPlayer[id], rec.room);
+    filings[id] = mine || f.c || null;
+  });
+  // An editor putting a game under Escape or Rhap settles it for everyone.
+  var edited = !!edit && PUBLIC_COMMUNITIES_.indexOf(edit.community) !== -1;
+  var publicOne = edited ? edit.community : null;
+  if (!edited) {
+    // The stored community if someone filed it there, else the first public filing.
+    if (PUBLIC_COMMUNITIES_.indexOf(rec.community) !== -1 && Object.keys(filings).some(function (id) { return filings[id] === rec.community; })) publicOne = rec.community;
+    else Object.keys(filings).forEach(function (id) { if (!publicOne && PUBLIC_COMMUNITIES_.indexOf(filings[id]) !== -1) publicOne = filings[id]; });
+  }
+  var recorded = !!viewer && viewer in filings;
+  if (!publicOne && !recorded) return null;
+  // You see a game you recorded under the community you filed it in; everyone else sees the public one.
+  g.community = recorded && !edited ? filings[viewer] : publicOne;
+  delete g.filedBy;
+  return g;
+}
+
+function bumpVisibility_(store, now) { store.setValue('visibilityAt', String(now)); }
+function visibilityAt_(store) { return Number(store.getValue('visibilityAt')) || 0; }
+
+// Checks and tidies a list of communities from the website: [{ id, name, rooms }].
+function cleanCommunities_(list) {
+  if (!Array.isArray(list)) return { error: 'Something went wrong with that list.' };
+  if (list.length > MAX_COMMUNITIES_) return { error: 'You can have up to ' + MAX_COMMUNITIES_ + ' communities.' };
+  var out = [], taken = PUBLIC_COMMUNITIES_.concat(['none']);
+  for (var i = 0; i < list.length; i++) {
+    var c = list[i] || {};
+    var name = String(c.name || '').replace(/\s+/g, ' ').trim();
+    if (!name) return { error: 'Every community needs a name.' };
+    if (name.length > 40) return { error: 'Community names are up to 40 characters.' };
+    if (taken.indexOf(name.toLowerCase()) !== -1 || out.some(function (o) { return o.name.toLowerCase() === name.toLowerCase(); })) return { error: 'There\'s already a community called ' + name + '.' };
+    var rooms = (Array.isArray(c.rooms) ? c.rooms : []).map(roomKey_).filter(function (r, j, a) { return r && a.indexOf(r) === j; });
+    if (rooms.length > MAX_ROOMS_) return { error: 'A community can have up to ' + MAX_ROOMS_ + ' rooms.' };
+    if (rooms.some(function (r) { return r.length > 60; })) return { error: 'That room name is too long.' };
+    var keep = typeof c.id === 'string' && /^[a-z0-9-]{1,48}$/.test(c.id) && taken.indexOf(c.id) === -1 ? c.id : slug(name, taken);
+    taken.push(keep);
+    out.push({ id: keep, name: name, rooms: rooms });
+  }
+  return { communities: out };
 }
 
 // ----- backend/sheets-store.js -----
@@ -786,6 +909,9 @@ function sheetStore_() {
       if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); p.setProperty('SESSION_SECRET', s); }
       return s;
     },
+    // Small settings the store keeps for itself, in Script properties.
+    getValue: function (k) { return PropertiesService.getScriptProperties().getProperty('CW_' + k); },
+    setValue: function (k, v) { PropertiesService.getScriptProperties().setProperty('CW_' + k, String(v)); },
     hmac: function (key, value) { return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(String(value), String(key))); },
     randomId: function () { return Utilities.getUuid(); },
     // Wrong-password counts, kept for up to an hour in Apps Script's cache.

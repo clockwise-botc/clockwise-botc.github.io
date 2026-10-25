@@ -508,6 +508,14 @@ form.change-pw .toolbar, form.change-pw .msg { margin: 0; }
 .card.account .account-row { margin-bottom: 26px; }
 .card.account > :last-child { margin-bottom: 0; }
 .editor-card .form .toolbar { margin-bottom: 0; }
+.my-communities .form .toolbar { margin-bottom: 0; }
+.my-communities #mc-msg { margin: 12px 0 0; }
+.my-communities #mc-msg:empty { display: none; }
+.my-community { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--grid); font-size: 15px; }
+.my-community:last-of-type { border-bottom: 1px solid var(--grid); margin-bottom: 16px; }
+.my-community .hint { font-size: 14px; color: var(--muted); margin-top: 2px; }
+.my-community .btn { margin: 0; flex: none; }
+.mc-form { margin-top: 4px; }
 .editor-card #shared-msg:empty { display: none; }
 .player-claim { margin-bottom: 26px; display: grid; gap: 12px; }
 .player-claim .field-head .hint { margin-bottom: 0; }

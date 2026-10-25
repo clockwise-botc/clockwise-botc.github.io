@@ -1,14 +1,14 @@
 import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js';
 import { predictOutcome, tuneOutcomeModel } from './insights.js';
 import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable } from './insights.js';
-import { communityConfig, communityName, gameCommunity, NONE } from './communities.js';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js';
 import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar } from './ui.js';
 import { renderData, handleDataClick, handleImport } from './dataview.js';
 import { renderGrimoire } from './grimoire.js';
 import { makeImages } from './images.js';
 import { characterToken, installTokenStyle } from './tokens.js';
 import { multiSelect } from './multiselect.js';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate } from './data.js';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -37,14 +37,19 @@ const state = {
   settings: {},
   // Shared games: is a shared store set up, can we read it (password), can we change it (editor key)?
   shared: { on: false, hasPassword: false, canEdit: true, status: null, cacheAt: null, account: null },
-  profile: undefined, // the signed-in account as the store has it (e.g. their claimed player); undefined until checked
+  profile: WEB && webAuth.account().token ? webAuth.profile() : undefined, // the signed-in account as the store has it (claimed player, own communities); undefined until checked
   claimPick: null, // the player picked in "Your player" before pressing Claim
   signin: { mode: 'signin', open: false }, // the website's sign-in screen: which form, and whether shown on request
 };
 const savePrefs = () => { try { localStorage.setItem('dash.prefs', JSON.stringify({ communities: state.filters.communities })); } catch {} };
 const communityOptions = () => communityConfig(state.settings).communities.map((c) => ({ value: c.id, name: c.name }));
+// On the website your own communities are only for filtering; a game itself goes under Escape or Rhap.
+const gameCommunityOptions = () => (WEB ? communityOptions().filter((o) => DEFAULTS.communities.some((d) => d.id === o.value)) : communityOptions());
+// The signed-in account (website): remembered on this device, and its own communities join Escape and Rhap.
+function setProfile(p) { state.profile = p; webAuth.setProfile(p); }
+const withMyCommunities = (settings) => (WEB ? { ...settings, communities: [...DEFAULTS.communities, ...((state.profile && state.profile.communities) || [])] } : settings);
 // On/off buttons for picking communities; `on` is the list of ids that are switched on.
-const communityButtons = (attr, on, extra = '') => communityOptions().map((o) => `<button class="toggle" ${attr}="${esc(extra + o.value)}" aria-pressed="${on.includes(o.value)}">${esc(o.name)}</button>`).join('');
+const communityButtons = (attr, on, extra = '', options = communityOptions()) => options.map((o) => `<button class="toggle" ${attr}="${esc(extra + o.value)}" aria-pressed="${on.includes(o.value)}">${esc(o.name)}</button>`).join('');
 const $ = (sel) => document.querySelector(sel);
 const ctx = { state, api, load: () => load(), communityOptions,
   tools: { WEB, creds, siteUrl, checkKey, webAuth, cacheClear, syncShared: () => syncShared(), nameOf: (key, fallback) => (playerNames.has(key) ? playerNames.get(key) : fallback || key), playerChoices: () => playerChoices() },
@@ -704,7 +709,7 @@ function gameDetail(g) {
       ${canEdit ? '' : `<p class="sub" style="margin:0">This game is shared with everyone, so changing or deleting it needs an editor key. ${WEB ? 'Add one under Data & settings.' : 'Add one in Data & settings.'}</p>`}
       <fieldset class="gm-fields" ${canEdit ? '' : 'disabled'}>
       <div class="gm-grid">
-        <div class="gm-field"><span class="field-label">Community</span><div class="toggles">${communityButtons('data-game-community', g.community ? [g.community] : [], `${g.id}|`)}</div></div>
+        <div class="gm-field"><span class="field-label">Community</span><div class="toggles">${communityButtons('data-game-community', g.community ? [g.community] : [], `${g.id}|`, gameCommunityOptions())}</div></div>
         <label class="gm-field"><span class="field-label">Storyteller</span><input type="text" value="${esc(g.storytellers.map((s) => s.username).filter(Boolean).join(', '))}" placeholder="Not recorded — type a name" data-st="${esc(g.id)}"></label>
         <label class="gm-field gm-wide"><span class="field-label">Notes</span><textarea rows="2" placeholder="Anything to remember about this game" data-notes="${esc(g.id)}">${esc(g.notes || '')}</textarea></label>
       </div>
@@ -913,10 +918,29 @@ function render() {
   document.querySelectorAll('[data-tab]').forEach((b) => { if (b.closest('.tabs')) b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)); });
   $('#filters').hidden = state.tab === 'data';
   const views = { stats: statsView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
-  $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab]();
+  keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab](); });
   // Editors' account list loads the first time Data & settings is opened.
   mountClaimPicker();
   if (state.tab === 'data' && state.accounts === undefined && state.shared.on && state.shared.canEdit && creds(state.settings).editorKey) { state.accounts = null; loadAccounts(); }
+}
+
+// A redraw (new games arriving, the account check finishing) mustn't close a form someone is filling in: forms
+// marked data-keep stay open with what was typed, and the button that opened them (data-opens) stays hidden.
+function keepOpenForms(redraw) {
+  const kept = [...document.querySelectorAll('#view form[data-keep]:not([hidden])')].map((f) => ({
+    key: f.dataset.keep,
+    values: [...f.elements].filter((el) => el.name).map((el) => [el.name, el.value]),
+    focus: f.contains(document.activeElement) ? document.activeElement.name : null,
+  }));
+  redraw();
+  for (const k of kept) {
+    const f = document.querySelector(`#view form[data-keep="${k.key}"]`);
+    if (!f) continue;
+    f.hidden = false;
+    document.querySelectorAll(`#view [data-opens="${k.key}"]`).forEach((b) => { b.hidden = true; });
+    for (const [name, value] of k.values) if (f.elements[name]) f.elements[name].value = value;
+    if (k.focus && f.elements[k.focus]) f.elements[k.focus].focus();
+  }
 }
 
 // ---------- shared games: sign-in and status ----------
@@ -982,7 +1006,7 @@ async function syncShared() {
 }
 
 async function load() {
-  state.settings = WEB ? await api.get('settings', {}) : await api.get('settings', {});
+  state.settings = withMyCommunities(await api.get('settings', {}));
   const local = WEB ? {} : await api.get('games', {});
   const c = creds(state.settings);
   const cache = c.url ? await loadShared() : null;
@@ -1196,7 +1220,7 @@ document.addEventListener('submit', async (e) => {
       const r = mode === 'signin' ? await signIn(state.settings, val('username'), f.password.value) : await signUp(state.settings, val('community'), val('username'), f.password.value);
       if (!r.ok) return fail(r.error === 'not-allowed' ? { error: 'not-allowed', message: 'That community password isn\'t right.' } : r);
       webAuth.setAccount(r.token, r.account.username, remember);
-      state.profile = r.account;
+      setProfile(r.account);
     } else {
       const pw = val('password');
       const r = await checkKey(state.settings, pw);
@@ -1299,8 +1323,54 @@ document.addEventListener('change', async (e) => {
   const r = await setPrivate(state.settings, box.checked).catch((err) => ({ ok: false, message: err.message }));
   box.disabled = false;
   if (!r.ok) { box.checked = !box.checked; const m = $('#claim-msg'); if (m) { m.className = 'msg err'; m.textContent = claimError(r); } return; }
-  state.profile = r.account;
+  setProfile(r.account);
   const m = $('#claim-msg'); if (m) { m.className = 'msg ok'; m.textContent = box.checked ? 'Your stats are private now.' : 'Your stats are visible to everyone again.'; }
+});
+
+// "Your communities" (website): a list with Remove buttons, and "+ Add community" opening a small form in place.
+async function saveMyCommunities(list, done, form) {
+  const say = (text, ok) => { const m = $('#mc-msg'); if (m) { m.className = `msg ${ok ? 'ok' : 'err'}`; m.textContent = text; } };
+  const r = await saveCommunities(state.settings, list).catch((err) => ({ ok: false, message: err.message }));
+  if (!r.ok) return say(claimError(r), false);
+  if (form) { form.reset(); form.hidden = true; } // saved: the form closes (a redraw would otherwise keep it open)
+  setProfile(r.account);
+  await load();
+  // Who sees what may have changed: download again (this redraws), then say so.
+  await syncShared();
+  say(done, true);
+}
+const myCommunities = () => (state.profile && state.profile.communities) || [];
+
+document.addEventListener('click', async (e) => {
+  const add = e.target.closest('[data-mc-add]');
+  const cancel = e.target.closest('[data-mc-cancel]');
+  const remove = e.target.closest('[data-mc-remove]');
+  if (add || cancel) {
+    const card = (add || cancel).closest('.card');
+    const form = card.querySelector('[data-mc-form]');
+    if (cancel) form.reset();
+    form.hidden = !!cancel;
+    card.querySelector('[data-mc-add]').hidden = !cancel;
+    const m = $('#mc-msg'); if (m) m.textContent = '';
+    if (add) form.querySelector('input').focus();
+  } else if (remove) {
+    const c = myCommunities().find((x) => x.id === remove.dataset.mcRemove);
+    if (!c) return;
+    remove.disabled = true;
+    await saveMyCommunities(myCommunities().filter((x) => x !== c), `Removed ${c.name}.`);
+  }
+});
+
+document.addEventListener('submit', async (e) => {
+  const f = e.target;
+  if (!f.matches('[data-mc-form]')) return;
+  e.preventDefault();
+  const name = f.elements.name.value.trim(); // (f.name would be the form's own name)
+  const rooms = f.elements.rooms.value.split(',').map((x) => x.trim()).filter(Boolean);
+  const button = f.querySelector('button[type=submit]');
+  button.disabled = true;
+  await saveMyCommunities([...myCommunities(), { name, rooms }], `Added ${name}.`, f);
+  button.disabled = false;
 });
 
 const claimError = (r) => (r.error === 'unknown-action' ? 'The shared store needs updating before this works.' : r.message || 'Couldn\'t do that. Try again in a moment.');
@@ -1317,22 +1387,24 @@ document.addEventListener('click', async (e) => {
     const r = await claimPlayer(state.settings, pick.key, pick.name).catch((err) => ({ ok: false, message: err.message }));
     claim.disabled = false;
     if (!r.ok) return say(claimError(r));
-    state.profile = r.account;
+    setProfile(r.account);
     state.claimPick = null;
     render();
+    syncShared();
   } else if (un) {
     un.disabled = true;
     const r = await unclaimPlayer(state.settings).catch((err) => ({ ok: false, message: err.message }));
     un.disabled = false;
     if (!r.ok) return say(claimError(r));
-    state.profile = r.account;
+    setProfile(r.account);
     render();
+    syncShared();
   } else if (remove) {
     const name = remove.dataset.claimRemove;
     if (!confirm(`Remove ${name}'s player? They can pick again.`)) return;
     remove.disabled = true;
     const r = await removeClaim(state.settings, name).catch((err) => ({ ok: false, message: err.message }));
-    if (r.ok && state.shared.account && r.account.username.toLowerCase() === state.shared.account.username.toLowerCase()) state.profile = r.account;
+    if (r.ok && state.shared.account && r.account.username.toLowerCase() === state.shared.account.username.toLowerCase()) setProfile(r.account);
     await loadAccounts();
     const m = $('#accounts-msg');
     if (m) { m.className = `msg ${r.ok ? 'ok' : 'err'}`; m.textContent = r.ok ? `Removed ${name}'s player.` : claimError(r); }
@@ -1343,7 +1415,7 @@ document.addEventListener('click', async (e) => {
 async function checkSignedIn() {
   if (!state.shared.account) return;
   const r = await whoAmI(state.settings).catch(() => null);
-  if (r && r.ok && r.account) { state.profile = r.account; renderPickers(); render(); }
+  if (r && r.ok && r.account) { setProfile(r.account); await load(); }
   if (r && r.ok && r.signedOut) {
     webAuth.clearAccount();
     state.signin = { mode: 'signin', open: false };

@@ -57,8 +57,11 @@ export const webAuth = {
   set: (pw, remember) => { try { (remember ? localStorage : sessionStorage).setItem('clockwise.password', pw); } catch {} },
   account: () => ({ token: stored('clockwise.token'), username: stored('clockwise.username') }),
   setAccount: (token, username, remember) => { forget('clockwise.token', 'clockwise.username'); try { const s = remember ? localStorage : sessionStorage; s.setItem('clockwise.token', token); s.setItem('clockwise.username', username); } catch {} },
-  clearAccount: () => forget('clockwise.token', 'clockwise.username'),
-  clear: () => forget('clockwise.password', 'clockwise.editorKey', 'clockwise.token', 'clockwise.username'),
+  clearAccount: () => forget('clockwise.token', 'clockwise.username', 'clockwise.profile'),
+  clear: () => forget('clockwise.password', 'clockwise.editorKey', 'clockwise.token', 'clockwise.username', 'clockwise.profile'),
+  // The account as the store last described it (claimed player, own communities), so the page is right before it asks.
+  profile: () => { try { return JSON.parse(localStorage.getItem('clockwise.profile')) || undefined; } catch { return undefined; } },
+  setProfile: (p) => { try { localStorage.setItem('clockwise.profile', JSON.stringify(p)); } catch {} },
   editorKey: () => { try { return localStorage.getItem('clockwise.editorKey') || ''; } catch { return ''; } },
   setEditorKey: (k) => { try { k ? localStorage.setItem('clockwise.editorKey', k) : localStorage.removeItem('clockwise.editorKey'); } catch {} },
 };
@@ -83,8 +86,9 @@ export async function refreshShared(settings) {
   const before = await cacheGet();
   const res = await pull(c.url, readAuth(c), before);
   if (!res.ok) return res;
-  // Remember deleted ids, so this browser's own copy of a deleted game isn't shown again.
-  const removed = before ? Object.keys(before.games || {}).filter((id) => !res.cache.games[id]) : [];
+  // Remember deleted ids, so this browser's own copy of a deleted game isn't shown again. (Games that are only
+  // hidden from you now, e.g. moved to someone's own community, aren't deleted.)
+  const removed = res.deletedIds;
   res.cache.deleted = [...new Set([...((before && before.deleted) || []), ...removed])];
   // Who keeps their stats private can change without any game changing.
   const privacy = JSON.stringify((before && before.privatePlayers) || []) !== JSON.stringify(res.cache.privatePlayers);
@@ -124,6 +128,7 @@ export const resetPassword = (settings, username, newPassword) => accountCall(se
 export const deleteAccount = (settings, username) => accountCall(settings, { action: 'delete-account', key: creds(settings).editorKey, username });
 export const claimPlayer = (settings, player, name) => accountCall(settings, { action: 'claim', token: creds(settings).token, player, name });
 export const unclaimPlayer = (settings) => accountCall(settings, { action: 'unclaim', token: creds(settings).token });
+export const saveCommunities = (settings, communities) => accountCall(settings, { action: 'save-communities', token: creds(settings).token, communities });
 export const setPrivate = (settings, on) => accountCall(settings, { action: 'set-private', token: creds(settings).token, private: on });
 export const removeClaim = (settings, username) => accountCall(settings, { action: 'remove-claim', key: creds(settings).editorKey, username });
 

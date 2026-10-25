@@ -169,6 +169,9 @@ function sheetStore_() {
       if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); p.setProperty('SESSION_SECRET', s); }
       return s;
     },
+    // Small settings the store keeps for itself, in Script properties.
+    getValue: function (k) { return PropertiesService.getScriptProperties().getProperty('CW_' + k); },
+    setValue: function (k, v) { PropertiesService.getScriptProperties().setProperty('CW_' + k, String(v)); },
     hmac: function (key, value) { return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(String(value), String(key))); },
     randomId: function () { return Utilities.getUuid(); },
     // Wrong-password counts, kept for up to an hour in Apps Script's cache.

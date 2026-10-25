@@ -40,7 +40,7 @@ function hashPassword_(store, password, salt) {
 }
 
 function publicAccount_(acct) {
-  return { username: acct.username, created: acct.created, profile: acct.profile || {}, claim: acct.claim || null };
+  return { username: acct.username, created: acct.created, profile: acct.profile || {}, claim: acct.claim || null, communities: acct.communities || [] };
 }
 
 // Players whose accounts keep their stats private.
@@ -134,8 +134,17 @@ function handleAccount_(body, store, who, now) {
       var myKey = accountKey_(mine.username);
       if (claimOwner_(store, player, myKey)) return { ok: false, error: 'taken', message: 'Someone else has already claimed that player. Ask an editor if that\'s wrong.' };
       var claimed = Object.assign({}, mine, { claim: { player: player, name: String(body.name || '').slice(0, 60), at: now } });
-      store.batch(function () { store.putAccount(myKey, claimed, now); });
+      store.batch(function () { store.putAccount(myKey, claimed, now); bumpVisibility_(store, now); });
       return { ok: true, account: publicAccount_(claimed) };
+    }
+
+    case 'save-communities': {
+      if (!who.account) return { ok: false, error: 'signed-out' };
+      var cleaned = cleanCommunities_(body.communities);
+      if (cleaned.error) return { ok: false, error: 'invalid', message: cleaned.error };
+      var withComms = Object.assign({}, who.account, { communities: cleaned.communities });
+      store.batch(function () { store.putAccount(accountKey_(withComms.username), withComms, now); bumpVisibility_(store, now); });
+      return { ok: true, account: publicAccount_(withComms) };
     }
 
     case 'set-private': {
@@ -154,7 +163,7 @@ function handleAccount_(body, store, who, now) {
       if (!target) return { ok: false, error: 'not-found', message: 'There\'s no account with that username.' };
       var unclaimed = Object.assign({}, target);
       delete unclaimed.claim;
-      store.batch(function () { store.putAccount(accountKey_(unclaimed.username), unclaimed, now); });
+      store.batch(function () { store.putAccount(accountKey_(unclaimed.username), unclaimed, now); bumpVisibility_(store, now); });
       return { ok: true, account: publicAccount_(unclaimed) };
     }
 

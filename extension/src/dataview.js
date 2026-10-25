@@ -68,9 +68,9 @@ function sharedCard(ctx) {
   if (tools.WEB) {
     const who = sh.account
       ? `<p class="sub">Signed in as <b>${esc(sh.account.username)}</b>.</p>
-        <div class="toolbar account-row"><button class="btn" type="button" data-pw-open>Change password</button><button class="btn" data-action="sign-out">Sign out</button></div>
+        <div class="toolbar account-row"><button class="btn" type="button" data-pw-open data-opens="pw">Change password</button><button class="btn" data-action="sign-out">Sign out</button></div>
         <p class="msg" id="pw-msg" role="status"></p>
-        <form class="form change-pw" data-change-password hidden>
+        <form class="form change-pw" data-change-password data-keep="pw" hidden>
           <div class="field-head">Change password <span class="hint">Saving signs you out on your other devices.</span></div>
           <input type="password" name="password" placeholder="Current password" autocomplete="current-password" required aria-label="Current password">
           <input type="password" name="newPassword" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required aria-label="New password">
@@ -86,6 +86,7 @@ function sharedCard(ctx) {
       ${sh.account ? playerSection(ctx) : ''}
       ${st.error ? `<p class="sub">${download}</p>` : ''}
     </div>
+    ${sh.account ? myCommunitiesCard(ctx) : ''}
     <div class="card editor-card">
       <h3>Editor key</h3>
       <p class="sub">Lets you fix or delete games for everyone.</p>
@@ -141,6 +142,27 @@ function playerSection({ state, tools }) {
       <div class="toolbar claim-form"><div class="claim-picker" data-claim-picker></div><button class="btn primary" type="button" data-claim>Claim</button></div>`;
   }
   return `<div class="player-claim">${body}<p class="msg" id="claim-msg"></p></div>`;
+}
+
+// Your own communities (website): only you see them. Games you record in their rooms are filed there.
+function myCommunitiesCard({ state }) {
+  const pl = state.profile;
+  if (pl === undefined) return '';
+  return `<div class="card my-communities">
+    <h3>Your communities</h3>
+    <p class="sub">Group games by the rooms you play in. Only you see these. Games you record in these rooms go here instead of Rhap, and only the people who recorded them can see them, unless someone else put the game under Escape or Rhap.</p>
+    ${pl.claim ? '' : '<p class="sub">Claim your player first, so the games you recorded count as yours.</p>'}
+    ${(pl.communities || []).map((c) => `<div class="my-community">
+      <div><b>${esc(c.name)}</b><div class="hint">${c.rooms.length ? `Rooms: ${esc(c.rooms.join(', '))}` : 'No rooms yet'}</div></div>
+      <button class="btn small" type="button" data-mc-remove="${esc(c.id)}">Remove</button></div>`).join('')}
+    <button class="btn" type="button" data-mc-add data-opens="mc">+ Add community</button>
+    <form class="form mc-form" data-mc-form data-keep="mc" hidden>
+      <input type="text" name="name" placeholder="Name" required maxlength="40" aria-label="Community name">
+      <input type="text" name="rooms" placeholder="Rooms, separated by commas" aria-label="Rooms">
+      <div class="toolbar"><button class="btn primary" type="submit">Save community</button><button class="btn" type="button" data-mc-cancel>Cancel</button></div>
+    </form>
+    <p class="msg" id="mc-msg"></p>
+  </div>`;
 }
 
 function accountsCard({ state, tools }) {

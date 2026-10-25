@@ -96,14 +96,24 @@ function handle_(body, store, keys, now) {
     case 'read': {
       if (!canRead) return deny('see games');
       var since = Number(body.since) || 0;
-      var out = [];
+      // Who sees what changed since then (someone's communities or claim): send everything again.
+      var full = since > 0 && since < visibilityAt_(store);
+      if (full) since = 0;
+      var out = [], hidden = [];
       var ids = store.changedSince(since);
       var recs = store.getRecords(ids);
-      ids.forEach(function (id) { if (recs[id]) out.push(withEdits_(recs[id], store.getEdit(id))); });
+      var byPlayer = accountsByPlayer_(store);
+      var viewer = account && account.claim ? account.claim.player : null;
+      ids.forEach(function (id) {
+        if (!recs[id]) return;
+        var seen = viewGame_(recs[id], store.getEdit(id), byPlayer, viewer);
+        if (seen) out.push(seen); else hidden.push(id);
+      });
       var metaInfo = store.getMetaInfo();
       return {
-        ok: true, now: now, since: since,
+        ok: true, now: now, since: since, full: full,
         games: out,
+        hidden: hidden,
         deleted: store.deletedSince(since),
         meta: metaInfo && metaInfo.at > since ? store.getMeta() : null,
         privatePlayers: privatePlayers_(store),
@@ -120,7 +130,7 @@ function handle_(body, store, keys, now) {
 function cleanGame_(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || /^sample-/.test(raw.id)) return null;
   var g = JSON.parse(JSON.stringify(raw));
-  ['syncedAt', 'excluded', 'notes', 'communityManual'].forEach(function (f) { delete g[f]; });
+  ['syncedAt', 'excluded', 'notes', 'communityManual', 'filedBy', 'recorders'].forEach(function (f) { delete g[f]; });
   var botcArt = function (u) { return typeof u === 'string' && /^https:\/\/botc\.app\/assets\//.test(u); };
   (g.players || []).forEach(function (p) {
     if (botcArt(p.icon)) delete p.icon;
@@ -151,7 +161,7 @@ function better_(a, b) {
 
 // Two recordings of one game → one record: the more complete one, with gaps filled from the other.
 function mergeGame_(stored, incoming) {
-  if (!stored) return Object.assign({}, incoming, { recorders: recorderList_([], incoming) });
+  if (!stored) return Object.assign({}, incoming, { recorders: recorderList_([], incoming), filedBy: withFiling_({}, incoming) });
   var main = better_(incoming, stored) ? incoming : stored;
   var other = main === incoming ? stored : incoming;
   var out = JSON.parse(JSON.stringify(main));
@@ -173,6 +183,7 @@ function mergeGame_(stored, incoming) {
   // A community the recorder picked for this game in the extension's popup beats the automatic one.
   if (incoming.communityChosen && incoming.community) out.community = incoming.community;
   out.recorders = recorderList_(stored.recorders || recorderList_([], stored), incoming);
+  out.filedBy = withFiling_(filedBy_(stored), incoming);
   return out;
 }
 

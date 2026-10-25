@@ -307,6 +307,47 @@ check('private stats: reads list the private players; only with a claim', () => 
   assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, keys).privatePlayers, []);
 });
 
+check('your communities: games only you filed are just for their recorders; Escape/Rhap ones for everyone', () => {
+  const { handle: raw } = loadBackend();
+  let t = 2000;
+  const handle = (body) => raw(body, keys, t++);
+  const a = signup(raw, 'oddish', 'correct horse');
+  const b = signup(raw, 'wren', 'another one');
+  handle({ action: 'claim', token: a.token, player: 'u-a' });
+  handle({ action: 'claim', token: b.token, player: 'u-b' });
+  const game = (id, room, recorder, community, chosen) => ({ ...clone(games[0]), id, room, community, communityChosen: !!chosen, capturedBy: { userId: recorder, username: recorder } });
+  // oddish records three games in room "thursday" and one in "escape"; extensions file unknown rooms under Rhap.
+  handle({ action: 'record', key: 'write-key', games: [game('thursday:1', 'thursday', 'u-a', 'rhap'), game('thursday:2', 'thursday', 'u-a', 'rhap'), game('thursday:3', 'thursday', 'u-a', 'escape', true), game('escape:1', 'escape', 'u-a', 'escape')] });
+  const ids = (r) => r.games.map((g) => g.id).sort();
+  assert.deepEqual(ids(handle({ action: 'read', key: 'view-pass' })), ['escape:1', 'thursday:1', 'thursday:2', 'thursday:3'], 'all public before any community');
+  const bad = handle({ action: 'save-communities', token: a.token, communities: [{ name: 'Rhap', rooms: [] }] });
+  assert.equal(bad.error, 'invalid', 'Escape and Rhap are taken');
+  const saved = handle({ action: 'save-communities', token: a.token, communities: [{ name: 'Thursday crew', rooms: ['Thursday '] }] });
+  assert.deepEqual(saved.account.communities, [{ id: 'thursday-crew', name: 'Thursday crew', rooms: ['thursday'] }]);
+  // Everyone else: thursday:1 and :2 are now only oddish's. thursday:3 was picked as Escape by hand, so it stays.
+  const since = handle({ action: 'read', key: 'view-pass' }).now - 1;
+  const other = handle({ action: 'read', token: b.token, since: 1 });
+  assert.equal(other.full, true, 'an older copy gets everything again');
+  assert.deepEqual(ids(other), ['escape:1', 'thursday:3']);
+  assert.deepEqual(ids(handle({ action: 'read', key: 'view-pass' })), ['escape:1', 'thursday:3'], 'community password too');
+  const mine = handle({ action: 'read', token: a.token });
+  assert.deepEqual(ids(mine), ['escape:1', 'thursday:1', 'thursday:2', 'thursday:3']);
+  assert.equal(mine.games.find((g) => g.id === 'thursday:1').community, 'thursday-crew', 'you see it under your community');
+  assert.ok(!('filedBy' in mine.games[0]), 'who filed what stays in the store');
+  // wren recorded thursday:2 too, with their extension filing it under Rhap → everyone sees it again.
+  handle({ action: 'record', key: 'write-key', games: [game('thursday:2', 'thursday', 'u-b', 'rhap')] });
+  const after = handle({ action: 'read', key: 'view-pass', since });
+  assert.deepEqual(ids(after), ['thursday:2']);
+  assert.equal(after.games[0].community, 'rhap');
+  assert.equal(handle({ action: 'read', token: a.token }).games.find((g) => g.id === 'thursday:2').community, 'thursday-crew', 'still yours for you');
+  // An editor putting a game under Escape settles it for everyone.
+  handle({ action: 'edit', key: 'editor-key', id: 'thursday:1', patch: { community: 'escape', communityManual: true } });
+  assert.ok(ids(handle({ action: 'read', key: 'view-pass' })).includes('thursday:1'));
+  // Dropping the claim: oddish no longer counts as a recorder.
+  handle({ action: 'save-communities', token: a.token, communities: [] });
+  assert.deepEqual(ids(handle({ action: 'read', key: 'view-pass' })), ['escape:1', 'thursday:1', 'thursday:2', 'thursday:3'], 'no communities → all public again');
+});
+
 check('every sample game uploads and builds the Sheet tables', () => {
   const { handle, store } = loadBackend();
   const r = handle({ action: 'record', key: 'write-key', games }, keys);
