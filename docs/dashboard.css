@@ -150,6 +150,8 @@ h4 { font-family: var(--serif); font-size: 16px; margin: 0 0 8px; font-weight: 6
 .meter.good > i { background: var(--good); }
 .meter.evil > i { background: var(--evil); }
 .meter::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--axis); }
+.meter.at::after { content: none; }
+.meter > em { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); border-radius: 1px; }
 .rate { display: grid; grid-template-columns: 40px minmax(36px, 1fr); gap: 8px; align-items: center; min-width: 96px; }
 .rate b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 

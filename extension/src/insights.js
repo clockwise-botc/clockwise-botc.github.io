@@ -8,6 +8,7 @@
 //     With only characters selected, the seats are whoever held those characters.
 
 import { playerKey, displayName } from './stats.js';
+import { ALL_CHARACTERS } from './characters.js';
 
 export const TYPES = ['townsfolk', 'outsider', 'minion', 'demon', 'traveller'];
 const rate = (w, n) => (n ? w / n : null);
@@ -209,6 +210,32 @@ export function groupRelations(games, keys) {
 }
 
 // Nomination behaviour for a set of players: how often their nominations and votes landed on evil players.
+// The token each seat drew: the character it started with (when that changed during the game), else the one it ended
+// with. Travellers choose theirs, so they're left out.
+const typeOfChar = new Map(ALL_CHARACTERS.map(([id, , type]) => [id, type]));
+const drawnType = (p) => (p.startingRoleId && p.startingRoleId !== p.roleId && typeOfChar.get(p.startingRoleId)) || p.team;
+const DRAWN = ['townsfolk', 'outsider', 'minion', 'demon'];
+
+// How often these seats drew each type of token, next to the chance of it: in each game, that type's share of the
+// tokens handed out, added up over the games.
+export function tokenDraws(seats) {
+  const drew = Object.fromEntries(DRAWN.map((t) => [t, 0])), chance = Object.fromEntries(DRAWN.map((t) => [t, 0]));
+  let n = 0;
+  for (const { g, p } of seats) {
+    const t = drawnType(p);
+    if (!DRAWN.includes(t)) continue;
+    const setup = g.players.map(drawnType).filter((x) => DRAWN.includes(x));
+    n++;
+    drew[t]++;
+    for (const x of setup) chance[x] += 1 / setup.length;
+  }
+  const row = (key, types) => {
+    const k = types.reduce((a, t) => a + drew[t], 0);
+    return { key, n: k, share: rate(k, n), chance: rate(types.reduce((a, t) => a + chance[t], 0), n) };
+  };
+  return { games: n, good: row('good', ['townsfolk', 'outsider']), evil: row('evil', ['minion', 'demon']), byType: DRAWN.map((t) => row(t, [t])) };
+}
+
 export function nominationStats(games, keys) {
   const s = { made: 0, onEvil: 0, received: 0, executed: 0, votes: 0, votesOnEvil: 0 };
   for (const g of games) {

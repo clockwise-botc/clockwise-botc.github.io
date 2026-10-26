@@ -1,6 +1,6 @@
 import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js';
 import { predictOutcome, tuneOutcomeModel } from './insights.js';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable } from './insights.js';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js';
 import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js';
 import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js';
 import { renderData, handleDataClick, handleImport } from './dataview.js';
@@ -440,6 +440,12 @@ function rateRows(rows, id = null) {
   return id ? fitted(id, html, { expanded: state.expanded.has(id), wrap }) : wrap(html.join(''));
 }
 
+// Shares of the tokens drawn, each with a line at the chance of drawing it. Rows: [label, {n, share, chance}, cls, plain label].
+function drawRows(rows, games) {
+  return `<table class="rows"><tbody>${rows.map(([label, r, cls, plain = label]) => `<tr><td>${label}</td><td class="num muted">${r.n} of ${games}</td><td>${r.share === null ? '<span class="muted">–</span>'
+    : `<div class="rate" data-tip="${esc(`${plain}: ${r.n} of ${plural(games, 'game')} (${pct(r.share)})\nBy chance: ${pct(r.chance)}`)}"><b>${pct(r.share)}</b><div class="meter at ${cls}"><i style="width:${Math.max(r.share * 100, 1)}%"></i><em style="left:${r.chance * 100}%"></em></div></div>`}</td></tr>`).join('')}</tbody></table>`;
+}
+
 function deathBars(timing, total) {
   const max = Math.max(...timing.map((t) => t.n), 1);
   return `<div class="bars">${timing.map((t) => `<div class="bar-row" data-tip="${esc(`${t.when === 'survived' ? 'Survived to the end' : t.when === 'unknown' ? 'Died, time not recorded' : t.when}: ${t.n} of ${total}`)}">
@@ -628,6 +634,11 @@ function playerSections(G, sel, seats, base) {
       ...TYPES.map((team) => st.byTeam.find((t) => t.team === team) || { team, plays: 0, winRate: null })
         .map((t) => [typeLink(t.team), t.winRate, t.plays, isEvilTeam(t.team) ? 'evil' : t.team === 'traveller' ? 'neutral' : 'good']),
     ]) + `<p class="sub" style="margin:10px 0 0">Survived to the end in ${pct(st.survivalRate)} of games.</p>`));
+    const draws = tokenDraws(seats);
+    if (draws.games) out.push(card('Tokens drawn', `How often ${esc(nameOf(key))} drew each kind of token (the character they started with; travellers left out). The line on each bar marks the chance, from the setups of these games.`, drawRows([
+      ['Good', draws.good, 'good'], ['Evil', draws.evil, 'evil'],
+      ...draws.byType.map((r) => [typeLink(r.key), r, isEvilTeam(r.key) ? 'evil' : 'good', teamOne(r.key)]),
+    ], draws.games)));
     // "Show all" lists every character on botc.app, with the ones they haven't played yet at the end.
     const playedIds = new Set(st.byCharacter.map((c) => c.roleId));
     const onBotc = Object.keys(roleMeta).length > 20 ? (cid) => cid in roleMeta : () => true;
