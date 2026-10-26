@@ -19,18 +19,78 @@ async function getSettings() {
   return { ...DEFAULT_SETTINGS, ...settings };
 }
 
+// "Don't record this game" (popup): { ids: { gameId: true }, rooms: { room: when } }. A skipped game is still kept
+// in this browser (marked `skipped`) so it can be recorded after all, but it's never uploaded; a room in `rooms`
+// skips the next game that ends there.
+async function getSkips() {
+  const { skips = {} } = await chrome.storage.local.get('skips');
+  return { ids: skips.ids || {}, rooms: skips.rooms || {} };
+}
+const roomKey = (room) => String(room || '').trim().toLowerCase();
+const RECENT_MS = 20 * 60e3; // how long after a game ends it still counts as "the game that just ended"
+
+// Which game the popup's button is about: the one being played, the one that just ended here, or the next one.
+async function skipTarget(room, gameId, inGame) {
+  if (inGame && gameId) return { kind: 'current', id: gameId };
+  const games = await getGames();
+  const last = Object.values(games).filter((g) => roomKey(g.room) === roomKey(room)).sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0))[0];
+  if (last && Date.now() - (last.capturedAt || 0) < RECENT_MS) return { kind: 'last', id: last.id };
+  return { kind: 'next' };
+}
+
+async function skipState(room, gameId, inGame) {
+  const t = await skipTarget(room, gameId, inGame);
+  const skips = await getSkips();
+  return { ...t, skipped: t.kind === 'next' ? !!skips.rooms[roomKey(room)] : !!skips.ids[t.id] };
+}
+
+async function setSkip(room, gameId, inGame, on) {
+  const t = await skipTarget(room, gameId, inGame);
+  let withdraw = null;
+  await locked(async () => {
+    const skips = await getSkips();
+    const games = await getGames();
+    if (t.kind === 'next') { if (on) skips.rooms[roomKey(room)] = Date.now(); else delete skips.rooms[roomKey(room)]; }
+    else if (on) skips.ids[t.id] = true;
+    else delete skips.ids[t.id];
+    const g = t.id && games[t.id];
+    if (g) {
+      // Already recorded here: keep it, but take it back from the shared stats (or send it again).
+      if (on && !g.skipped && g.syncedAt) withdraw = g;
+      g.skipped = on;
+      if (!on) g.syncedAt = null;
+    }
+    await chrome.storage.local.set({ skips, games });
+  });
+  if (withdraw) {
+    const { url, writeKey } = await backend();
+    const recorder = withdraw.capturedBy && (withdraw.capturedBy.username || withdraw.capturedBy.userId);
+    if (url && writeKey) await call(url, { action: 'void', key: writeKey, id: withdraw.id, recorder }).catch(() => {});
+  }
+  if (!on) syncPending().catch(recordSyncError);
+  return skipState(room, gameId, inGame);
+}
+
 async function upsertGame(game) {
   const settings = await getSettings();
   await locked(async () => {
     const games = await getGames();
     const prev = games[game.id];
+    // Don't record: asked for this game, or for the next game in its room.
+    const skips = await getSkips();
+    if (!prev && skips.rooms[roomKey(game.room)]) {
+      skips.ids[game.id] = true;
+      delete skips.rooms[roomKey(game.room)];
+      await chrome.storage.local.set({ skips });
+    }
+    const skipped = !!skips.ids[game.id];
     // A community picked for this game in the dashboard wins; otherwise use the room's community.
     const community = prev && prev.communityManual ? prev.community : communityForRoom(settings, game.room);
     // Picked by hand (for this game, or for its room in the popup): the shared store then won't refile it under one
     // of your own communities by room.
     const communityChosen = !!(prev && (prev.communityManual || prev.communityChosen)) || isManual(settings, game.room);
     // Keep the user's own edits (exclusion, notes) when the same game is re-captured.
-    games[game.id] = { ...game, community, communityChosen, communityManual: !!(prev && prev.communityManual), excluded: prev ? !!prev.excluded : false, notes: prev ? prev.notes || '' : '', syncedAt: null };
+    games[game.id] = { ...game, community, communityChosen, communityManual: !!(prev && prev.communityManual), excluded: prev ? !!prev.excluded : false, notes: prev ? prev.notes || '' : '', syncedAt: null, skipped };
     await chrome.storage.local.set({ games });
   });
   syncPending().catch(recordSyncError);
@@ -62,7 +122,7 @@ async function syncPending(all = false) {
   if (!url || !writeKey) return { skipped: true };
   uploadMeta().catch(() => {}); // the art info too, if it changed (it's skipped when it hasn't)
   const games = await getGames();
-  const pending = Object.values(games).filter((g) => !g.id.startsWith('sample-') && (all || !g.syncedAt));
+  const pending = Object.values(games).filter((g) => !g.id.startsWith('sample-') && !g.skipped && (all || !g.syncedAt));
   if (!pending.length) return { synced: 0 };
   for (let i = 0; i < pending.length; i += 20) {
     const chunk = pending.slice(i, i + 20);
@@ -128,6 +188,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       case 'assets:refresh':
         return refreshAssetMap(!!msg.force);
+      case 'skip:get':
+        return { ok: true, ...(await skipState(msg.room, msg.gameId, msg.inGame)) };
+      case 'skip:set':
+        return { ok: true, ...(await setSkip(msg.room, msg.gameId, msg.inGame, !!msg.on)) };
       case 'game:void':
         await voidGame(msg.payload.id);
         return { ok: true };

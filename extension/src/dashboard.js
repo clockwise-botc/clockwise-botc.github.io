@@ -1044,7 +1044,8 @@ async function syncShared() {
 async function load() {
   state.settings = withMyCommunities(await api.get('settings', {}));
   if (!WEB && !state.settings.accountToken) state.profile = undefined;
-  const local = WEB ? {} : await api.get('games', {});
+  // This browser's games, minus ones you chose not to record (popup: "Don't record").
+  const local = WEB ? {} : Object.fromEntries(Object.entries(await api.get('games', {})).filter(([, g]) => !g.skipped));
   const c = creds(state.settings);
   const cache = c.url ? await loadShared() : null;
   state.shared = { ...state.shared, on: !!c.url, hasPassword: canReadWith(c), account: c.token ? { username: c.username } : null, canEdit: !c.url || !!c.editorKey, cacheAt: cache && cache.at };

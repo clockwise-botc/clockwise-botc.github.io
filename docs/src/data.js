@@ -3,8 +3,8 @@
 //   Extension, sharing: everyone's games from the shared store, plus this browser's games not uploaded yet.
 //   Website (community dashboard): everyone's games, after the community password.
 // Downloads are cached (chrome.storage in the extension, IndexedDB on the website) and topped up incrementally.
-import { BACKEND_URL, SITE_URL } from './config.js?v=276bfa0b3c';
-import { call, pull, ping, editPatch } from './shared.js?v=276bfa0b3c';
+import { BACKEND_URL, SITE_URL } from './config.js?v=b3b2f25454';
+import { call, pull, ping, editPatch } from './shared.js?v=b3b2f25454';
 
 // Set by web-config.js on the community website.
 export const WEB = (typeof window !== 'undefined' && window.CLOCKWISE_WEB) || null;

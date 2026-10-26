@@ -1,42 +1,46 @@
-import { communityConfig, communityForRoom, automaticCommunity, communityName, NONE } from './communities.js';
+import { communityConfig, communityForRoom, automaticCommunity, communityName } from './communities.js';
 import { call } from './shared.js';
 import { BACKEND_URL, SITE_URL } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// Community buttons: one is on by default (from the room name). Clicking the one that's on switches it
-// off, and the game is then recorded without a community.
+// One dropdown: the communities (the room's own is picked to start with), then "Don't record". "Don't record" is about
+// the game being played, the one that just ended here (its upload is taken back), or the next one; picking a
+// community again records it after all. Picking the room's automatic community clears a choice made by hand.
+const SKIPPED = {
+  current: 'This game won\'t be recorded.',
+  last: 'The game that just ended won\'t be recorded.',
+  next: 'The next game here won\'t be recorded.',
+};
 async function showCommunity(room) {
   const { settings = {} } = await chrome.storage.local.get('settings');
   const cfg = communityConfig(settings);
   const current = communityForRoom(settings, room);
   const auto = automaticCommunity(settings, room);
-  // Escape | Rhap as buttons; once you have communities of your own too, a dropdown. Picking the automatic one
-  // clears a choice made by hand, so the room follows its default again.
-  const many = cfg.communities.length > 2;
-  $('community').hidden = many;
-  $('community-select').hidden = !many;
-  if (many) {
-    $('community-select').innerHTML = (current ? '' : '<option value="" selected>No community</option>')
-      + cfg.communities.map((c) => `<option value="${esc(c.id)}" ${c.id === current ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
-    $('community-select').onchange = (e) => { const wanted = e.target.value; if (wanted) choose(room, wanted === auto ? null : wanted); };
-  } else {
-    // Clicking the one that's on switches it off: the game is then recorded without a community.
-    $('community').innerHTML = cfg.communities
-      .map((c) => `<button class="choice" data-community="${esc(c.id)}" aria-pressed="${c.id === current}">${esc(c.name)}</button>`).join('');
-    $('community').querySelectorAll('[data-community]').forEach((b) => b.addEventListener('click', () => {
-      const wanted = b.dataset.community === current ? null : b.dataset.community;
-      choose(room, wanted === auto ? null : wanted === null ? NONE : wanted);
-    }));
-  }
+  const ask = { room, gameId: liveTab && liveTab.gameId, inGame: !!(liveTab && liveTab.inGame) };
+  const st = await chrome.runtime.sendMessage({ type: 'skip:get', ...ask }).catch(() => null);
+  const skipped = !!(st && st.ok && st.skipped);
+  const sel = $('community-select');
+  sel.innerHTML = cfg.communities.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')
+    + (current ? '' : '<option value="">No community</option>') // only for a room switched off in an older version
+    + '<hr><option value="skip">Don\'t record</option>';
+  sel.value = skipped ? 'skip' : current || '';
+  sel.onchange = async () => {
+    const wanted = sel.value;
+    sel.disabled = true;
+    if (wanted === 'skip') await chrome.runtime.sendMessage({ type: 'skip:set', ...ask, on: true });
+    else {
+      if (skipped) await chrome.runtime.sendMessage({ type: 'skip:set', ...ask, on: false });
+      if (wanted && wanted !== current) await chrome.runtime.sendMessage({ type: 'community:set', room, choice: wanted === auto ? null : wanted });
+    }
+    sel.disabled = false;
+    await showCommunity(room);
+    showStats();
+  };
   $('community-box').hidden = false;
-  showStatus(communityName(settings, current));
-}
-
-async function choose(room, choice) {
-  await chrome.runtime.sendMessage({ type: 'community:set', room, choice });
-  await showCommunity(room);
+  if (skipped) show('', SKIPPED[st.kind]);
+  else showStatus(communityName(settings, current));
 }
 
 // ---------- signing in ----------
@@ -165,14 +169,19 @@ async function start() {
   await showMain();
 }
 
-async function showMain() {
+// Games recorded here (not counting ones you chose not to record), and who won the last one.
+async function showStats() {
   const { games = {} } = await chrome.storage.local.get('games');
-  const list = Object.values(games).sort((a, b) => b.endedAt - a.endedAt);
+  const list = Object.values(games).filter((g) => !g.skipped).sort((a, b) => b.endedAt - a.endedAt);
   $('games').textContent = list.length;
   $('games-label').textContent = list.length === 1 ? 'Game recorded' : 'Games recorded';
   $('last').textContent = list[0] ? `${list[0].winner === 'evil' ? 'Evil' : 'Good'} won` : '–';
   fitStats();
   document.fonts.ready.then(fitStats); // again once the serif has loaded (it's wider than the fallback)
+}
+
+async function showMain() {
+  await showStats();
   await showAccount();
   refreshAccount();
 
