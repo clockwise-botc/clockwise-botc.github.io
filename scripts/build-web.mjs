@@ -4,6 +4,7 @@
 // The site holds only code: games come from the shared store, which needs the community password.
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,16 +22,30 @@ const copy = (from, to = from) => fs.cpSync(path.join(ext, from), path.join(out,
 for (const dir of ['src', 'fonts', 'images', 'icons']) copy(dir);
 copy('dashboard.css');
 // Extension-only scripts aren't needed on the website.
-for (const f of ['background.js', 'bridge.js', 'page-hook.js', 'popup.js']) fs.rmSync(path.join(out, 'src', f), { force: true });
+for (const f of ['background.js', 'bridge.js', 'page-hook.js', 'popup.js', 'site-sync.js']) fs.rmSync(path.join(out, 'src', f), { force: true });
+
+// GitHub Pages lets browsers keep each file for 10 minutes. Stamping every link (and every import between the
+// scripts) with this build's version means a browser never mixes files from two versions, and picks up a new
+// build in one go once its copy of the page expires.
+const srcDir = path.join(out, 'src');
+const scripts = fs.readdirSync(srcDir).filter((f) => f.endsWith('.js')).sort();
+const version = crypto.createHash('sha1')
+  .update(scripts.map((f) => fs.readFileSync(path.join(srcDir, f), 'utf8')).join('') + fs.readFileSync(path.join(out, 'dashboard.css'), 'utf8') + backend)
+  .digest('hex').slice(0, 10);
+for (const f of scripts) {
+  const file = path.join(srcDir, f);
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(/(\bfrom\s+|\bimport\s*\(\s*)(['"])(\.\/[^'"?]+\.js)\2/g, `$1$2$3?v=${version}$2`));
+}
 
 let html = fs.readFileSync(path.join(ext, 'dashboard.html'), 'utf8');
 html = html
   .replace('<a class="brand" href="dashboard.html"', '<a class="brand" href="./"')
   .replace('<title>Clockwise</title>', '<title>Clockwise</title>\n  <meta name="robots" content="noindex">')
-  .replace('<script type="module" src="src/dashboard.js"></script>', '<script src="web-config.js"></script>\n  <script type="module" src="src/dashboard.js"></script>');
+  .replace('href="dashboard.css"', `href="dashboard.css?v=${version}"`)
+  .replace('<script type="module" src="src/dashboard.js"></script>', `<script src="web-config.js?v=${version}"></script>\n  <script type="module" src="src/dashboard.js?v=${version}"></script>`);
 fs.writeFileSync(path.join(out, 'index.html'), html);
 fs.writeFileSync(path.join(out, 'web-config.js'), `// Where the community dashboard reads its games (password needed).\nwindow.CLOCKWISE_WEB = ${JSON.stringify({ backendUrl: backend })};\n`);
 fs.copyFileSync(path.join(root, 'site/privacy.html'), path.join(out, 'privacy.html'));
 fs.writeFileSync(path.join(out, '.nojekyll'), '');
 fs.writeFileSync(path.join(out, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
-console.log(`built ${path.relative(root, out)}/ (backend: ${backend || 'not set'})`);
+console.log(`built ${path.relative(root, out)}/ version ${version} (backend: ${backend || 'not set'})`);

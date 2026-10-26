@@ -9,7 +9,7 @@
 //
 // cfg: { label, options: () => [{ value, label, sub }], selected: () => [values], onChange: (values) => void, nameOf: (value) => text,
 //        single }  single: pick one; no checkboxes or Selected/All rows, and the list closes on a pick.
-import { esc } from './ui.js';
+import { esc } from './ui.js?v=276bfa0b3c';
 
 const CHEVRON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const SEARCH = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
