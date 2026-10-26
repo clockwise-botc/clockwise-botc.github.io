@@ -40,7 +40,7 @@
     },
     {
       "matches": [
-        "https://clockwise-botc.github.io/*"
+        "https://myclockwise.com/*"
       ],
       "js": [
         "src/site-sync.js"

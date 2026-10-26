@@ -52,7 +52,7 @@ Upload `dist/clockwise-<version>.zip` (made by `node scripts/pack.mjs`).
 - `scripting` — connects to botc.app tabs that were already open when the extension was installed or updated, so they don't need reloading.
 - Host permission `https://botc.app/*` — reads the game state on botc.app to record games, and botc.app's public character images and fonts for drawing tokens.
 - Host permissions `https://script.google.com/*`, `https://script.googleusercontent.com/*` — uploads games to, and reads them from, the community's shared Google Apps Script store.
-- Content script on `https://clockwise-botc.github.io/*` (new in 3.1) — the extension's own community dashboard website. It only keeps the user's Clockwise sign-in the same in the extension and on that site, so they sign in once; it reads nothing else there.
+- Content script on `https://myclockwise.com/*` (new in 3.1) — the extension's own community dashboard website. It only keeps the user's Clockwise sign-in the same in the extension and on that site, so they sign in once; it reads nothing else there.
 
 **Remote code:** No, I am not using remote code.
 
@@ -65,7 +65,7 @@ Upload `dist/clockwise-<version>.zip` (made by `node scripts/pack.mjs`).
 **Certify:** ☑ not sold to third parties · ☑ not used or transferred for purposes unrelated to the single purpose ·
 ☑ not used or transferred to determine creditworthiness or for lending.
 
-**Privacy policy URL:** `https://clockwise-botc.github.io/privacy.html`
+**Privacy policy URL:** `https://myclockwise.com/privacy.html`
 
 ## Version 3.1 — what changed (for your notes; the store doesn't ask)
 

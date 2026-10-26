@@ -5,4 +5,4 @@
 // Left empty, Clockwise keeps games in this browser only, as before.
 export const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbysmkDF6F6V9nag4El5Uom_iBsQ8HZ-FfHIHnUQGcXQ3utgwqFwpJ9k3wZje6d3NIL0/exec';
 export const WRITE_KEY = 'cw-up-gaz_iIGkx0RW58k7';
-export const SITE_URL = 'https://clockwise-botc.github.io/';
+export const SITE_URL = 'https://myclockwise.com/';

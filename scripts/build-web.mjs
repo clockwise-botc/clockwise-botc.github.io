@@ -48,4 +48,8 @@ fs.writeFileSync(path.join(out, 'web-config.js'), `// Where the community dashbo
 fs.copyFileSync(path.join(root, 'site/privacy.html'), path.join(out, 'privacy.html'));
 fs.writeFileSync(path.join(out, '.nojekyll'), '');
 fs.writeFileSync(path.join(out, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
+// The site's own address (SITE_URL), when it isn't the github.io one: GitHub Pages serves it there. Only for the
+// real build, not test copies.
+const siteHost = (() => { try { return new URL((config.match(/SITE_URL = '([^']*)'/) || [])[1] || '').host; } catch { return ''; } })();
+if (!arg('out') && siteHost && !siteHost.endsWith('.github.io')) fs.writeFileSync(path.join(out, 'CNAME'), `${siteHost}\n`);
 console.log(`built ${path.relative(root, out)}/ version ${version} (backend: ${backend || 'not set'})`);
