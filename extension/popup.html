@@ -10,7 +10,8 @@
     /* Dark is the default look, like the dashboard. */
     :root:not([data-theme="light"]) { color-scheme: dark; --page:#1a1324; --card:#261c33; --ink:#f3eadb; --ink-2:#cdbfda; --border:rgba(243,234,219,.13); --accent:#7a55c7; --ok:#6cc36c; --rec:#f08a80; --warn:#f0bf4c; }
     [hidden] { display: none !important; }
-    body { margin: 0; width: 320px; background: var(--page) url("images/background-tile.webp") 0 0 / 627px auto repeat; color: var(--ink); font-size: 14px; line-height: 1.45; }
+    /* Set on body itself: Chrome's own style for extension pages gives body the system font otherwise. */
+    body { font-family: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; width: 320px; background: var(--page) url("images/background-tile.webp") 0 0 / 627px auto repeat; color: var(--ink); font-size: 14px; line-height: 1.45; }
     .wrap { padding: 16px; display: grid; gap: 12px; }
     .brand { display: flex; align-items: center; gap: 8px; }
     h1 { font-family: "Fraunces", Georgia, serif; font-variation-settings: 'SOFT' 50; font-size: 24px; font-weight: 650; letter-spacing: -0.01em; margin: 0; line-height: 1; }
@@ -23,27 +24,38 @@
     .dot.rec { background: var(--rec); box-shadow: 0 0 0 4px color-mix(in srgb, var(--rec) 22%, transparent); }
     .dot.err { background: var(--warn); }
     .muted { color: var(--ink-2); }
-    .community { display: grid; gap: 8px; background: var(--card); border: 1.5px solid var(--border); border-radius: 24px; padding: 14px 16px; }
-    .community label { font-family: "Fraunces", Georgia, serif; font-variation-settings: 'SOFT' 50; font-weight: 600; font-size: 16px; }
+    .community { display: grid; gap: 8px; }
     .choices { display: inline-flex; gap: 2px; padding: 4px; background: var(--card); border: 1.5px solid var(--border); border-radius: 999px; justify-self: start; }
     .choice { font: inherit; font-weight: 600; color: var(--ink-2); background: none; border: 0; border-radius: 999px; padding: 7px 18px; cursor: pointer; }
     .choice[aria-pressed="true"] { background: var(--ink); color: var(--card); }
-    .community .note { font-size: 12.5px; }
     .linkish { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
     .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .stat { background: var(--card); border: 1.5px solid var(--border); border-radius: 22px; padding: 10px 12px; }
-    .stat b { display: block; font-size: 22px; font-weight: 700; }
+    /* Like the dashboard's tiles: small label, the number in the display serif. */
+    .stat { background: var(--card); border: 1.5px solid var(--border); border-radius: 22px; padding: 14px 16px; min-width: 0; }
+    .stat .label { display: block; color: var(--ink-2); font-size: 12.5px; font-weight: 600; letter-spacing: .02em; }
+    .stat b { display: block; font-family: "Fraunces", Georgia, serif; font-variation-settings: 'SOFT' 50; font-weight: 650; font-size: 28px; line-height: 1.05; letter-spacing: -.01em; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: lining-nums; }
     #open { font: inherit; font-weight: 700; padding: 10px; border-radius: 999px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
     #open:hover { filter: brightness(1.08); }
     .choices { flex-wrap: wrap; border-radius: 22px; }
+    .community-select { justify-self: stretch; font: inherit; font-weight: 600; color: var(--ink); background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' fill='none' stroke='%23cdbfda' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right 14px center / 14px no-repeat;
+      border: 1.5px solid var(--border); border-radius: 999px; padding: 9px 40px 9px 16px; appearance: none; cursor: pointer; }
+    .community-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
     #main { display: grid; gap: 12px; }
     .account { font-size: 13px; color: var(--ink-2); }
     .account b { color: var(--ink); }
-    .gate { display: grid; gap: 12px; }
+    /* The sign-in looks like the website's: centred logo, name and tabs, centred fields. */
+    body.gate-on .brand { display: none; }
+    .gate { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 8px 4px 4px; }
     .gate p { margin: 0; }
-    .gate form { display: grid; gap: 8px; }
-    .gate input { font: inherit; font-size: 14px; padding: 10px 14px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--card); color: var(--ink); outline: none; }
+    .gate h2 { font-family: "Fraunces", Georgia, serif; font-variation-settings: 'SOFT' 50; font-size: 30px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.1; margin: 4px 0 0; }
+    .gate .choices { justify-self: center; margin: 10px 0 2px; }
+    .gate .choice { padding: 7px 14px; font-size: 14px; }
+    .gate form { display: grid; gap: 14px; width: 100%; margin-top: 8px; }
+    .gate input { font: inherit; font-size: 15px; height: 46px; box-sizing: border-box; padding: 0 16px; text-align: center; border-radius: 999px; border: 1.5px solid var(--border); background: transparent; color: var(--ink); outline: none; }
+    .gate input::placeholder { color: var(--ink-2); opacity: .7; }
     .gate input:focus { border-color: var(--accent); }
+    .gate .btn { height: 46px; font-size: 15px; }
+    .gate .forgot { color: var(--ink-2); font-size: 14px; margin: 12px 0 0; }
     .btn { font: inherit; font-weight: 700; padding: 10px 16px; border-radius: 999px; border: 0; cursor: pointer; }
     .btn.primary { background: var(--accent); color: #fff; }
     .btn:disabled { opacity: .6; }
@@ -57,7 +69,8 @@
     <div class="brand"><img class="logo" src="icons/logo-dark.png" alt="" width="30" height="30"><h1 aria-label="Clockwise"><span aria-hidden="true">Clockw<span class="i-dot">ı</span>se</span></h1></div>
     <!-- First use: sign in (or create an account) once; the extension stays signed in after that. -->
     <div class="gate" id="gate" hidden>
-      <p class="muted">Sign in once to start. You'll stay signed in on this browser.</p>
+      <img src="icons/logo-dark.png" alt="" width="56" height="56">
+      <h2>Clockwise</h2>
       <div class="choices" role="group" aria-label="Sign in or create an account">
         <button class="choice" data-gate-mode="signin" aria-pressed="true">Sign in</button><button class="choice" data-gate-mode="signup" aria-pressed="false">Create account</button>
       </div>
@@ -68,19 +81,18 @@
         <input name="community" type="password" placeholder="Community password" aria-label="Community password" data-signup hidden>
         <button type="submit" class="btn primary" id="gate-submit">Sign in</button>
         <span class="msg" id="signin-msg" role="alert"></span>
-        <span class="muted small" data-signin-only>Forgot your password? Ask an editor to set a new one.</span>
+        <p class="forgot" data-signin-only>Forgot your password? Ask an editor to set a new one.</p>
       </form>
     </div>
     <div id="main" hidden>
     <div class="status"><span class="dot" id="dot"></span><span id="status">Checking…</span></div>
     <div class="community" id="community-box" hidden>
-      <label>Community for room “<span id="room"></span>”</label>
       <div class="choices" id="community" role="group" aria-label="Community"></div>
-      <span class="note muted" id="community-note"></span>
+      <select class="community-select" id="community-select" aria-label="Community" hidden></select>
     </div>
     <div class="stats">
-      <div class="stat"><b id="games">–</b><span class="muted" id="games-label">games recorded</span></div>
-      <div class="stat"><b id="last">–</b><span class="muted">last game</span></div>
+      <div class="stat"><span class="label" id="games-label">Games recorded</span><b id="games">–</b></div>
+      <div class="stat"><span class="label">Last game</span><b id="last">–</b></div>
     </div>
     <button id="open">Open dashboard</button>
     <div class="account" id="acct-in" hidden>Signed in as <b id="acct-name"></b> · <button class="linkish" id="signout">Sign out</button></div>

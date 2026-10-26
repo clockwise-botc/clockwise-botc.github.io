@@ -1,4 +1,4 @@
-import { communityConfig, communityForRoom, automaticCommunity, isManual, communityName, NONE } from './communities.js';
+import { communityConfig, communityForRoom, automaticCommunity, communityName, NONE } from './communities.js';
 import { call } from './shared.js';
 import { BACKEND_URL, SITE_URL } from './config.js';
 
@@ -12,28 +12,31 @@ async function showCommunity(room) {
   const cfg = communityConfig(settings);
   const current = communityForRoom(settings, room);
   const auto = automaticCommunity(settings, room);
-  $('room').textContent = room;
-  $('community').innerHTML = cfg.communities
-    .map((c) => `<button class="choice" data-community="${esc(c.id)}" aria-pressed="${c.id === current}">${esc(c.name)}</button>`).join('');
-  $('community').querySelectorAll('[data-community]').forEach((b) => b.addEventListener('click', () => {
-    const wanted = b.dataset.community === current ? null : b.dataset.community;
-    // Matching the automatic choice clears the manual one, so the room follows its default again.
-    choose(room, wanted === auto ? null : wanted === null ? NONE : wanted);
-  }));
-  const note = $('community-note');
-  const autoName = communityName(settings, auto);
-  if (!current) {
-    note.innerHTML = `No community selected — games here are recorded without one.${isManual(settings, room) && auto ? ` <button class="linkish" id="reset">Use ${esc(autoName)}</button>` : ''}`;
-  } else if (isManual(settings, room)) {
-    note.innerHTML = `Set by you${auto ? ` (automatic: ${esc(autoName)})` : ''}. <button class="linkish" id="reset">Use automatic</button>`;
+  // Escape | Rhap as buttons; once you have communities of your own too, a dropdown. Picking the automatic one
+  // clears a choice made by hand, so the room follows its default again.
+  const many = cfg.communities.length > 2;
+  $('community').hidden = many;
+  $('community-select').hidden = !many;
+  if (many) {
+    $('community-select').innerHTML = (current ? '' : '<option value="" selected>No community</option>')
+      + cfg.communities.map((c) => `<option value="${esc(c.id)}" ${c.id === current ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+    $('community-select').onchange = (e) => { const wanted = e.target.value; if (wanted) choose(room, wanted === auto ? null : wanted); };
   } else {
-    note.textContent = `Chosen automatically from the room name. Click it to switch it off, or pick ${cfg.communities.length > 2 ? 'another' : 'the other'} community.`;
+    // Clicking the one that's on switches it off: the game is then recorded without a community.
+    $('community').innerHTML = cfg.communities
+      .map((c) => `<button class="choice" data-community="${esc(c.id)}" aria-pressed="${c.id === current}">${esc(c.name)}</button>`).join('');
+    $('community').querySelectorAll('[data-community]').forEach((b) => b.addEventListener('click', () => {
+      const wanted = b.dataset.community === current ? null : b.dataset.community;
+      choose(room, wanted === auto ? null : wanted === null ? NONE : wanted);
+    }));
   }
-  const chosen = cfg.communities.find((c) => c.id === current);
-  if (chosen && chosen.own) note.insertAdjacentHTML('beforeend', ' Only the people who recorded games here will see them.');
-  const reset = $('reset');
-  if (reset) reset.addEventListener('click', () => choose(room, null));
   $('community-box').hidden = false;
+  showStatus(communityName(settings, current));
+}
+
+async function choose(room, choice) {
+  await chrome.runtime.sendMessage({ type: 'community:set', room, choice });
+  await showCommunity(room);
 }
 
 // ---------- signing in ----------
@@ -106,11 +109,6 @@ function setupGate() {
   $('signout').addEventListener('click', async () => { await saveSettings(signedOut()); start(); });
 }
 
-async function choose(room, choice) {
-  await chrome.runtime.sendMessage({ type: 'community:set', room, choice });
-  await showCommunity(room);
-}
-
 async function ping(tabId) {
   return chrome.tabs.sendMessage(tabId, { type: 'ping' });
 }
@@ -131,9 +129,30 @@ async function statusOf(tab) {
   }
 }
 
+// The status line, which also says where the next game goes (it follows the community picked below it).
+let liveTab = null;
+function showStatus(community) {
+  const live = liveTab;
+  if (!live || !live.loggedIn || !live.room) return;
+  // Ends with "to:" so it reads on into the community picked just below.
+  if (live.inGame) show('rec', `Recording the game in “${live.room}” (${live.nominations} nominations so far)${community ? ' to:' : ', without a community.'}`);
+  else show('live', `Connected to “${live.room}”. The next game will be recorded ${community ? 'to:' : 'without a community.'}`);
+}
+
 function show(kind, text) {
   $('dot').className = `dot ${kind}`;
   $('status').textContent = text;
+}
+
+// "Good won" in a half-width card: shrink both numbers together until it fits, so the two cards stay matched.
+function fitStats() {
+  const values = [$('games'), $('last')];
+  let size = 28;
+  values.forEach((v) => { v.style.fontSize = `${size}px`; });
+  while (size > 18 && values.some((v) => v.scrollWidth > v.clientWidth)) {
+    size -= 1;
+    values.forEach((v) => { v.style.fontSize = `${size}px`; });
+  }
 }
 
 // Show the sign-in, or (signed in) the recording status for the open botc.app tab.
@@ -141,6 +160,7 @@ async function start() {
   const gate = await needsSignIn();
   $('gate').hidden = !gate;
   $('main').hidden = gate;
+  document.body.classList.toggle('gate-on', gate);
   if (gate) { $('signin').reset(); setGateMode('signin'); $('signin').elements.username.focus(); return; }
   await showMain();
 }
@@ -149,8 +169,10 @@ async function showMain() {
   const { games = {} } = await chrome.storage.local.get('games');
   const list = Object.values(games).sort((a, b) => b.endedAt - a.endedAt);
   $('games').textContent = list.length;
-  $('games-label').textContent = list.length === 1 ? 'game recorded' : 'games recorded';
+  $('games-label').textContent = list.length === 1 ? 'Game recorded' : 'Games recorded';
   $('last').textContent = list[0] ? `${list[0].winner === 'evil' ? 'Evil' : 'Good'} won` : '–';
+  fitStats();
+  document.fonts.ready.then(fitStats); // again once the serif has loaded (it's wider than the fallback)
   await showAccount();
   refreshAccount();
 
@@ -163,12 +185,10 @@ async function showMain() {
   const live = results.map((r) => r && r.status).filter((s) => s && s.attached);
   const best = live.find((s) => s.inGame) || live.find((s) => s.room) || live[0];
 
-  if (best && best.room) { currentRoom = best.room; await showCommunity(best.room); }
-
+  liveTab = best || null;
   if (best) {
     if (!best.loggedIn) return show('', 'botc.app is open — log in to record games.');
-    if (best.inGame) return show('rec', `Recording game in “${best.room}” (${best.nominations} nominations so far).`);
-    if (best.room) return show('live', `Connected to “${best.room}”. The next game will be recorded.`);
+    if (best.room) { currentRoom = best.room; return showCommunity(best.room); }
     return show('live', 'Connected. Join a room and games will be recorded.');
   }
   if (results.some((r) => r && r.bridge)) {

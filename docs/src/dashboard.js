@@ -890,12 +890,30 @@ function populateFilters() {
     sel.innerHTML = `<option value="">${allLabel}</option>` + values.map((v) => `<option value="${esc(v.value ?? v)}" ${String(cur) === String(v.value ?? v) ? 'selected' : ''}>${esc(label(v))}</option>`).join('');
   };
   state.filters.communities = state.filters.communities.filter((c) => communityOptions().some((o) => o.value === c));
-  $('#community-filter').innerHTML = communityButtons('data-filter-community', state.filters.communities);
+  renderCommunityFilter();
   opts('script', distinct(all, (g) => g.script.name), 'All scripts');
   opts('storyteller', distinct(all, storytellerKeys).map((k) => ({ value: k, name: nameOf(k) })).sort((a, b) => a.name.localeCompare(b.name)), 'All storytellers', (v) => v.name);
 }
 
 const dropdowns = {};
+// Communities: Escape | Rhap as toggles; once you have communities of your own too, a dropdown like the other
+// filters (still several at once; none picked means all).
+let communityDropdown = null;
+function renderCommunityFilter() {
+  const box = $('#community-filter');
+  const many = communityOptions().length > 2;
+  box.classList.toggle('toggles', !many);
+  if (!many) { communityDropdown = null; box.innerHTML = communityButtons('data-filter-community', state.filters.communities); return; }
+  if (communityDropdown) { communityDropdown.refresh(); return; }
+  box.innerHTML = '<div class="ms-communities"></div>';
+  communityDropdown = multiSelect(box.firstElementChild, {
+    label: 'All communities', nameOf: (v) => communityName(state.settings, v),
+    options: () => communityOptions().map((o) => ({ value: o.value, label: o.name })),
+    selected: () => state.filters.communities,
+    onChange: (values) => { state.filters.communities = values; savePrefs(); state.expanded.clear(); communityDropdown.refresh(); render(); },
+  });
+}
+
 function setupDropdowns() {
   const defs = {
     // Your own player (if you've claimed one) comes first.

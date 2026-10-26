@@ -546,3 +546,4 @@ form.change-pw .toolbar, form.change-pw .msg { margin: 0; }
 #pw-msg:empty, form.change-pw .msg:empty { display: none; }
 .form label.key-field { font-size: 14px; }
 .key-field .hint, .field-head .hint { font-weight: 400; color: var(--muted); margin-bottom: 6px; }
+#community-filter .ms-communities { min-width: 190px; }
