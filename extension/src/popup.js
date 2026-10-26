@@ -79,6 +79,17 @@ async function refreshAccount() {
 }
 
 let setGateMode = () => {};
+// Claim your player for you: the botc.app account logged in on this computer, if your Clockwise account hasn't
+// claimed a player yet. Tried once per Clockwise account, so removing the claim on the website sticks.
+async function autoClaim(me) {
+  const s = await getSettings();
+  if (!me || !me.id || !s.accountToken || !storeUrl(s) || s.autoClaimedFor === s.accountName) return;
+  const r = await call(storeUrl(s), { action: 'ping', token: s.accountToken }).catch(() => null);
+  if (!r || !r.ok || !r.account) return;
+  if (!r.account.claim) await call(storeUrl(s), { action: 'claim', token: s.accountToken, player: me.id, name: me.username || '' }).catch(() => null);
+  await saveSettings({ autoClaimedFor: s.accountName });
+}
+
 function setupGate() {
   const form = $('signin');
   let mode = 'signin';
@@ -195,6 +206,7 @@ async function showMain() {
   const best = live.find((s) => s.inGame) || live.find((s) => s.room) || live[0];
 
   liveTab = best || null;
+  if (best && best.me) autoClaim(best.me);
   if (best) {
     if (!best.loggedIn) return show('', 'botc.app is open — log in to record games.');
     if (best.room) { currentRoom = best.room; return showCommunity(best.room); }

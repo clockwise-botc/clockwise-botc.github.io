@@ -141,6 +141,8 @@
         room: S.session.sessionId || null,
         connected: !!S.session.isConnected,
         loggedIn: !!(S.user.user && S.user.user.id),
+        // Who's logged in to botc.app (the popup claims this player for you if you haven't claimed one).
+        me: S.user.user && S.user.user.id ? { id: S.user.user.id, username: S.user.user.username || null } : null,
         inGame: !!(current && !current.saved && !current.alreadyOver && S.game.isRunning),
         gameId: current ? current.id : null,
         phase: g.phase,
