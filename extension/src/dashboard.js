@@ -323,12 +323,6 @@ const gamesCards = {
     const rows = [...m.values()].sort((a, b) => b.games - a.games);
     return rows.length > 1 ? card('Who wins, by Demon', 'Which side won, by which Demon was in play.', legendGE() + bars('o-demons', rows, (r) => charLink(r.key, charName(r.key)))) : '';
   },
-  recent: (G) => {
-    const rows = [...G].sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
-    return rows.length > 1 ? card('Recent games', 'The latest games, newest first.', fitted('o-recent', rows.map((g) =>
-      `<tr><td class="muted nowrap">${esc(fmtDate(g.endedAt))}</td><td>${esc(g.script.name || 'Unknown script')}</td><td class="num"><span class="pill ${g.winner}">${g.winner === 'evil' ? 'Evil' : 'Good'} won</span></td></tr>`),
-    { expanded: state.expanded.has('o-recent'), wrap: (inner) => `<table class="rows"><tbody>${inner}</tbody></table>` })) : '';
-  },
   bestPlayers: (G) => {
     const rows = playerTable(G).filter((p) => p.plays >= 3);
     return rows.length > 1 ? card('Best win rates', 'Players with at least 3 games. Click a column to sort.',
@@ -336,12 +330,12 @@ const gamesCards = {
   },
 };
 // The order spares are used in: the most useful first.
-const SPARES = ['communities', 'characters', 'nominations', 'demons', 'scripts', 'counts', 'storytellerWins', 'bestPlayers', 'recent', 'players', 'storytellers', 'balance', 'playerCount'];
+const SPARES = ['communities', 'characters', 'nominations', 'demons', 'scripts', 'counts', 'storytellerWins', 'bestPlayers', 'players', 'storytellers', 'balance', 'playerCount'];
 
 // Cards about the picked seats (a player's, a character's holders', a type's), for pages with a selection: how they
 // do by storyteller, player count, script and Demon in play, their recent games, and (players) who they play with.
 function seatCards(G, sel, seats) {
-  const who = sel.players.length ? esc(seatsLabel(sel)) : sel.characters.length ? `The holder of ${esc(asChars(sel.characters))}` : esc(seatsLabel(sel));
+  const who = sel.players.length ? esc(seatsLabel(sel)) : sel.characters.length === 1 ? `The ${esc(charName(sel.characters[0]))} holder` : sel.characters.length ? 'The holders' : esc(seatsLabel(sel));
   const byKey = (keyOf, labelOf) => {
     const m = new Map();
     for (const x of seats) for (const k of [].concat(keyOf(x)).filter((v) => v !== null && v !== undefined)) {
@@ -361,12 +355,6 @@ function seatCards(G, sel, seats) {
   const side = facing.length && facing.every((x) => x.p.alignment === 'good') ? 'Against each Demon' : facing.length && facing.every((x) => x.p.alignment === 'evil') ? 'With each Demon' : 'By Demon in play';
   const demonRows = (() => { const m = new Map(); for (const x of facing) for (const d of x.g.players) if (d !== x.p && d.team === 'demon' && d.roleId) { const r = m.get(d.roleId) || { key: d.roleId, plays: 0, wins: 0 }; r.plays++; if (x.p.won) r.wins++; m.set(d.roleId, r); } return [...m.values()].map((r) => [charLink(r.key, charName(r.key)), r.wins / r.plays, r.plays, 'neutral']); })();
   out.demons = rateCard('s-demons', side, `${who}'s win rate by which Demon was in the game.`, demonRows);
-  // Recent games: when, as what (and who, when it's about a character or several players), and the result.
-  const recent = [...seats].sort((a, b) => (b.g.endedAt || 0) - (a.g.endedAt || 0));
-  const showWho = !sel.players.length || sel.players.length > 1;
-  out.recent = recent.length ? card('Recent games', `${who}'s latest games, newest first.`, fitted('s-recent', recent.map(({ g, p }) =>
-    `<tr><td class="muted nowrap">${esc(fmtDate(g.endedAt))}</td>${showWho ? `<td>${playerLink(playerKey(p), p.username || '?')}</td>` : ''}<td>${p.roleId ? charLink(p.roleId, charName(p.roleId)) : '<span class="muted">?</span>'}</td><td class="num"><span class="pill ${p.won ? 'won' : 'lost'}">${p.won ? 'Won' : 'Lost'}</span></td></tr>`),
-  { expanded: state.expanded.has('s-recent'), wrap: (inner) => `<table class="rows"><tbody>${inner}</tbody></table>` })) : '';
   // Who a player plays with most (only with players picked).
   if (sel.players.length) {
     const picked = new Set(sel.players), m = new Map();
@@ -376,7 +364,7 @@ function seatCards(G, sel, seats) {
   }
   out.alignment = rateCard('s-alignment', 'As good and as evil', `${who}'s win rate on each side.`,
     byKey((x) => x.p.alignment || null, (k) => (k === 'evil' ? 'As evil' : 'As good')).map((r) => [r[0], r[1], r[2], r[4] === 'evil' ? 'evil' : 'good', r[4]]));
-  return ['recent', 'with', 'demons', 'alignment', 'storytellers', 'counts', 'scripts'].map((k) => out[k]).filter(Boolean);
+  return ['with', 'demons', 'alignment', 'storytellers', 'counts', 'scripts'].map((k) => out[k]).filter(Boolean);
 }
 
 // Spare cards for a page, hidden until fillRows needs them; leaves out any whose title the page already shows. The
@@ -645,6 +633,9 @@ function playerSections(G, sel, seats, base) {
       sortable('p-mates', mateCols, rel.teammates, { sort: 2, empty: 'Not enough games together yet.' })));
     out.push(card('Struggles most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
       sortable('p-rivals', rivalCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
+    const beatCols = [colPlayer('Opponent'), colNum('Games', (r) => r.opposite), colRate('Win rate', (r) => r.oppositeRate, (r) => r.opposite)];
+    out.push(card('Wins most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
+      sortable('p-beats', beatCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
     out.push(card('Nominations and votes', 'From recorded nominations in these games.', `<div class="mini-tiles">
       <div><b>${noms.made}</b><span>nominations made</span></div>
       <div><b>${pct(noms.accuracy)}</b><span>of their nominations were on evil players</span></div>
@@ -697,6 +688,48 @@ function playerSections(G, sel, seats, base) {
   return out.join('');
 }
 
+// One character's third row: how its holder takes part in the day, what it's in play with most, and how it does by
+// the Demon in play (by the Minions with it, for a Demon). Each card is about one holder per game, so it reads like
+// a single game.
+function characterExtras(id, row, holders, evil) {
+  const name = esc(row.name || charName(id));
+  const out = [];
+  const n = holders.length;
+  if (n) {
+    const t = { made: 0, onEvil: 0, received: 0, executed: 0, votes: 0, votesOnEvil: 0 };
+    for (const { g, p } of holders) { const k = playerKey(p); if (!k) continue; const s = nominationStats([g], [k]); for (const f of Object.keys(t)) t[f] += s[f] || 0; }
+    const per = (x) => (x / n).toFixed(1);
+    if (t.made + t.received + t.votes) out.push(card(`Nominations and votes as the ${name}`, `Per game, for the player holding it (${plural(n, 'game')}).`, `<div class="mini-tiles">
+      <div><b>${per(t.made)}</b><span>nominations made</span></div>
+      <div><b>${pct(t.made ? t.onEvil / t.made : null)}</b><span>of their nominations were on evil players</span></div>
+      <div><b>${per(t.received)}</b><span>times nominated</span></div>
+      <div><b>${pct(t.executed / n)}</b><span>of games they were executed</span></div>
+      <div><b>${per(t.votes)}</b><span>votes cast</span></div>
+      <div><b>${pct(t.votes ? t.votesOnEvil / t.votes : null)}</b><span>of their votes were on evil players</span></div></div>`));
+  }
+  // The characters most often in play alongside it, and how good did in those games.
+  const m = new Map();
+  for (const { g, p } of holders) for (const o of g.players) if (o !== p && o.roleId && o.roleId !== id) {
+    const r = m.get(o.roleId) || { roleId: o.roleId, name: charName(o.roleId), team: o.team, games: 0, good: 0 }; r.games++; if (g.winner === 'good') r.good++; m.set(o.roleId, r);
+  }
+  const along = [...m.values()].map((r) => ({ ...r, goodRate: r.good / r.games }));
+  if (along.length > 1) out.push(card('Most often in play with it', `The characters that came up most in games with the ${name}. Click a column to sort.`,
+    sortable('c-along', [colChar(), colNum('Games', (r) => r.games), colRate('Good won', (r) => r.goodRate, (r) => r.games, 'neutral', 'Good won')], along, { sort: 1 })));
+  // A Demon: its Minions. Anything else: the Demon it faced (or served).
+  const team = (t) => (x) => x.team === t && x.roleId;
+  const pairs = new Map();
+  for (const { g, p } of holders) for (const o of new Set(g.players.filter(row.team === 'demon' ? team('minion') : team('demon')).filter((x) => x !== p).map((x) => x.roleId))) {
+    const r = pairs.get(o) || { roleId: o, name: charName(o), plays: 0, wins: 0 }; r.plays++; if (p.won) r.wins++; pairs.set(o, r);
+  }
+  const prs = [...pairs.values()].map((r) => ({ ...r, winRate: r.wins / r.plays }));
+  if (prs.length > 1) {
+    const title = row.team === 'demon' ? 'With each Minion' : evil ? 'With each Demon' : 'Against each Demon';
+    out.push(card(title, `How the ${name} did, by which ${row.team === 'demon' ? 'Minions were' : 'Demon was'} in the game.`,
+      sortable('c-pairs', [colChar(row.team === 'demon' ? 'Minion' : 'Demon'), colNum('Games', (r) => r.plays), colRate('Holder won', (r) => r.winRate, (r) => r.plays, evil ? 'evil' : 'good')], prs, { sort: 1 })));
+  }
+  return out;
+}
+
 function characterSections(G, base, sel) {
   const baseRate = outcome(base).goodRate;
   const out = [];
@@ -714,6 +747,7 @@ function characterSections(G, base, sel) {
     out.push(card('When the holder dies', 'Share of games by when the player holding it died.', deathBars(st.deathTiming, st.plays)));
     out.push(card('Who plays it', 'Click a name to see that player with this character.', sortable('c-players', [colPlayer(), colNum('Plays', (p) => p.plays), colRate('Won', (p) => p.winRate, (p) => p.plays, evil ? 'evil' : 'good')],
       st.byPlayer, { sort: 1 })));
+    out.push(...characterExtras(id, row, holders, evil));
   } else {
     const together = outcome(G);
     const each = characterTable(base, baseRate).filter((c) => sel.characters.includes(c.roleId));
@@ -1100,12 +1134,19 @@ function fillRows() {
       if (free() <= 0) break;
       c.hidden = false;
     }
-    let left = free();
+    // Out of spares. One gap: the last card goes two wide. A lone card on the last row (three columns): pair the last
+    // two rows as wide + normal instead, by widening the card three from the end as well as the last one.
+    const widen = (c) => { c.style.gridColumn = 'span 2'; c.setAttribute('data-widened', ''); };
+    const left = free();
     if (left > 0) {
       const cards = [...grid.children].filter((c) => !c.hidden);
       const last = cards[cards.length - 1];
-      last.style.gridColumn = `span ${Math.min(cols, left + 1)}`;
-      last.setAttribute('data-widened', '');
+      if (left === 2 && cols === 3 && cards.length >= 4) { widen(cards[cards.length - 3]); widen(last); }
+      if (left === 1 || free() > 0) {
+        grid.querySelectorAll(':scope > [data-widened]').forEach((c) => { c.style.gridColumn = ''; c.removeAttribute('data-widened'); });
+        last.style.gridColumn = `span ${Math.min(cols, left + 1)}`;
+        last.setAttribute('data-widened', '');
+      }
     }
   }
 }
