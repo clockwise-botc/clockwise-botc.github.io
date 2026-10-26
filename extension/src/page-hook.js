@@ -75,15 +75,23 @@
     // The storyteller's reminder tokens, dead votes and demon bluffs as shown at the end. Players
     // usually only see these once the storyteller reveals the grimoire, so keep everything seen from
     // the end of the game through the reveal (later resets can't wipe it).
+    // Reminder tokens only come from the storyteller's grimoire. In a player's browser, the tokens already on the
+    // board when the game ends are the player's own notes (the storyteller's arrive with the reveal, after the
+    // end), so those are noted the first time and left out from then on.
+    const tokenKey = (r) => r.id || `${r.role}:${r.name}`;
     function captureGrimoire() {
       current.reminders = current.reminders || {};
       current.voteless = current.voteless || {};
+      if (!hasGrimoireAccess() && !current.ownNotes) {
+        current.ownNotes = S.players.players.flatMap((p) => (p.reminders || []).filter((r) => r && r.name).map(tokenKey));
+      }
+      const own = new Set(hasGrimoireAccess() ? [] : current.ownNotes);
       S.players.players.forEach((p, i) => {
         const seat = String(i + 1);
         const bag = (current.reminders[seat] = current.reminders[seat] || {});
         (p.reminders || []).forEach((r) => {
-          if (!r || !r.name) return;
-          bag[r.id || `${r.role}:${r.name}`] = { role: r.role || null, name: r.name };
+          if (!r || !r.name || own.has(tokenKey(r))) return;
+          bag[tokenKey(r)] = { role: r.role || null, name: r.name };
         });
         if (Array.isArray(p.status) && p.status.includes('voteless')) current.voteless[seat] = true;
       });
