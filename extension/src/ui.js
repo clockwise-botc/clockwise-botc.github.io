@@ -44,9 +44,11 @@ export const LIST_LIMIT = 8;
 // rows: HTML strings each starting with the row's element (<tr…> or <div…>); wrap(inner) puts them in their table.
 // The button is always there for a list longer than 3 rows (hidden while every row shows), since fitting the page can
 // fold rows away from a list of any length.
-export function fitted(id, rows, { expanded = false, limit = LIST_LIMIT, wrap = (inner) => inner } = {}) {
+export function fitted(id, rows, { expanded = false, limit = LIST_LIMIT, wrap = (inner) => inner, more = null } = {}) {
   const html = rows.map((r, i) => (!expanded && i >= limit ? r.replace(/^\s*<(tr|div)/, '<$1 data-fold') : r)).join('');
-  const button = rows.length > 3 ? `<button class="btn small show-all" data-expand="${esc(id)}"${!expanded && rows.length <= limit ? ' hidden' : ''}>${expanded ? 'Show less' : `Show all ${rows.length}`}</button>` : '';
+  // `more`: Show all adds rows that aren't there yet (e.g. characters not played), so the button always shows.
+  const button = more ? `<button class="btn small show-all" data-more data-expand="${esc(id)}">${expanded ? 'Show less' : esc(more)}</button>`
+    : rows.length > 3 ? `<button class="btn small show-all" data-expand="${esc(id)}"${!expanded && rows.length <= limit ? ' hidden' : ''}>${expanded ? 'Show less' : `Show all ${rows.length}`}</button>` : '';
   return `<div data-fit="${esc(id)}"${expanded ? ' data-expanded' : ''}>${wrap(html)}${button}</div>`;
 }
 
@@ -77,9 +79,9 @@ export const card = (title, sub, body, cls = '') =>
   `<div class="card ${cls}"><h3>${title}</h3>${sub ? `<p class="sub">${sub}</p>` : ''}${body}</div>`;
 
 // A table that shows the first `limit` rows, with a button to show the rest.
-export function table(id, head, rows, { limit = LIST_LIMIT, expanded = false, empty = 'Nothing to show yet.' } = {}) {
+export function table(id, head, rows, { limit = LIST_LIMIT, expanded = false, empty = 'Nothing to show yet.', more = null } = {}) {
   if (!rows.length) return `<p class="muted">${empty}</p>`;
-  return fitted(id, rows, { expanded, limit, wrap: (inner) => `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${inner}</tbody></table></div>` });
+  return fitted(id, rows, { expanded, limit, more, wrap: (inner) => `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${inner}</tbody></table></div>` });
 }
 
 // Pie chart (SVG). slices: [{ label, value, color, tip, chip }] — `chip` is the text shown on the slice,

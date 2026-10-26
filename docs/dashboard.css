@@ -549,3 +549,5 @@ form.change-pw .toolbar, form.change-pw .msg { margin: 0; }
 #community-filter .ms-communities { min-width: 190px; }
 /* Rows a list keeps folded away until "Show all" (see fitLists in dashboard.js). */
 [data-fit] [data-fold] { display: none; }
+/* Characters a player hasn't played yet ("Show all" on Characters played). */
+tr.unplayed td { opacity: .5; }

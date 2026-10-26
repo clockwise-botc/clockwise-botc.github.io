@@ -22,6 +22,6 @@ const zip = path.join(dist, `clockwise-${version}.zip`);
 fs.rmSync(zip, { force: true });
 // The dashboard is the community website (built from these same files by build-web.mjs), so the extension itself
 // doesn't ship it: only the popup, the background and the content scripts (and what they import) go in.
-const dashboardOnly = ['dashboard.html', 'dashboard.css', ...['dashboard', 'data', 'dataview', 'grimoire', 'images', 'insights', 'multiselect', 'stats', 'tables', 'tokens', 'ui'].map((m) => `src/${m}.js`)];
+const dashboardOnly = ['dashboard.html', 'dashboard.css', ...['characters', 'dashboard', 'data', 'dataview', 'grimoire', 'images', 'insights', 'multiselect', 'stats', 'tables', 'tokens', 'ui'].map((m) => `src/${m}.js`)];
 execFileSync('zip', ['-r', '-X', '-q', zip, '.', '-x', '*.DS_Store', ...dashboardOnly], { cwd: ext, stdio: 'inherit' });
 console.log(`wrote ${path.relative(root, zip)} (${Math.round(fs.statSync(zip).size / 1024)} KB)`);

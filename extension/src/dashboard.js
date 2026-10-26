@@ -8,6 +8,7 @@ import { renderGrimoire } from './grimoire.js';
 import { makeImages } from './images.js';
 import { characterToken, installTokenStyle } from './tokens.js';
 import { multiSelect } from './multiselect.js';
+import { ALL_CHARACTERS } from './characters.js';
 import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
@@ -399,11 +400,14 @@ function overallSections(base) {
 // cols: [{ label, value: (row) => sort value, cell: (row) => '<td>…</td>', num }]
 const td = (html, num) => `<td${num ? ' class="num"' : ''}>${html}</td>`;
 // sort: null keeps the rows in the order given (e.g. most played first, without a Plays column) until a label is clicked.
-function sortable(id, cols, data, { sort = 0, limit, empty } = {}) {
+// Rows marked `unplayed` always go last, greyed out. `more`: the button's label when it shows something besides the
+// hidden rows (it then shows even when every row fits).
+function sortable(id, cols, data, { sort = 0, limit, empty, more = null } = {}) {
   const cur = state.sorts[id] && cols[state.sorts[id].col] ? state.sorts[id] : { col: sort === null ? -1 : sort, rev: false };
   const col = cols[cur.col] || { value: () => 0 };
   const missing = (v) => v === null || v === undefined || Number.isNaN(v);
   const rows = data.map((r, i) => ({ r, i, v: col.value(r) })).sort((a, b) => {
+    if (!!a.r.unplayed !== !!b.r.unplayed) return a.r.unplayed ? 1 : -1;
     if (missing(a.v) || missing(b.v)) return missing(a.v) - missing(b.v) || a.i - b.i;
     let d = typeof a.v === 'string' ? a.v.localeCompare(b.v) : b.v - a.v;
     if (cur.rev) d = -d;
@@ -415,7 +419,7 @@ function sortable(id, cols, data, { sort = 0, limit, empty } = {}) {
     const order = on ? ((isText !== cur.rev) ? 'ascending' : 'descending') : 'none';
     return `<th class="sortable${c.num ? ' num' : ''}${on ? ' sorted' : ''}" data-sort-table="${esc(id)}" data-sort-col="${i}" aria-sort="${order}" title="Sort by ${esc(c.label)}">${c.label}<span class="arrow" aria-hidden="true">${on ? (cur.rev ? '▲' : '▼') : '▼'}</span></th>`;
   }).join('');
-  return table(id, head, rows.map(({ r }) => `<tr>${cols.map((c) => c.cell(r)).join('')}</tr>`), { limit, expanded: state.expanded.has(id), empty });
+  return table(id, head, rows.map(({ r }) => `<tr${r.unplayed ? ' class="unplayed"' : ''}>${cols.map((c) => c.cell(r)).join('')}</tr>`), { limit, expanded: state.expanded.has(id), empty, more });
 }
 
 // Reusable columns.
@@ -624,9 +628,14 @@ function playerSections(G, sel, seats, base) {
       ...TYPES.map((team) => st.byTeam.find((t) => t.team === team) || { team, plays: 0, winRate: null })
         .map((t) => [typeLink(t.team), t.winRate, t.plays, isEvilTeam(t.team) ? 'evil' : t.team === 'traveller' ? 'neutral' : 'good']),
     ]) + `<p class="sub" style="margin:10px 0 0">Survived to the end in ${pct(st.survivalRate)} of games.</p>`));
-    out.push(card('Characters played', 'Click a character to see how this player does with it. Click a column to sort.',
+    // "Show all" lists every character on botc.app, with the ones they haven't played yet at the end.
+    const playedIds = new Set(st.byCharacter.map((c) => c.roleId));
+    const onBotc = Object.keys(roleMeta).length > 20 ? (cid) => cid in roleMeta : () => true;
+    const unplayed = ALL_CHARACTERS.filter(([cid]) => !playedIds.has(cid) && onBotc(cid)).map(([roleId, name, team]) => ({ roleId, name, team, plays: 0, winRate: null, unplayed: true }));
+    const allChars = state.expanded.has('p-chars');
+    out.push(card('Characters played', `Played ${playedIds.size} of ${playedIds.size + unplayed.length} characters. Click a character to see how this player does with it. Click a column to sort.`,
       sortable('p-chars', [colChar(), { label: 'Type', value: (c) => -TYPES.indexOf(c.team), cell: (c) => td(esc(teamOne(c.team))) }, colNum('Plays', (c) => c.plays), colRate('Win rate', (c) => c.winRate, (c) => c.plays, charCls)],
-        st.byCharacter, { sort: 2 })));
+        allChars ? [...st.byCharacter, ...unplayed] : st.byCharacter, { sort: 2, more: unplayed.length ? 'Show all, with unplayed' : null })));
     const mateCols = [colPlayer('Teammate'), colNum('Games', (r) => r.same), colRate('Win rate', (r) => r.sameRate, (r) => r.same)];
     const rivalCols = [colPlayer('Opponent'), colNum('Games', (r) => r.opposite), { ...colRate('Win rate', (r) => r.oppositeRate, (r) => r.opposite), value: (r) => -r.oppositeRate }];
     out.push(card('Wins most with', `${esc(nameOf(key))}'s win rate when on the same team as each player (at least 3 games together). Click a name to see them together.`,
@@ -1169,7 +1178,7 @@ function fitLists() {
   const show = (l, k) => {
     l.k = k;
     l.rows.forEach((r, i) => r.toggleAttribute('data-fold', i >= k));
-    if (l.button) l.button.hidden = k >= l.n;
+    if (l.button && !l.button.hasAttribute('data-more')) l.button.hidden = k >= l.n;
   };
   // Measure each card's own height rather than the row's (grid rows stretch their cards).
   cards.forEach((c) => { c.style.alignSelf = 'start'; });
