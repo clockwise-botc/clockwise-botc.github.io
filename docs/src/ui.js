@@ -36,10 +36,25 @@ export function delta(d, suffix = ' pts') {
   return `<span class="delta ${v > 0 ? 'up' : 'down'}">${v > 0 ? '▲ +' : '▼ '}${v}${suffix}</span>`;
 }
 
+// Lists show this many rows to start with, with a button to show the rest (and fold them away again). On the page,
+// fitLists (dashboard.js) then shows more or fewer so cards side by side end level.
+export const LIST_LIMIT = 8;
+
+// Every row is rendered; the ones past `limit` start folded away (data-fold) unless the list is expanded.
+// rows: HTML strings each starting with the row's element (<tr…> or <div…>); wrap(inner) puts them in their table.
+// The button is always there for a list longer than 3 rows (hidden while every row shows), since fitting the page can
+// fold rows away from a list of any length.
+export function fitted(id, rows, { expanded = false, limit = LIST_LIMIT, wrap = (inner) => inner } = {}) {
+  const html = rows.map((r, i) => (!expanded && i >= limit ? r.replace(/^\s*<(tr|div)/, '<$1 data-fold') : r)).join('');
+  const button = rows.length > 3 ? `<button class="btn small show-all" data-expand="${esc(id)}"${!expanded && rows.length <= limit ? ' hidden' : ''}>${expanded ? 'Show less' : `Show all ${rows.length}`}</button>` : '';
+  return `<div data-fit="${esc(id)}"${expanded ? ' data-expanded' : ''}>${wrap(html)}${button}</div>`;
+}
+
 // Good-vs-evil 100% bars. rows: [{ key, games, good, evil }]; label(r) may return HTML.
-export function splitBars(rows, label, plainLabel = label) {
+// With an `id`, only the first LIST_LIMIT rows show until "Show all" is clicked.
+export function splitBars(rows, label, plainLabel = label, { id = null, expanded = false } = {}) {
   if (!rows.length) return '<p class="muted">No games.</p>';
-  return rows.map((r) => {
+  const html = rows.map((r) => {
     const g = r.good / r.games, e = r.evil / r.games;
     const tip = `${plainLabel(r)}\n${plural(r.games, 'game')}\nGood won ${r.good} (${pct(g)})\nEvil won ${r.evil} (${pct(e)})`;
     const seg = (cls, frac, count) => (count ? `<div class="${cls}" style="flex:${frac}">${frac >= 0.18 ? pct(frac) : ''}</div>` : '');
@@ -48,7 +63,8 @@ export function splitBars(rows, label, plainLabel = label) {
       <div class="split">${seg('good', g, r.good)}${seg('evil', e, r.evil)}</div>
       <div class="n">${plural(r.games, 'game')}</div>
     </div>`;
-  }).join('');
+  });
+  return id ? fitted(id, html, { expanded }) : html.join('');
 }
 
 export const legendGE = (goodLabel = 'Good won', evilLabel = 'Evil won') =>
@@ -61,11 +77,9 @@ export const card = (title, sub, body, cls = '') =>
   `<div class="card ${cls}"><h3>${title}</h3>${sub ? `<p class="sub">${sub}</p>` : ''}${body}</div>`;
 
 // A table that shows the first `limit` rows, with a button to show the rest.
-export function table(id, head, rows, { limit = 8, expanded = false, empty = 'Nothing to show yet.' } = {}) {
+export function table(id, head, rows, { limit = LIST_LIMIT, expanded = false, empty = 'Nothing to show yet.' } = {}) {
   if (!rows.length) return `<p class="muted">${empty}</p>`;
-  const shown = expanded ? rows : rows.slice(0, limit);
-  return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${shown.join('')}</tbody></table></div>
-    ${rows.length > limit ? `<button class="btn small" data-expand="${esc(id)}">${expanded ? 'Show less' : `Show all ${rows.length}`}</button>` : ''}`;
+  return fitted(id, rows, { expanded, limit, wrap: (inner) => `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${inner}</tbody></table></div>` });
 }
 
 // Pie chart (SVG). slices: [{ label, value, color, tip, chip }] — `chip` is the text shown on the slice,

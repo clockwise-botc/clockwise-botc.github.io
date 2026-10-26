@@ -1,14 +1,14 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js?v=c386dc4187';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=c386dc4187';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable } from './insights.js?v=c386dc4187';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=c386dc4187';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar } from './ui.js?v=c386dc4187';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=c386dc4187';
-import { renderGrimoire } from './grimoire.js?v=c386dc4187';
-import { makeImages } from './images.js?v=c386dc4187';
-import { characterToken, installTokenStyle } from './tokens.js?v=c386dc4187';
-import { multiSelect } from './multiselect.js?v=c386dc4187';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=c386dc4187';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js?v=42aacc31e9';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=42aacc31e9';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable } from './insights.js?v=42aacc31e9';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=42aacc31e9';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=42aacc31e9';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=42aacc31e9';
+import { renderGrimoire } from './grimoire.js?v=42aacc31e9';
+import { makeImages } from './images.js?v=42aacc31e9';
+import { characterToken, installTokenStyle } from './tokens.js?v=42aacc31e9';
+import { multiSelect } from './multiselect.js?v=42aacc31e9';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=42aacc31e9';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -164,9 +164,9 @@ function playerCountCard(base) {
   return `<div class="card pie-card"><h3>Player count</h3><p class="sub">How many players sat down (not counting travellers).</p><div class="pie-wrap">${pie(slices, { minLabel: 0.06, ariaLabel: 'Games by player count' })}</div>${legend}</div>`;
 }
 
-function frequencyCard(title, sub, rows, linkFn) {
+function frequencyCard(id, title, sub, rows, linkFn) {
   const max = Math.max(1, ...rows.map((r) => r.games));
-  const body = rows.length ? `<table><tbody>${rows.map((r) => `<tr><td>${linkFn(r)}</td><td class="num">${plural(r.games, 'game')}</td><td style="width:40%"><div class="freq-bar" data-tip="${esc(`${r.name}: ${plural(r.games, 'game')}`)}"><i style="width:${(r.games / max) * 100}%"></i></div></td></tr>`).join('')}</tbody></table>` : '<p class="muted">Not recorded yet.</p>';
+  const body = rows.length ? fitted(id, rows.map((r) => `<tr><td>${linkFn(r)}</td><td class="num">${plural(r.games, 'game')}</td><td style="width:40%"><div class="freq-bar" data-tip="${esc(`${r.name}: ${plural(r.games, 'game')}`)}"><i style="width:${(r.games / max) * 100}%"></i></div></td></tr>`), { expanded: state.expanded.has(id), wrap: (inner) => `<table><tbody>${inner}</tbody></table>` }) : '<p class="muted">Not recorded yet.</p>';
   return card(title, sub, body);
 }
 
@@ -198,9 +198,9 @@ function swingCards(base, what, keep = () => true) {
   const cols = [colChar(), colNum('Games', (c) => c.games), colRate('Good won', (c) => c.goodRate, (c) => c.games, 'neutral', 'Good won')];
   const id = what === 'Characters' ? '' : `-${what.toLowerCase().replace(/[^a-z]+/g, '-')}`;
   return `${card(`${what} that help good`, `Good wins more often when these are in play (overall: ${pct(o.goodRate)}). At least 3 games each.`,
-      sortable(`swing-good${id}`, [...cols, colDelta('vs. overall', (c) => c.delta)], forGood, { sort: 3, limit: 6, empty: 'Not enough games yet.' }))}
+      sortable(`swing-good${id}`, [...cols, colDelta('vs. overall', (c) => c.delta)], forGood, { sort: 3, empty: 'Not enough games yet.' }))}
     ${card(`${what} that help evil`, 'Evil wins more often when these are in play.',
-      sortable(`swing-evil${id}`, [...cols, { ...colDelta('vs. overall', (c) => -c.delta), cell: (r) => td(delta(r.delta), true) }], forEvil, { sort: 3, limit: 6, empty: 'Not enough games yet.' }))}`;
+      sortable(`swing-evil${id}`, [...cols, { ...colDelta('vs. overall', (c) => -c.delta), cell: (r) => td(delta(r.delta), true) }], forEvil, { sort: 3, empty: 'Not enough games yet.' }))}`;
 }
 
 // ---------- one storyteller picked: their games next to everyone else's ----------
@@ -275,27 +275,135 @@ function storytellerCharactersCard(st, mine, others) {
     ? 'No other storyteller ran the same scripts yet, so this shows how often each is in play.'
     : `Compared with other storytellers' games on the same scripts${comparable.length < mine.length ? ` (${comparable.length} of ${esc(st)}'s ${plural(mine.length, 'game')} are on scripts others also ran)` : ''}. Biggest difference first.`;
   return card(`${esc(st)}'s favourite characters`, `How often each character is in play in ${esc(st)}'s games. ${note}`,
-    sortable('st-chars', cols, rows, { sort: comparable.length ? 3 : 1, limit: 8, empty: 'No characters recorded yet.' }));
+    sortable('st-chars', cols, rows, { sort: comparable.length ? 3 : 1, empty: 'No characters recorded yet.' }));
+}
+
+// Cards about a set of games that make sense on any stats page. The overview uses them, and every page keeps the
+// ones it isn't showing as spares to fill out its last row (fillRows). Each returns '' when it has nothing to compare.
+const gamesCards = {
+  balance: (G) => balanceCard(overview(G)),
+  playerCount: (G) => playerCountCard(G),
+  players: (G) => {
+    const rows = playerTable(G).map((p) => ({ key: p.key, name: p.name, games: p.plays })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
+    return rows.length > 1 ? frequencyCard('freq-players', 'Most frequent players', 'Who has played the most games. Click a name to see their stats.', rows, (r) => playerLink(r.key, r.name)) : '';
+  },
+  storytellers: (G) => {
+    const rows = storytellerTable(G);
+    return rows.length > 1 ? frequencyCard('freq-sts', 'Most frequent storytellers', 'Who has run the most games.', rows, (r) => (playerKeys.has(r.key) ? playerLink(r.key, r.name) : esc(r.name))) : '';
+  },
+  scripts: (G) => { const rows = overview(G).byScript; return rows.length > 1 ? card('Who wins, by script', '', legendGE() + bars('o-scripts', rows, (r) => esc(r.key))) : ''; },
+  counts: (G) => { const rows = overview(G).byPlayerCount; return rows.length > 1 ? card('Who wins, by player count', '', legendGE() + bars('o-counts', rows, (r) => `${r.key} players`)) : ''; },
+  storytellerWins: (G) => { const rows = overview(G).byStoryteller; return rows.length > 1 ? card('Who wins, by storyteller', '', legendGE() + bars('o-sts', rows, (r) => esc(r.name))) : ''; },
+  communities: (G) => {
+    const rows = overview(G).byCommunity.filter((r) => r.key);
+    return rows.length > 1 ? card('Who wins, by community', 'Good and evil win rates in each community.', legendGE() + bars('o-communities', rows, (r) => esc(communityName(state.settings, r.key)))) : '';
+  },
+  characters: (G) => {
+    const m = new Map();
+    for (const g of G) for (const p of g.players) if (p.roleId) { const r = m.get(p.roleId) || { key: p.roleId, name: charName(p.roleId), games: 0 }; r.games++; m.set(p.roleId, r); }
+    const rows = [...m.values()].sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
+    return rows.length > 1 ? frequencyCard('freq-chars', 'Most played characters', 'The characters that came up most. Click one to see how it does.', rows, (r) => charLink(r.key, r.name)) : '';
+  },
+  nominations: (G) => {
+    const keys = [...new Set(G.flatMap((g) => g.players.map(playerKey)).filter(Boolean))];
+    const n = nominationStats(G, keys);
+    return n.made ? card('Nominations and votes', 'Averages per game, from every recorded nomination.', `<div class="mini-tiles">
+      <div><b>${(n.made / G.length).toFixed(1)}</b><span>nominations per game</span></div>
+      <div><b>${pct(n.accuracy)}</b><span>of nominations were on evil players</span></div>
+      <div><b>${(n.votes / n.made).toFixed(1)}</b><span>votes per nomination</span></div>
+      <div><b>${pct(n.voteAccuracy)}</b><span>of votes were on evil players</span></div>
+      <div><b>${n.executed}</b><span>executions</span></div>
+      <div><b>${(n.executed / G.length).toFixed(1)}</b><span>executions per game</span></div></div>`) : '';
+  },
+  demons: (G) => {
+    const m = new Map();
+    for (const g of G) for (const d of new Set(g.players.filter((p) => p.team === 'demon' && p.roleId).map((p) => p.roleId))) {
+      const r = m.get(d) || { key: d, games: 0, good: 0, evil: 0 }; r.games++; r[g.winner === 'evil' ? 'evil' : 'good']++; m.set(d, r);
+    }
+    const rows = [...m.values()].sort((a, b) => b.games - a.games);
+    return rows.length > 1 ? card('Who wins, by Demon', 'Which side won, by which Demon was in play.', legendGE() + bars('o-demons', rows, (r) => charLink(r.key, charName(r.key)))) : '';
+  },
+  recent: (G) => {
+    const rows = [...G].sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
+    return rows.length > 1 ? card('Recent games', 'The latest games, newest first.', fitted('o-recent', rows.map((g) =>
+      `<tr><td class="muted nowrap">${esc(fmtDate(g.endedAt))}</td><td>${esc(g.script.name || 'Unknown script')}</td><td class="num"><span class="pill ${g.winner}">${g.winner === 'evil' ? 'Evil' : 'Good'} won</span></td></tr>`),
+    { expanded: state.expanded.has('o-recent'), wrap: (inner) => `<table class="rows"><tbody>${inner}</tbody></table>` })) : '';
+  },
+  bestPlayers: (G) => {
+    const rows = playerTable(G).filter((p) => p.plays >= 3);
+    return rows.length > 1 ? card('Best win rates', 'Players with at least 3 games. Click a column to sort.',
+      sortable('o-best', [colPlayer(), colNum('Games', (p) => p.plays), colRate('Win rate', (p) => p.winRate, (p) => p.plays)], rows, { sort: 2 })) : '';
+  },
+};
+// The order spares are used in: the most useful first.
+const SPARES = ['communities', 'characters', 'nominations', 'demons', 'scripts', 'counts', 'storytellerWins', 'bestPlayers', 'recent', 'players', 'storytellers', 'balance', 'playerCount'];
+
+// Cards about the picked seats (a player's, a character's holders', a type's), for pages with a selection: how they
+// do by storyteller, player count, script and Demon in play, their recent games, and (players) who they play with.
+function seatCards(G, sel, seats) {
+  const who = sel.players.length ? esc(seatsLabel(sel)) : sel.characters.length ? `The holder of ${esc(asChars(sel.characters))}` : esc(seatsLabel(sel));
+  const byKey = (keyOf, labelOf) => {
+    const m = new Map();
+    for (const x of seats) for (const k of [].concat(keyOf(x)).filter((v) => v !== null && v !== undefined)) {
+      const r = m.get(k) || { key: k, plays: 0, wins: 0 }; r.plays++; if (x.p.won) r.wins++; m.set(k, r);
+    }
+    return [...m.values()].map((r) => [labelOf(r.key), r.wins / r.plays, r.plays, 'neutral', r.key]);
+  };
+  const rateCard = (id, title, sub, rows, sortBy = (a, b) => b[2] - a[2]) => (rows.length > 1 ? card(title, sub, rateRows(rows.sort(sortBy).map((r) => r.slice(0, 4)), id)) : '');
+  const out = {};
+  out.storytellers = rateCard('s-sts', 'By storyteller', `${who}'s win rate with each storyteller.`,
+    byKey((x) => storytellerKeys(x.g), (k) => esc(nameOf(k))));
+  out.counts = rateCard('s-counts', 'By player count', `${who}'s win rate by how many players sat down.`,
+    byKey((x) => x.g.playerCount, (k) => `${k} players`), (a, b) => a[4] - b[4]);
+  out.scripts = rateCard('s-scripts', 'By script', `${who}'s win rate on each script.`, byKey((x) => x.g.script.name || 'Unknown script', esc));
+  // Which Demon was in the game (not when they were the Demon themselves).
+  const facing = seats.filter((x) => x.p.team !== 'demon');
+  const side = facing.length && facing.every((x) => x.p.alignment === 'good') ? 'Against each Demon' : facing.length && facing.every((x) => x.p.alignment === 'evil') ? 'With each Demon' : 'By Demon in play';
+  const demonRows = (() => { const m = new Map(); for (const x of facing) for (const d of x.g.players) if (d !== x.p && d.team === 'demon' && d.roleId) { const r = m.get(d.roleId) || { key: d.roleId, plays: 0, wins: 0 }; r.plays++; if (x.p.won) r.wins++; m.set(d.roleId, r); } return [...m.values()].map((r) => [charLink(r.key, charName(r.key)), r.wins / r.plays, r.plays, 'neutral']); })();
+  out.demons = rateCard('s-demons', side, `${who}'s win rate by which Demon was in the game.`, demonRows);
+  // Recent games: when, as what (and who, when it's about a character or several players), and the result.
+  const recent = [...seats].sort((a, b) => (b.g.endedAt || 0) - (a.g.endedAt || 0));
+  const showWho = !sel.players.length || sel.players.length > 1;
+  out.recent = recent.length ? card('Recent games', `${who}'s latest games, newest first.`, fitted('s-recent', recent.map(({ g, p }) =>
+    `<tr><td class="muted nowrap">${esc(fmtDate(g.endedAt))}</td>${showWho ? `<td>${playerLink(playerKey(p), p.username || '?')}</td>` : ''}<td>${p.roleId ? charLink(p.roleId, charName(p.roleId)) : '<span class="muted">?</span>'}</td><td class="num"><span class="pill ${p.won ? 'won' : 'lost'}">${p.won ? 'Won' : 'Lost'}</span></td></tr>`),
+  { expanded: state.expanded.has('s-recent'), wrap: (inner) => `<table class="rows"><tbody>${inner}</tbody></table>` })) : '';
+  // Who a player plays with most (only with players picked).
+  if (sel.players.length) {
+    const picked = new Set(sel.players), m = new Map();
+    for (const g of new Set(seats.map((x) => x.g))) for (const p of g.players) { const k = playerKey(p); if (k && !picked.has(k)) { const r = m.get(k) || { key: k, name: nameOf(k), games: 0 }; r.games++; m.set(k, r); } }
+    const rows = [...m.values()].sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
+    out.with = rows.length > 1 ? frequencyCard('s-with', 'Played with most', `Who was in the most games with ${esc(listWords(sel.players.map(nameOf)))}.`, rows, (r) => playerLink(r.key, r.name)) : '';
+  }
+  out.alignment = rateCard('s-alignment', 'As good and as evil', `${who}'s win rate on each side.`,
+    byKey((x) => x.p.alignment || null, (k) => (k === 'evil' ? 'As evil' : 'As good')).map((r) => [r[0], r[1], r[2], r[4] === 'evil' ? 'evil' : 'good', r[4]]));
+  return ['recent', 'with', 'demons', 'alignment', 'storytellers', 'counts', 'scripts'].map((k) => out[k]).filter(Boolean);
+}
+
+// Spare cards for a page, hidden until fillRows needs them; leaves out any whose title the page already shows. The
+// overview's are about the games; a page with players, characters or types picked gets ones about those seats.
+function spareCards(G, sel, seats, shown) {
+  const titles = new Set([...shown.matchAll(/<h3>([^<]*)<\/h3>/g)].map((m) => m[1]));
+  const pool = hasSelection(sel) ? seatCards(G, sel, seats) : SPARES.map((k) => gamesCards[k](G));
+  return pool.filter((html) => html && !titles.has((html.match(/<h3>([^<]*)<\/h3>/) || [])[1]))
+    .map((html) => html.replace('<div class="card', '<div data-spare hidden class="card')).join('');
 }
 
 function overallSections(base) {
-  const o = overview(base);
-  const frequent = playerTable(base).map((p) => ({ key: p.key, name: p.name, games: p.plays })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name)).slice(0, 5);
-  const sts = storytellerTable(base).slice(0, 5);
   // With one storyteller picked, the storyteller cards would only repeat them; compare them with the others instead.
   const st = state.filters.storyteller;
   const others = st ? otherStorytellerGames(st) : [];
   return `
-  <div class="grid two">
-    ${balanceCard(o)}
-    ${playerCountCard(base)}
-    ${frequencyCard('Most frequent players', 'Who has played the most games. Click a name to see their stats.', frequent, (r) => playerLink(r.key, r.name))}
-    ${st ? storytellerCompareCard(nameOf(st), base, others) : frequencyCard('Most frequent storytellers', 'Who has run the most games.', sts, (r) => (playerKeys.has(r.key) ? playerLink(r.key, r.name) : esc(r.name)))}
-    ${card('Who wins, by script', '', legendGE() + splitBars(o.byScript, (r) => esc(r.key)))}
-    ${card('Who wins, by player count', '', legendGE() + splitBars(o.byPlayerCount, (r) => `${r.key} players`))}
-    ${st ? storytellerCharactersCard(nameOf(st), base, others) : card('Who wins, by storyteller', '', legendGE() + splitBars(o.byStoryteller.slice(0, 10), (r) => esc(r.name)))}
+    ${gamesCards.balance(base)}
+    ${gamesCards.playerCount(base)}
+    ${gamesCards.players(base)}
+    ${st ? storytellerCompareCard(nameOf(st), base, others) : gamesCards.storytellers(base)}
+    ${gamesCards.scripts(base)}
+    ${gamesCards.counts(base)}
+    ${st ? storytellerCharactersCard(nameOf(st), base, others) : gamesCards.storytellerWins(base)}
     ${swingCards(base, 'Characters')}
-  </div>`;
+    ${gamesCards.communities(base)}
+    ${gamesCards.characters(base)}
+    ${gamesCards.nominations(base)}`;
 }
 
 // Sortable table: click a column label to sort by it (▼); click it again to flip the order (▲).
@@ -303,7 +411,7 @@ function overallSections(base) {
 // cols: [{ label, value: (row) => sort value, cell: (row) => '<td>…</td>', num }]
 const td = (html, num) => `<td${num ? ' class="num"' : ''}>${html}</td>`;
 // sort: null keeps the rows in the order given (e.g. most played first, without a Plays column) until a label is clicked.
-function sortable(id, cols, data, { sort = 0, limit = 8, empty } = {}) {
+function sortable(id, cols, data, { sort = 0, limit, empty } = {}) {
   const cur = state.sorts[id] && cols[state.sorts[id].col] ? state.sorts[id] : { col: sort === null ? -1 : sort, rev: false };
   const col = cols[cur.col] || { value: () => 0 };
   const missing = (v) => v === null || v === undefined || Number.isNaN(v);
@@ -332,8 +440,12 @@ const gap = (a, b) => (a === null || a === undefined || b === null || b === unde
 const colDelta = (label, get) => ({ label, num: true, value: get, cell: (r) => td(delta(get(r)), true) });
 const charCls = (c) => (isEvilTeam(c.team) ? 'evil' : c.team === 'traveller' ? 'neutral' : 'good');
 
-function rateRows(rows) {
-  return `<table class="rows"><tbody>${rows.map(([label, r, n, cls]) => `<tr><td>${label}</td><td class="num muted">${n === undefined ? '' : plural(n, 'game')}</td><td>${rateCell(r, n, cls)}</td></tr>`).join('')}</tbody></table>`;
+// With an `id`, only the first LIST_LIMIT rows show until "Show all" is clicked.
+const bars = (id, rows, label) => splitBars(rows, label, label, { id, expanded: state.expanded.has(id) });
+function rateRows(rows, id = null) {
+  const html = rows.map(([label, r, n, cls]) => `<tr><td>${label}</td><td class="num muted">${n === undefined ? '' : plural(n, 'game')}</td><td>${rateCell(r, n, cls)}</td></tr>`);
+  const wrap = (inner) => `<table class="rows"><tbody>${inner}</tbody></table>`;
+  return id ? fitted(id, html, { expanded: state.expanded.has(id), wrap }) : wrap(html.join(''));
 }
 
 function deathBars(timing, total) {
@@ -469,7 +581,7 @@ function heldSections(G, sel, seats, base) {
     out.push(card(`When ${name} dies as ${as}`, `Survived to the end in ${pct(st.survivalRate)} of these games${os.plays ? `, against ${pct(os.survivalRate)} for other players as ${as}` : ''}.`, deathBars(st.deathTiming, st.plays)));
     if (role.many) {
       out.push(card(role.byType ? `Characters played as ${as}` : 'Character by character', `Click a character to see how ${name} does with it. Click a column to sort.`,
-        sortable('held-chars', [colChar(), colNum('Plays', (c) => c.plays), colRate('Win rate', (c) => c.winRate, (c) => c.plays, charCls)], st.byCharacter, { sort: 1, limit: 8 })));
+        sortable('held-chars', [colChar(), colNum('Plays', (c) => c.plays), colRate('Win rate', (c) => c.winRate, (c) => c.plays, charCls)], st.byCharacter, { sort: 1 })));
     }
     const noms = nominationStats(G, [key]);
     out.push(card(`Nominations and votes as ${as}`, `From recorded nominations in these games.`, `<div class="mini-tiles">
@@ -493,10 +605,10 @@ function heldSections(G, sel, seats, base) {
       const sideOf = seats.every((x) => x.p.alignment === 'good') ? 'good' : seats.every((x) => x.p.alignment === 'evil') ? 'evil' : null;
       const side = sideOf === 'good' ? 'Against each Demon' : sideOf === 'evil' ? 'With each Demon' : 'By Demon in play';
       out.push(card(side, `${name}'s win rate as ${as}, by which Demon was in the game. Click a column to sort.`,
-        sortable('held-demons', [{ label: 'Demon', value: (r) => r.name || '', cell: (r) => td(esc(r.name || 'Unknown')) }, colNum('Games', (r) => r.plays), colRate('Win rate', (r) => r.winRate, (r) => r.plays, sideOf || 'neutral')], demonRows, { sort: 1, limit: 8 })));
+        sortable('held-demons', [{ label: 'Demon', value: (r) => r.name || '', cell: (r) => td(esc(r.name || 'Unknown')) }, colNum('Games', (r) => r.plays), colRate('Win rate', (r) => r.winRate, (r) => r.plays, sideOf || 'neutral')], demonRows, { sort: 1 })));
     }
     if (byScript.size > 1) {
-      out.push(card('By script', `${name}'s win rate as ${as} on each script.`, rateRows([...byScript.values()].sort((x, y) => y.plays - x.plays).map((r) => [esc(r.key), r.wins / r.plays, r.plays, 'evil']))));
+      out.push(card('By script', `${name}'s win rate as ${as} on each script.`, rateRows([...byScript.values()].sort((x, y) => y.plays - x.plays).map((r) => [esc(r.key), r.wins / r.plays, r.plays, 'evil']), 'held-scripts')));
     }
   } else {
     const names = sel.players.map(nameOf);
@@ -526,13 +638,13 @@ function playerSections(G, sel, seats, base) {
     ]) + `<p class="sub" style="margin:10px 0 0">Survived to the end in ${pct(st.survivalRate)} of games.</p>`));
     out.push(card('Characters played', 'Click a character to see how this player does with it. Click a column to sort.',
       sortable('p-chars', [colChar(), { label: 'Type', value: (c) => -TYPES.indexOf(c.team), cell: (c) => td(esc(teamOne(c.team))) }, colNum('Plays', (c) => c.plays), colRate('Win rate', (c) => c.winRate, (c) => c.plays, charCls)],
-        st.byCharacter, { sort: 2, limit: 8 })));
+        st.byCharacter, { sort: 2 })));
     const mateCols = [colPlayer('Teammate'), colNum('Games', (r) => r.same), colRate('Win rate', (r) => r.sameRate, (r) => r.same)];
     const rivalCols = [colPlayer('Opponent'), colNum('Games', (r) => r.opposite), { ...colRate('Win rate', (r) => r.oppositeRate, (r) => r.opposite), value: (r) => -r.oppositeRate }];
     out.push(card('Wins most with', `${esc(nameOf(key))}'s win rate when on the same team as each player (at least 3 games together). Click a name to see them together.`,
-      sortable('p-mates', mateCols, rel.teammates, { sort: 2, limit: 6, empty: 'Not enough games together yet.' })));
+      sortable('p-mates', mateCols, rel.teammates, { sort: 2, empty: 'Not enough games together yet.' })));
     out.push(card('Struggles most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
-      sortable('p-rivals', rivalCols, rel.rivals, { sort: 2, limit: 6, empty: 'Not enough games against each other yet.' })));
+      sortable('p-rivals', rivalCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
     out.push(card('Nominations and votes', 'From recorded nominations in these games.', `<div class="mini-tiles">
       <div><b>${noms.made}</b><span>nominations made</span></div>
       <div><b>${pct(noms.accuracy)}</b><span>of their nominations were on evil players</span></div>
@@ -540,8 +652,8 @@ function playerSections(G, sel, seats, base) {
       <div><b>${noms.executed}</b><span>times executed</span></div>
       <div><b>${noms.votes}</b><span>votes cast</span></div>
       <div><b>${pct(noms.voteAccuracy)}</b><span>of their votes were on evil players</span></div></div>`));
-    if (st.byScript.length > 1) out.push(card('By script', '', rateRows(st.byScript.map((s) => [esc(s.key), s.winRate, s.plays, 'neutral']))));
-    if (state.filters.communities.length !== 1 && st.byCommunity.length > 1) out.push(card('By community', '', rateRows(st.byCommunity.map((s) => [esc(communityName(state.settings, s.key)), s.winRate, s.plays, 'neutral']))));
+    if (st.byScript.length > 1) out.push(card('By script', '', rateRows(st.byScript.map((s) => [esc(s.key), s.winRate, s.plays, 'neutral']), 'sel-scripts')));
+    if (state.filters.communities.length !== 1 && st.byCommunity.length > 1) out.push(card('By community', '', rateRows(st.byCommunity.map((s) => [esc(communityName(state.settings, s.key)), s.winRate, s.plays, 'neutral']), 'sel-communities')));
   } else {
     const grp = groupRelations(G, sel.players);
     const names = sel.players.map(nameOf);
@@ -568,10 +680,10 @@ function playerSections(G, sel, seats, base) {
         colNum('Same team', (p) => p.same),
         colRate('Won together', (p) => p.sameRate, (p) => p.same),
         { label: 'Head to head', value: (p) => p.opposite, cell: (p) => `<td class="nowrap">${p.opposite ? `${esc(nameOf(p.a))} ${p.aWins} – ${p.bWins} ${esc(nameOf(p.b))}` : '<span class="muted">never opposed</span>'}</td>` },
-      ], grp.pairs, { sort: 1, limit: 10 }), 'wide'));
+      ], grp.pairs, { sort: 1 }), 'wide'));
     }
     out.push(card('Each player in these games', '', sortable('grp-players', [colPlayer(), colNum('Games', (p) => p.plays), colRate('Win rate', (p) => p.winRate, (p) => p.plays), colRate('Survived', (p) => p.survivalRate, (p) => p.plays, 'neutral', 'Survived')],
-      st.byPlayer, { sort: 1, limit: 10 })));
+      st.byPlayer, { sort: 1 })));
   }
   if (sel.characters.length) {
     const holding = seats.filter((s) => sel.characters.includes(s.p.roleId));
@@ -601,7 +713,7 @@ function characterSections(G, base, sel) {
     ])));
     out.push(card('When the holder dies', 'Share of games by when the player holding it died.', deathBars(st.deathTiming, st.plays)));
     out.push(card('Who plays it', 'Click a name to see that player with this character.', sortable('c-players', [colPlayer(), colNum('Plays', (p) => p.plays), colRate('Won', (p) => p.winRate, (p) => p.plays, evil ? 'evil' : 'good')],
-      st.byPlayer, { sort: 1, limit: 8 })));
+      st.byPlayer, { sort: 1 })));
   } else {
     const together = outcome(G);
     const each = characterTable(base, baseRate).filter((c) => sel.characters.includes(c.roleId));
@@ -613,18 +725,14 @@ function characterSections(G, base, sel) {
       ].filter((r) => r.games), (r) => esc(r.key))));
     const holders = seatStats(focusSeats(G, { players: [], types: [], characters: sel.characters }));
     out.push(card('How each holder did in these games', '', sortable('cs-holders', [colChar(), colNum('Plays', (c) => c.plays), colRate('Holder won', (c) => c.winRate, (c) => c.plays, charCls)],
-      holders.byCharacter, { sort: 1, limit: 8 })));
+      holders.byCharacter, { sort: 1 })));
   }
   if (G.length >= 8) {
     const combos = companions(G, sel.characters, 3);
     const rate0 = outcome(G).goodRate;
     out.push(card('Characters that change the result alongside', `In these ${plural(G.length, 'game')} good wins ${pct(rate0)}. Here's how that shifts when another character is also in play (at least 3 games). Click one to add it.`,
       sortable('combos', [colChar('Also in play'), colNum('Games', (c) => c.games), colRate('Good won', (c) => c.goodRate, (c) => c.games, 'neutral', 'Good won'),
-        { ...colDelta('Shift', (c) => c.delta), value: (c) => Math.abs(c.delta) }], combos, { sort: 3, limit: 6, empty: 'Not enough games yet.' })));
-  }
-  if (outcome(G).n) {
-    const byScript = overview(G).byScript;
-    if (byScript.length > 1) out.push(card('Who wins, by script', '', legendGE() + splitBars(byScript, (r) => esc(r.key))));
+        { ...colDelta('Shift', (c) => c.delta), value: (c) => Math.abs(c.delta) }], combos, { sort: 3, empty: 'Not enough games yet.' })));
   }
   return out.join('');
 }
@@ -642,10 +750,10 @@ function typeSections(G, sel, seats, base) {
     sortable('t-chars', [colChar(),
       { label: 'Holder won', value: (c) => c.winRate, cell: (c) => td(rateCell(c.winRate, c.plays, charCls(c), '', `${c.name}: held ${plural(c.plays, 'time')}, the holder won ${c.wins}`)) },
       { ...colDelta('Good wins', (c) => (inPlay.get(c.roleId) || {}).delta), cell: (c) => { const r = inPlay.get(c.roleId) || {}; return `<td class="num" data-tip="${esc(`Good won ${pct(r.goodRate)} of the ${plural(r.games || 0, 'game')} with the ${c.name} in play`)}">${delta(r.delta)}</td>`; } }],
-      st.byCharacter, { sort: null, limit: 8 })));
+      st.byCharacter, { sort: null })));
   const best = st.byPlayer.filter((p) => p.plays >= 2);
   out.push(card(`Best players as ${esc(label)}`, 'At least 2 games.', sortable('t-players', [colPlayer(), colNum('Plays', (p) => p.plays), colRate('Win rate', (p) => p.winRate, (p) => p.plays)],
-    best, { sort: 2, limit: 8, empty: 'Not enough games yet.' })));
+    best, { sort: 2, empty: 'Not enough games yet.' })));
   out.push(swingCards(base, label, (c) => sel.types.includes(c.team)));
   const counts = countEffect(G, sel.types);
   if (counts.length > 1) out.push(card(`Who wins, by number of ${esc(label)} in play`, '', legendGE() + splitBars(counts, (r) => `${r.key} in play`)));
@@ -685,7 +793,7 @@ function predictionSections(G, base, sel, pr) {
      <p class="muted small">How it works: across all ${plural(pr.gamesUsed, 'game')} in your filters, it learns how much each character tends to shift the result, accounting for which characters usually appear together, and pulls characters with few games toward "no effect". Tested on your past games, it called the winner ${pct(pr.check.accuracy)} of the time (always picking the more common winner: ${pct(pr.check.baseAccuracy)}). The range covers about 80% of likely outcomes.</p></div>`, 'wide'));
   out.push(card('What each character does', 'Its estimated shift in the good win rate on its own, compared with a typical game.',
     sortable('predict-chars', [colChar(), colNum('Games', (c) => c.games), { label: 'Shift', num: true, value: (c) => c.push, cell: (c) => td(c.games ? delta(c.push) : '<span class="muted">no games yet</span>', true) }],
-      pr.contributions.map((c) => ({ ...c, name: charName(c.roleId) })), { sort: 2, limit: 10 })));
+      pr.contributions.map((c) => ({ ...c, name: charName(c.roleId) })), { sort: 2 })));
   return out.join('');
 }
 
@@ -867,7 +975,7 @@ function statsView() {
   if (pr) sections = `<div class="grid two">${predictionSections(G, base, sel, pr)}${G.length ? characterSections(G, base, sel) : ''}</div>`;
   else if (!G.length && held) sections = `<div class="card empty"><h2>Not yet</h2><p>${esc(listWords(sel.players.map(nameOf)))} ${sel.players.length > 1 ? 'haven\'t each' : 'hasn\'t'} been ${esc(heldRole(sel).as)} in any recorded game${sel.players.length > 1 ? ' together' : ''} under these filters.</p></div>`;
   else if (!G.length) sections = `<div class="card empty"><h2>No games match</h2><p>No recorded game has ${hasSelection(sel) ? 'everything you selected' : 'these filters'}. Try removing a filter.</p></div>`;
-  else if (!hasSelection(sel)) sections = overallSections(base);
+  else if (!hasSelection(sel)) sections = `<div class="grid two">${overallSections(base)}</div>`;
   else {
     if (sel.characters.length && !sel.players.length) sections += characterSections(G, base, sel);
     if (sel.players.length && (sel.characters.length || sel.types.length)) sections += heldSections(G, sel, seats, base);
@@ -875,6 +983,8 @@ function statsView() {
     else if (sel.types.length) sections += typeSections(G, sel, seats, base);
     sections = `<div class="grid two">${sections}</div>`;
   }
+  // Spares to fill out the last row (see fillRows): cards about these games the page doesn't already show.
+  if (G.length && sections.includes('<div class="grid two">')) sections = sections.replace(/<\/div>\s*$/, `${spareCards(G, sel, seats, sections)}</div>`);
   const more = G.length ? `<p class="see-games"><button class="btn" data-tab="games">See ${G.length === 1 ? 'this game' : `these ${G.length} games`} →</button></p>` : '';
   // With no filters the Games tile already says how many games there are, so the line would only repeat it.
   const lead = anyFilter(sel) ? summaryLine(G, base, sel).replace('class="summary"', 'class="summary lead"') : '';
@@ -958,8 +1068,97 @@ function render() {
   keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab](); });
   // Editors' account list loads the first time Data & settings is opened.
   mountClaimPicker();
+  fillRows();
+  fitLists();
   if (state.tab === 'data' && state.accounts === undefined && state.shared.on && state.shared.canEdit && creds(state.settings).editorKey) { state.accounts = null; loadAccounts(); }
 }
+
+// Every row of cards should be full. The page brings spare cards (data-spare, hidden); this shows as many as the last
+// row needs, in order. If it runs out, the last card in the row is widened to close the gap. Works for however many
+// columns the window has room for.
+function fillRows() {
+  for (const grid of document.querySelectorAll('#view .grid.two')) {
+    const spares = [...grid.querySelectorAll(':scope > [data-spare]')];
+    spares.forEach((c) => { c.hidden = true; });
+    grid.querySelectorAll(':scope > [data-widened]').forEach((c) => { c.style.gridColumn = ''; c.removeAttribute('data-widened'); });
+    const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length;
+    if (cols < 2) continue;
+    // Empty slots in any row, from where the cards sit. (The grid packs densely, so a spare added at the end moves
+    // up into an earlier hole, e.g. one left before a wide card.)
+    const free = () => {
+      const cards = [...grid.children].filter((c) => !c.hidden);
+      const g = grid.getBoundingClientRect(), gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+      const slot = (g.width - gap * (cols - 1)) / cols + gap;
+      let n = 0;
+      for (const top of new Set(cards.map((c) => c.offsetTop))) {
+        const row = cards.filter((c) => c.offsetTop === top);
+        n += Math.round((g.width - row.reduce((w, c) => w + c.getBoundingClientRect().width, 0) - gap * (row.length - 1)) / slot);
+      }
+      return n;
+    };
+    for (const c of spares) {
+      if (free() <= 0) break;
+      c.hidden = false;
+    }
+    let left = free();
+    if (left > 0) {
+      const cards = [...grid.children].filter((c) => !c.hidden);
+      const last = cards[cards.length - 1];
+      last.style.gridColumn = `span ${Math.min(cols, left + 1)}`;
+      last.setAttribute('data-widened', '');
+    }
+  }
+}
+
+// Cards side by side should end level, without empty space under the shorter ones. Lists (data-fit) show as many
+// rows as fit their row of cards, with "Show all" for the rest. Next to cards that can't change length (a pie
+// chart, an opened list), lists fill that height; in a row of only lists, they all trim to the shortest one's
+// natural height (up to 8 rows). Lists show at least 3 rows. On one column (phones), lists show 8.
+const MIN_ROWS = 3, START_ROWS = 8;
+function fitLists() {
+  const cards = [...document.querySelectorAll('#view .grid > .card')].filter((c) => !c.hidden);
+  if (!cards.some((c) => c.querySelector('[data-fit]:not([data-expanded])'))) return;
+  const lists = new Map(); // card → { fit, rows, button, n }
+  for (const c of cards) {
+    const fit = c.querySelector('[data-fit]');
+    if (!fit || fit.hasAttribute('data-expanded')) continue;
+    const rows = [...fit.querySelectorAll('tr, .split-row')].filter((r) => !r.closest('thead'));
+    if (rows.length > MIN_ROWS) lists.set(c, { rows, button: fit.querySelector('.show-all'), n: rows.length });
+  }
+  const show = (l, k) => {
+    l.k = k;
+    l.rows.forEach((r, i) => r.toggleAttribute('data-fold', i >= k));
+    if (l.button) l.button.hidden = k >= l.n;
+  };
+  // Measure each card's own height rather than the row's (grid rows stretch their cards).
+  cards.forEach((c) => { c.style.alignSelf = 'start'; });
+  lists.forEach((l) => show(l, Math.min(l.n, START_ROWS)));
+  const height = (c) => c.getBoundingClientRect().height;
+  const rowsOfCards = new Map();
+  for (const c of cards) {
+    const key = `${[...document.querySelectorAll('#view .grid')].indexOf(c.parentElement)}:${Math.round(c.offsetTop)}`;
+    if (!rowsOfCards.has(key)) rowsOfCards.set(key, []);
+    rowsOfCards.get(key).push(c);
+  }
+  for (const row of rowsOfCards.values()) {
+    const flexible = row.filter((c) => lists.has(c));
+    if (!flexible.length || row.length === 1) continue;
+    const fixed = row.filter((c) => !lists.has(c));
+    const target = fixed.length ? Math.max(...fixed.map(height)) : Math.min(...flexible.map(height));
+    for (const c of flexible) {
+      const l = lists.get(c);
+      while (l.k > MIN_ROWS && height(c) > target + 1) show(l, l.k - 1);
+      while (l.k < l.n) {
+        show(l, l.k + 1);
+        if (height(c) > target + 1) { show(l, l.k - 1); break; }
+      }
+    }
+  }
+  cards.forEach((c) => { c.style.alignSelf = ''; });
+}
+let fitTimer;
+window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(() => { fillRows(); fitLists(); }, 120); });
+document.fonts.ready.then(() => { fillRows(); fitLists(); });
 
 // A redraw (new games arriving, the account check finishing) mustn't close a form someone is filling in: forms
 // marked data-keep stay open with what was typed, and the button that opened them (data-opens) stays hidden.

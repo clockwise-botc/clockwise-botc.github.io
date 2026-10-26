@@ -24,13 +24,17 @@ export function hasSelection(sel) {
 export const holds = (p, chars) => chars.includes(p.roleId) || (!!p.startingRoleId && chars.includes(p.startingRoleId));
 
 // With players picked, characters and types describe what those players held ("liatfiat as the Scarlet Woman").
-// With no players, characters mean "in play" and types only narrow the seats looked at.
+// Several players with a character or type: each one's games as it ("liatfiat and oddish, each as the Imp"), since
+// they rarely (or never, for one character) hold it in the same game. With no players, characters mean "in play"
+// and types only narrow the seats looked at.
+const matches = (p, sel) => (!sel.characters.length || holds(p, sel.characters)) && (!sel.types.length || sel.types.includes(p.team));
 export function selectGames(base, sel) {
-  return base.filter((g) =>
-    sel.players.every((k) => g.players.some((p) => playerKey(p) === k
-      && (!sel.characters.length || holds(p, sel.characters))
-      && (!sel.types.length || sel.types.includes(p.team)))) &&
-    (sel.players.length > 0 || sel.characters.every((r) => g.players.some((p) => p.roleId === r))));
+  const asSomething = sel.characters.length || sel.types.length;
+  return base.filter((g) => {
+    if (sel.players.length > 1 && asSomething) return sel.players.some((k) => g.players.some((p) => playerKey(p) === k && matches(p, sel)));
+    return sel.players.every((k) => g.players.some((p) => playerKey(p) === k && matches(p, sel)))
+      && (sel.players.length > 0 || sel.characters.every((r) => g.players.some((p) => p.roleId === r)));
+  });
 }
 
 export function focusSeats(games, sel) {
@@ -39,7 +43,8 @@ export function focusSeats(games, sel) {
   for (const g of games) {
     for (const p of g.players) {
       if (onlyChars ? sel.characters.includes(p.roleId)
-        : (!sel.players.length || sel.players.includes(playerKey(p))) && (!sel.types.length || sel.types.includes(p.team))) {
+        : sel.players.length ? sel.players.includes(playerKey(p)) && matches(p, sel)
+        : !sel.types.length || sel.types.includes(p.team)) {
         seats.push({ g, p });
       }
     }
