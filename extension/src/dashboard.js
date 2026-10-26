@@ -635,7 +635,7 @@ function playerSections(G, sel, seats, base) {
     const allChars = state.expanded.has('p-chars');
     out.push(card('Characters played', `Played ${playedIds.size} of ${playedIds.size + unplayed.length} characters. Click a character to see how this player does with it. Click a column to sort.`,
       sortable('p-chars', [colChar(), { label: 'Type', value: (c) => -TYPES.indexOf(c.team), cell: (c) => td(esc(teamOne(c.team))) }, colNum('Plays', (c) => c.plays), colRate('Win rate', (c) => c.winRate, (c) => c.plays, charCls)],
-        allChars ? [...st.byCharacter, ...unplayed] : st.byCharacter, { sort: 2, more: unplayed.length ? 'Show all, with unplayed' : null })));
+        allChars ? [...st.byCharacter, ...unplayed] : st.byCharacter, { sort: 2, more: unplayed.length ? `Show all ${playedIds.size + unplayed.length}` : null })));
     const mateCols = [colPlayer('Teammate'), colNum('Games', (r) => r.same), colRate('Win rate', (r) => r.sameRate, (r) => r.same)];
     const rivalCols = [colPlayer('Opponent'), colNum('Games', (r) => r.opposite), { ...colRate('Win rate', (r) => r.oppositeRate, (r) => r.opposite), value: (r) => -r.oppositeRate }];
     out.push(card('Wins most with', `${esc(nameOf(key))}'s win rate when on the same team as each player (at least 3 games together). Click a name to see them together.`,
