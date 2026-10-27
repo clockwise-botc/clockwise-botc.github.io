@@ -23,7 +23,11 @@
     const S = store.state;
     let current = restore();
     let activeNomination = null;
-    let prevDead = [];
+    // Who was dead at the last look, by player (by seat for an empty one): seats are renumbered when a traveller's
+    // seat is removed, so going by position would mistake the shift for deaths and resurrections.
+    let prevDead = new Map();
+    const seatKey = (p, i) => p.id || `#${i}`;
+    const deadNow = () => new Map(S.players.players.map((p, i) => [seatKey(p, i), isDead(p)]));
     let finalizeTimer = null;
     let voidTimer = null;
     let playersTimer = null;
@@ -145,6 +149,10 @@
         me: S.user.user && S.user.user.id ? { id: S.user.user.id, username: S.user.user.username || null } : null,
         inGame: !!(current && !current.saved && !current.alreadyOver && S.game.isRunning),
         gameId: current ? current.id : null,
+        // The game has ended and been saved, but the storyteller's reveal hasn't shown who won yet (botc.app marks
+        // the storyteller "revealed" once it has), so the popup keeps the result to itself until then.
+        revealing: !!(current && current.saved && S.game.isRunning && S.game.history.some((h) => h.type === 'end')
+          && !S.players.storytellers.some((st) => Array.isArray(st.status) && st.status.includes('revealed'))),
         phase: g.phase,
         players: S.players.players.length,
         nominations: current ? current.nominations.length : 0,
@@ -168,6 +176,8 @@
         nominations: [],
         deaths: [],
         startingRoles: {},
+        startingRolesById: {},
+        travellers: {},
         seatIds: [],
         stIds: [],
         names: {},
@@ -178,9 +188,9 @@
         // arrived. Those games weren't watched here, so they're never saved.
         alreadyOver: S.game.history.some((h) => h.type === 'end'),
       };
-      prevDead = S.players.players.map(isDead);
+      prevDead = deadNow();
       // Joined mid-game: we can't know when earlier deaths happened.
-      prevDead.forEach((dead, i) => { if (dead) current.deaths.push({ seat: i + 1, userId: S.players.players[i].id || null, phase: null }); });
+      S.players.players.forEach((p, i) => { if (isDead(p)) current.deaths.push({ seat: i + 1, userId: p.id || null, phase: null }); });
       log(current.alreadyOver ? 'ignoring game that ended before joining' : 'tracking game', current.id);
       persist();
     }
@@ -191,9 +201,12 @@
       const all = hasGrimoireAccess();
       S.players.players.forEach((p, i) => {
         const seat = String(i + 1);
-        if (current.startingRoles[seat]) return;
         const id = roleIdOf(p.role);
-        if (id && (all || p.id === me)) current.startingRoles[seat] = id;
+        if (!id || !(all || p.id === me)) return;
+        // By player too: seats are renumbered when a traveller's seat is removed.
+        current.startingRolesById = current.startingRolesById || {};
+        if (p.id && !current.startingRolesById[p.id]) current.startingRolesById[p.id] = id;
+        if (!current.startingRoles[seat]) current.startingRoles[seat] = id;
       });
     }
 
@@ -207,6 +220,16 @@
       S.players.players.forEach((p, i) => { if (p.id) current.seatIds[i] = p.id; });
       current.seatIds.length = S.players.players.length;
       S.players.storytellers.forEach((st) => { if (st.id && !current.stIds.includes(st.id)) current.stIds.push(st.id); });
+      // Travellers, with who sat either side of them: when one leaves, the storyteller removes their seat, and this is
+      // how the grimoire can still show them where they sat.
+      current.travellers = current.travellers || {};
+      const list = S.players.players;
+      list.forEach((p, i) => {
+        const id = roleIdOf(p.role);
+        if (!p.id || !id || roleInfo(id).team !== 'traveller') return;
+        const near = (d) => (list.length > 1 && list[(i + d + list.length) % list.length].id) || null;
+        current.travellers[p.id] = { userId: p.id, roleId: id, alignment: alignmentOf(p.alignment, 'traveller'), dead: isDead(p), before: near(-1), after: near(1), seat: i + 1 };
+      });
       [...current.seatIds, ...current.stIds].forEach((id) => {
         const u = id && S.session.users && S.session.users.get && S.session.users.get(id);
         if (u && u.username) current.names[id] = u.username;
@@ -281,13 +304,18 @@
       const frozenSeat = current.frozen ? new Map(current.frozen.seatIds) : null;
       const seatId = (i) => (frozenSeat ? frozenSeat.get(i + 1) || null : (live[i] && live[i].id) || (current.seatIds || [])[i] || null);
 
+      // Did a traveller leave (and the seats after theirs move up one)? Then seat numbers from earlier can't be trusted.
+      const endIds = new Set(endPlayers.map((_, i) => seatId(i)).filter(Boolean));
+      const renumbered = Object.keys(current.travellers || {}).some((id) => !endIds.has(id));
       const players = endPlayers.map((ep, i) => {
         const lp = live[i] || {};
         const role = roleInfo(roleIdOf(ep.role) || roleIdOf(lp.role));
         const alignment = alignmentOf(ep.alignment || lp.alignment, role.team);
         const statusArr = ep.status || lp.status || [];
-        const death = [...current.deaths].reverse().find((d) => d.seat === i + 1);
-        const startId = current.startingRoles[String(i + 1)] || null;
+        const uid = seatId(i);
+        // Matched by player where known: seats are renumbered when a traveller's seat is removed.
+        const death = [...current.deaths].reverse().find((d) => (d.userId && uid ? d.userId === uid : !renumbered && d.seat === i + 1));
+        const startId = (uid && (current.startingRolesById || {})[uid]) || (renumbered ? null : current.startingRoles[String(i + 1)]) || null;
         return {
           seat: i + 1,
           userId: seatId(i),
@@ -308,6 +336,26 @@
         };
       }).filter((p) => p.userId || p.roleId);
 
+      // Travellers who left before the end (their seat removed), placed after whoever sat before them.
+      const seated = new Set(players.map((p) => p.userId).filter(Boolean));
+      const departed = Object.values(current.travellers || {}).filter((t) => !seated.has(t.userId)).map((t) => {
+        const role = roleInfo(t.roleId);
+        const death = [...current.deaths].reverse().find((d) => d.userId === t.userId);
+        const prev = players.find((p) => p.userId && p.userId === t.before), next = players.find((p) => p.userId && p.userId === t.after);
+        return {
+          userId: t.userId,
+          username: username(t.userId),
+          roleId: role.id,
+          roleName: role.name,
+          team: role.team,
+          alignment: t.alignment,
+          icon: iconUrl(role.id, t.alignment),
+          afterSeat: prev ? prev.seat : next ? next.seat - 1 : Math.min(t.seat - 1, players.length),
+          survived: !t.dead && !death,
+          diedPhase: death ? death.phase : null,
+        };
+      });
+
       const ed = S.edition || {};
       const stIds = current.frozen ? current.frozen.stIds : [...new Set([...(current.stIds || []), ...S.players.storytellers.map((s) => s.id).filter(Boolean)])];
       const storytellers = stIds.map((id) => ({ userId: id, username: username(id) }));
@@ -324,13 +372,14 @@
         winner: isEvilWin ? 'evil' : 'good',
         storytellers,
         playerCount: players.filter((p) => !p.isTraveller).length,
-        travellerCount: players.filter((p) => p.isTraveller).length,
+        travellerCount: players.filter((p) => p.isTraveller).length + departed.length,
         phases: phase,
         days: Math.ceil(phase / 2),
         bluffs: (current.bluffs || []).map((id) => ({ id, name: roleInfo(id).name, icon: iconUrl(id) })),
         fabled: (data.npcs || S.players.npcs.map((n) => n.id) || []).map((id) => ({ id, name: npcName(id), icon: iconUrl(id) })),
         background: backgroundInfo(),
         players,
+        departedTravellers: departed,
         nominations: current.nominations,
         deaths: current.deaths.map((d) => ({ ...d, username: username(d.userId) })),
         capturedBy: { userId: me.id || null, username: me.username || null, asStoryteller: hasGrimoireAccess() },
@@ -401,16 +450,16 @@
       if (!current || current.saved || current.alreadyOver) return;
       const players = S.players.players;
       players.forEach((p, i) => {
-        const dead = isDead(p);
-        if (dead && !prevDead[i]) {
+        const dead = isDead(p), was = prevDead.get(seatKey(p, i));
+        if (dead && !was) {
           current.deaths.push({ seat: i + 1, userId: p.id || null, phase: S.game.phase, day: Math.ceil(S.game.phase / 2), atNight: !!(S.game.phase % 2) });
-        } else if (!dead && prevDead[i]) {
+        } else if (!dead && was) {
           // Resurrected, or the storyteller fixed a misclick.
-          const idx = current.deaths.map((d) => d.seat).lastIndexOf(i + 1);
+          const idx = current.deaths.map((d) => (p.id ? d.userId === p.id : d.seat === i + 1)).lastIndexOf(true);
           if (idx >= 0) current.deaths.splice(idx, 1);
         }
       });
-      prevDead = players.map(isDead);
+      prevDead = deadNow();
       if (S.game.phase <= 2) snapshotStartingRoles();
       remember();
       persist();
@@ -437,7 +486,7 @@
 
     // Handle state that already exists when we attach (e.g. page reload mid-game).
     onHistory();
-    if (current) prevDead = S.players.players.map(isDead);
+    if (current) prevDead = deadNow();
     status();
     setInterval(status, 15000);
 

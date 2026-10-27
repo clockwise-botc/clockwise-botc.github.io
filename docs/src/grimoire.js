@@ -2,8 +2,8 @@
 // seats in a circle with botc.app's character tokens, death shrouds, nameplates, and the
 // storyteller's reminder tokens. Images come from botc.app (see images.js); if one can't load,
 // the token falls back to its name on a plain disc.
-import { esc, cap, teamOne, phaseLabel } from './ui.js?v=1ec2d5cb89';
-import { characterToken, reminderToken } from './tokens.js?v=1ec2d5cb89';
+import { esc, cap, teamOne, phaseLabel } from './ui.js?v=7834be4561';
+import { characterToken, reminderToken } from './tokens.js?v=7834be4561';
 
 const GOOD_TEAMS = ['townsfolk', 'outsider'];
 const EVIL_TEAMS = ['minion', 'demon'];
@@ -19,9 +19,26 @@ function seatTip(p) {
   return bits.filter(Boolean).join('\n');
 }
 
+function leftTip(t) {
+  return [
+    `${t.username || 'unknown player'} · left the game before the end`,
+    `${t.roleName || 'Unknown'} (${teamOne(t.team)})`,
+    t.alignment ? cap(t.alignment) : '',
+    t.survived ? '' : `Died${t.diedPhase ? ` ${phaseLabel(t.diedPhase)}` : ''}`,
+  ].filter(Boolean).join('\n');
+}
+
+// The seats in order around the table, with any travellers who left put back where they sat.
+function seatsAround(g) {
+  const gone = (g.departedTravellers || []).map((t) => ({ ...t, left: true }));
+  const at = (n) => gone.filter((t) => t.afterSeat === n);
+  const last = g.players.length ? g.players[g.players.length - 1].seat : 0;
+  return [...gone.filter((t) => t.afterSeat < 1), ...g.players.flatMap((p) => [p, ...at(p.seat)]), ...gone.filter((t) => t.afterSeat > last)];
+}
+
 const pos = (x, y) => `left:${x.toFixed(2)}%;top:${y.toFixed(2)}%`;
 export function renderGrimoire(g, { playerLink, playerKey, images, roleMeta = {} }) {
-  const seats = g.players;
+  const seats = seatsAround(g);
   const n = Math.max(seats.length, 1);
   const R = 37; // token centres, % of the width from the middle
   const tok = Math.max(7.5, Math.min(14.5, ((2 * Math.PI * R) / n) * 0.6));
@@ -37,10 +54,10 @@ export function renderGrimoire(g, { playerLink, playerKey, images, roleMeta = {}
     const key = playerKey(p);
     const icon = p.roleId ? images.character(p.roleId, p.team, align, p.icon) : null;
     // Drawn like botc.app: the art shows good/evil (a red Washerwoman for an evil one); the tooltip has the details.
-    html += `<div class="g-seat" style="${pos(cx, cy)}" data-tip="${esc(seatTip(p))}">
+    html += `<div class="g-seat${p.left ? ' left' : ''}" style="${pos(cx, cy)}" data-tip="${esc(p.left ? leftTip(p) : seatTip(p))}">
       ${characterToken({ id: p.roleId, name: p.roleName || 'Unknown', team: p.team, icon, fallback: images.fallback(p.roleId, icon), meta: roleMeta[p.roleId],
         shroud: !p.survived, voteless: !p.survived && p.deadVoteUsed, shroudUrl: images.asset('shroud.webp'), link: !!p.roleId })}
-      <div class="g-name">${key ? playerLink(key, p.username || 'unknown') : `<span>Seat ${p.seat}</span>`}</div>
+      <div class="g-name">${p.left ? `<span>${esc(p.username || 'Traveller')}</span>` : key ? playerLink(key, p.username || 'unknown') : `<span>Seat ${p.seat}</span>`}${p.left ? '<em>left</em>' : ''}</div>
     </div>`;
 
     // Reminder tokens cluster just inside the seat, three per row, working toward the middle.

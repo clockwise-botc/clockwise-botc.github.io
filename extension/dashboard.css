@@ -291,6 +291,9 @@ table.rows td:last-child { width: 46%; }
 .g-mini { width: 8cqw; height: 8cqw; --ts: 8cqw; }
 .g-name { position: absolute; top: calc(100% + .3cqw); left: 50%; transform: translateX(-50%); background: rgba(34, 34, 38, .92); border: 1px solid rgba(255, 255, 255, .1); border-radius: .6cqw; padding: .25cqw 1cqw; white-space: nowrap; max-width: calc(var(--tok) * 1.7); overflow: hidden; text-overflow: ellipsis; box-shadow: 0 .3cqw .8cqw rgba(0,0,0,.4); }
 .g-name .lnk, .g-name span { color: #fff; font-size: max(10px, calc(var(--tok) * .14)); text-decoration: none; font-weight: 500; }
+/* A traveller who left before the end, shown where they sat. */
+.g-seat.left .ctok { opacity: .55; filter: grayscale(.6); }
+.g-name em { display: block; font-style: normal; text-align: center; color: rgba(255, 255, 255, .6); font-size: max(9px, calc(var(--tok) * .11)); line-height: 1.1; }
 .g-corner { position: absolute; display: grid; gap: .6cqw; font-size: max(10px, 1.6cqw); color: #d8cfe8; z-index: 3; }
 .g-corner.tl { left: 2.5%; top: 2.5%; }
 .g-corner.br { right: 2.5%; bottom: 2.5%; text-align: right; }
@@ -462,6 +465,35 @@ td.nowrap { white-space: nowrap; }
 /* Token cards (most played / best / worst) */
 .token-card .ctok { --ts: 210px; width: min(100%, 210px); }
 .token-card .ctok.empty { background: var(--wash); border-color: var(--border); box-shadow: none; }
+/* Most played, by type: a column per type, the most played token large with the next two at its sides. */
+.bytype { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
+.bt-col { padding: 20px 14px 26px; text-align: center; min-width: 0; }
+.bt-col h3 { margin: 0 0 14px; text-align: center; }
+.bt-toks { position: relative; width: 100%; max-width: 210px; aspect-ratio: 210 / 150; margin: 0 auto; container-type: inline-size; }
+.bt-tok { position: absolute; }
+.bt-tok .ctok { width: 100%; }
+.bt-big { --ts: 57cqw; width: 57cqw; left: 50%; top: 0; transform: translateX(-50%); z-index: 1; }
+.bt-l, .bt-r { --ts: 27cqw; width: 27cqw; bottom: 0; z-index: 2; }
+.bt-l { left: 0; }
+.bt-r { right: 0; }
+.bt-blank { aspect-ratio: 1; }
+.bt-n { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #3b3b40; color: #fff; font: 600 12px/22px var(--sans); box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
+.bt-l .bt-n, .bt-r .bt-n { bottom: -10px; background: #67676d; }
+/* A player's character collection: every character by type, played ones in colour. */
+.card.collection { margin-top: 18px; }
+.collection .sub { margin-bottom: 22px; }
+.coll { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 28px; align-items: start; }
+.coll-col h4 { margin: 0 0 12px; text-align: center; font-family: var(--serif); font-size: 19px; font-weight: 500; color: var(--ink); }
+.coll-col h4 span { color: var(--muted); font-size: 15px; }
+.coll-grid { --n: 4; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.coll-townsfolk .coll-grid { --n: 8; }
+.coll-tok { flex: 0 0 calc((100% - (var(--n) - 1) * 6px) / var(--n)); container-type: inline-size; }
+.coll-tok .ctok { width: 100%; --ts: 100cqw; }
+.coll-tok.no .ctok { opacity: .28; filter: grayscale(.4); }
+.coll-tok.no:hover .ctok { opacity: .6; }
+@media (max-width: 1100px) { .coll { grid-template-columns: 1fr 1fr; } .coll-townsfolk { grid-column: 1 / -1; } }
+@media (max-width: 600px) { .coll { grid-template-columns: 1fr; } .coll-grid, .coll-townsfolk .coll-grid { --n: 6; } }
+@media (max-width: 900px) { .bytype { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; } }
 
 /* Shown when the files on disk are newer than the extension Chrome is running. */
 .update-banner { margin: 16px var(--gutter) 0; padding: 12px 18px; border-radius: 18px; background: var(--accent-soft); border: 1.5px solid var(--accent); color: var(--ink); font-weight: 600; }

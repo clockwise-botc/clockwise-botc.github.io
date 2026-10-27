@@ -1,8 +1,8 @@
 // The "Data & settings" view: export (and import), your account and communities, the editor key; in the extension
 // also this browser's uploads and stored games, and its Escape & Rhap rooms.
-import { toTables, toCSV, COLUMNS } from './tables.js?v=1ec2d5cb89';
-import { communityConfig, communityName, slug, NONE } from './communities.js?v=1ec2d5cb89';
-import { esc, fmtDate, fmtTime, plural } from './ui.js?v=1ec2d5cb89';
+import { toTables, toCSV, COLUMNS } from './tables.js?v=7834be4561';
+import { communityConfig, communityName, slug, NONE } from './communities.js?v=7834be4561';
+import { esc, fmtDate, fmtTime, plural } from './ui.js?v=7834be4561';
 
 export function renderData(ctx, filteredGames) {
   const { state } = ctx;
@@ -97,7 +97,7 @@ function playerSection({ state, tools }) {
     const priv = !!(pl.profile && pl.profile.private);
     body = `${head('This is you in the games.')}
       <div class="claim-line"><b>${esc(tools.nameOf(claim.player, claim.name))}</b><button class="btn small" type="button" data-unclaim>Not you? Remove</button></div>
-      <label class="private-check"><span>Keep my stats private <span class="hint">Only you can see your player page.</span></span>
+      <label class="private-check"><span>Hide player win rates <span class="hint">You won't see anyone's win rate, and yours is hidden from everyone.</span></span>
         <span class="switch"><input type="checkbox" role="switch" data-private ${priv ? 'checked' : ''}><span class="knob" aria-hidden="true"></span></span></label>`;
   } else {
     body = `${head('Which player in the games is you?')}

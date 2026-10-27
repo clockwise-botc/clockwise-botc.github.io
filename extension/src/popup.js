@@ -180,13 +180,19 @@ async function start() {
   await showMain();
 }
 
-// Games recorded here (not counting ones you chose not to record), and who won the last one.
-async function showStats() {
+// Games recorded here (not counting ones you chose not to record), and who won the last one. A game is saved when it
+// ends, before the storyteller's reveal has shown who won, so the result waits until the reveal is over: `revealing`
+// holds the games still being revealed in open botc.app tabs (null until the tabs have answered, when a game that
+// ended in the last half hour waits too).
+let revealingNow = null;
+async function showStats(revealing = revealingNow) {
   const { games = {} } = await chrome.storage.local.get('games');
   const list = Object.values(games).filter((g) => !g.skipped).sort((a, b) => b.endedAt - a.endedAt);
   $('games').textContent = list.length;
   $('games-label').textContent = list.length === 1 ? 'Game recorded' : 'Games recorded';
-  $('last').textContent = list[0] ? `${list[0].winner === 'evil' ? 'Evil' : 'Good'} won` : '–';
+  const last = list[0];
+  const wait = last && (revealing ? revealing.has(last.id) : Date.now() - last.endedAt < 30 * 60 * 1000);
+  $('last').textContent = !last ? '–' : wait ? (revealing ? 'Revealing…' : '–') : `${last.winner === 'evil' ? 'Evil' : 'Good'} won`;
   fitStats();
   document.fonts.ready.then(fitStats); // again once the serif has loaded (it's wider than the fallback)
 }
@@ -197,13 +203,15 @@ async function showMain() {
   refreshAccount();
 
   const tabs = await chrome.tabs.query({ url: 'https://botc.app/*' });
-  if (!tabs.length) return show('', 'botc.app is not open. Open it to start recording.');
+  if (!tabs.length) { revealingNow = new Set(); showStats(); return show('', 'botc.app is not open. Open it to start recording.'); }
 
   // Prefer the tab you're looking at, then any other botc.app tab that's in a game.
   tabs.sort((a, b) => Number(b.active) - Number(a.active));
   const results = await Promise.all(tabs.map(statusOf));
   const live = results.map((r) => r && r.status).filter((s) => s && s.attached);
   const best = live.find((s) => s.inGame) || live.find((s) => s.room) || live[0];
+  revealingNow = new Set(live.filter((s) => s.revealing).map((s) => s.gameId));
+  showStats();
 
   liveTab = best || null;
   if (best && best.me) autoClaim(best.me);

@@ -97,7 +97,7 @@ function playerSection({ state, tools }) {
     const priv = !!(pl.profile && pl.profile.private);
     body = `${head('This is you in the games.')}
       <div class="claim-line"><b>${esc(tools.nameOf(claim.player, claim.name))}</b><button class="btn small" type="button" data-unclaim>Not you? Remove</button></div>
-      <label class="private-check"><span>Keep my stats private <span class="hint">Only you can see your player page.</span></span>
+      <label class="private-check"><span>Hide player win rates <span class="hint">You won't see anyone's win rate, and yours is hidden from everyone.</span></span>
         <span class="switch"><input type="checkbox" role="switch" data-private ${priv ? 'checked' : ''}><span class="knob" aria-hidden="true"></span></span></label>`;
   } else {
     body = `${head('Which player in the games is you?')}

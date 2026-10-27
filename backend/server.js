@@ -139,7 +139,7 @@ function cleanGame_(raw) {
     if (botcArt(p.icon)) delete p.icon;
     (p.reminders || []).forEach(function (r) { if (botcArt(r.icon)) delete r.icon; });
   });
-  ['bluffs', 'fabled'].forEach(function (k) { (g[k] || []).forEach(function (x) { if (botcArt(x.icon)) delete x.icon; }); });
+  ['bluffs', 'fabled', 'departedTravellers'].forEach(function (k) { (g[k] || []).forEach(function (x) { if (botcArt(x.icon)) delete x.icon; }); });
   return g;
 }
 
@@ -188,7 +188,7 @@ function mergeGame_(stored, incoming) {
     out.remindersFrom = 'storyteller';
   }
   if (!(out.storytellers || []).some(function (s) { return s.username; }) && (other.storytellers || []).length) out.storytellers = other.storytellers;
-  ['bluffs', 'fabled', 'background'].forEach(function (k) {
+  ['bluffs', 'fabled', 'background', 'departedTravellers'].forEach(function (k) {
     var empty = !out[k] || (Array.isArray(out[k]) && !out[k].length);
     if (empty && other[k]) out[k] = other[k];
   });

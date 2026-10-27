@@ -27,7 +27,7 @@ Upload `dist/clockwise-<version>.zip` (made by `node scripts/pack.mjs`).
 >
 > Your account can also:
 > • claim your player, so you're first in the player list (Clockwise fills it in from your botc.app account)
-> • keep your stats private: only you can see your player page
+> • hide player win rates: nobody sees yours, and you don't see anyone's
 > • make your own communities from the rooms you play in, to filter by
 >
 > The dashboard is only for your community: it needs an account. Clockwise isn't made by or connected with botc.app or The Pandemonium Institute.
