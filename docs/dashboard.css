@@ -469,7 +469,7 @@ td.nowrap { white-space: nowrap; }
 .bytype { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
 .bt-col { padding: 20px 14px 26px; text-align: center; min-width: 0; }
 .bt-col h3 { margin: 0 0 14px; text-align: center; }
-.bt-toks { position: relative; width: 100%; max-width: 210px; aspect-ratio: 210 / 150; margin: 0 auto; container-type: inline-size; }
+.bt-toks { position: relative; width: 100%; max-width: 210px; aspect-ratio: 210 / 150; margin: 0 auto 18px; container-type: inline-size; }
 .bt-tok { position: absolute; }
 .bt-tok .ctok { width: 100%; }
 .bt-big { --ts: 57cqw; width: 57cqw; left: 50%; top: 0; transform: translateX(-50%); z-index: 1; }
@@ -477,8 +477,8 @@ td.nowrap { white-space: nowrap; }
 .bt-l { left: 0; }
 .bt-r { right: 0; }
 .bt-blank { aspect-ratio: 1; }
-.bt-n { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #3b3b40; color: #fff; font: 600 12px/22px var(--sans); box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
-.bt-l .bt-n, .bt-r .bt-n { bottom: -10px; background: #67676d; }
+.bt-n { position: absolute; left: 50%; bottom: -19px; transform: translateX(-50%); min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #3b3b40; color: #fff; font: 600 12px/22px var(--sans); box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
+.bt-l .bt-n, .bt-r .bt-n { bottom: -19px; background: #67676d; }
 /* A player's character collection: every character by type, played ones in colour. */
 .card.collection { margin-top: 18px; }
 .collection .sub { margin-bottom: 22px; }
