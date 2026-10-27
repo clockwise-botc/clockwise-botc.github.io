@@ -227,6 +227,7 @@ table.rows td { border-bottom: 0; padding: 7px 8px 7px 0; }
 .bar i { display: block; height: 100%; border-radius: 0 6px 6px 0; background: var(--neutral); }
 .bar i.alive { background: var(--axis); }
 .games-card { margin-top: 16px; }
+.games-card [data-more-games] { display: block; margin: 18px auto 0; }
 .pills { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .tiles .tile .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The headline number or name in the top cards: big, in the display face. */

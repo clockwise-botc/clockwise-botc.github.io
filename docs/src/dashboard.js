@@ -1,15 +1,15 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js?v=93ef744d60';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=93ef744d60';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=93ef744d60';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=93ef744d60';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=93ef744d60';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=93ef744d60';
-import { renderGrimoire } from './grimoire.js?v=93ef744d60';
-import { makeImages } from './images.js?v=93ef744d60';
-import { characterToken, installTokenStyle } from './tokens.js?v=93ef744d60';
-import { multiSelect } from './multiselect.js?v=93ef744d60';
-import { ALL_CHARACTERS } from './characters.js?v=93ef744d60';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=93ef744d60';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js?v=fb3a7db6ef';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=fb3a7db6ef';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=fb3a7db6ef';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=fb3a7db6ef';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=fb3a7db6ef';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=fb3a7db6ef';
+import { renderGrimoire } from './grimoire.js?v=fb3a7db6ef';
+import { makeImages } from './images.js?v=fb3a7db6ef';
+import { characterToken, installTokenStyle } from './tokens.js?v=fb3a7db6ef';
+import { multiSelect } from './multiselect.js?v=fb3a7db6ef';
+import { ALL_CHARACTERS } from './characters.js?v=fb3a7db6ef';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=fb3a7db6ef';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
