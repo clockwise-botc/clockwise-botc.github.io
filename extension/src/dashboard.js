@@ -9,7 +9,7 @@ import { makeImages } from './images.js';
 import { characterToken, installTokenStyle } from './tokens.js';
 import { multiSelect } from './multiselect.js';
 import { ALL_CHARACTERS } from './characters.js';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -114,7 +114,8 @@ const ranked = (rows, keyOf = (r) => r.key) => (iAmQuiet() ? [] : rows.filter((r
 const playerLink = uiPlayerLink;
 // Everyone who has played, for "Your player": [{ key, name }] by name, with a number added when two share a name.
 function playerChoices() {
-  const list = [...playerKeys].map((key) => ({ key, name: nameOf(key) })).filter((x) => x.name);
+  // While setting up a new account (not signed in yet), the players come from the games the community password shows.
+  const list = state.setup ? state.setup.players.map((x) => ({ ...x })) : [...playerKeys].map((key) => ({ key, name: nameOf(key) })).filter((x) => x.name);
   list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   const seen = new Map();
   for (const x of list) { const n = (seen.get(x.name.toLowerCase()) || 0) + 1; seen.set(x.name.toLowerCase(), n); if (n > 1) x.name = `${x.name} (${n})`; }
@@ -1261,8 +1262,10 @@ function addTo(kind, value) {
 function render() {
   // The website shows nothing but the sign-in until someone signs in (or an older visit saved the community password).
   const gate = WEB && (!state.shared.hasPassword || state.signin.open);
-  document.body.classList.toggle('signed-out', gate);
-  if (gate) { $('#filters').hidden = true; $('#view').innerHTML = signInView(); return; }
+  // Creating an account: the setup questions after the form (shown like the sign-in, without the tabs and filters).
+  document.body.classList.toggle('signed-out', gate || !!state.setup);
+  if (state.setup) { $('#filters').hidden = true; $('#view').innerHTML = setupView(); mountClaimPicker(); return; }
+  if (gate) { $('#filters').hidden = true; $('#view').innerHTML = signInView(); refillSignUp(); return; }
   document.querySelectorAll('[data-tab]').forEach((b) => { if (b.closest('.tabs')) b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)); });
   $('#filters').hidden = state.tab === 'data';
   const views = { stats: statsView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
@@ -1388,6 +1391,50 @@ function keepOpenForms(redraw) {
 }
 
 // ---------- shared games: sign-in and status ----------
+// Creating an account on the website, after the sign-up form: which player you are, and whether to see player win
+// rates (no answer picked to begin with). The account is only created on Continue, so Back leaves nothing behind.
+// Both can be changed later in Data & settings.
+const RATES_HINT = {
+  '': 'Choose whether to see other players\' win rates and share your own.',
+  show: 'See everyone\'s win rates and share yours.',
+  hide: 'You won\'t see anyone\'s win rate, and yours won\'t be visible to others.',
+};
+function setupView() {
+  const rates = state.setupRates || '';
+  const opt = (v, label) => `<button type="button" class="toggle setup-opt" data-setup-rates="${v}" aria-pressed="${rates === v}">${label}</button>`;
+  const picker = playerChoices().length
+    ? '<div class="claim-picker" data-claim-picker></div>'
+    : '<p class="sub small">No games have been recorded yet, so there\'s no one to pick. You can do this later in Data &amp; settings.</p>';
+  return `<div class="signin card setup">
+    <img class="logo" src="icons/logo-dark.png" alt="" width="64" height="64">
+    <h2>Welcome</h2>
+    <p class="sub">Two quick things before you start.</p>
+    <div class="setup-q">
+      <div class="field-head">Which player are you?</div>
+      ${picker}
+    </div>
+    <div class="setup-q">
+      <div class="field-head">Would you like to see player win rates?</div>
+      <div class="setup-opts" role="group" aria-label="Player win rates">${opt('show', 'Show win rates')}${opt('hide', 'Hide win rates')}</div>
+      <p class="sub small" id="rates-hint">${RATES_HINT[rates]}</p>
+    </div>
+    <button type="button" class="btn primary" data-setup-done ${rates ? '' : 'disabled'}>Continue</button>
+    <p class="msg" id="claim-msg" role="alert"></p>
+    <button type="button" class="linkish" data-setup-back>Back</button>
+  </div>`;
+}
+
+// Back from the setup: the sign-up form again, filled in as it was.
+function refillSignUp() {
+  const d = state.signupDraft;
+  const f = $('[data-signin="signup"]');
+  if (!d || !f) return;
+  for (const k of ['username', 'password', 'community']) if (f[k]) f[k].value = d[k];
+  if (f.confirm) f.confirm.value = d.password;
+  if (f.remember) f.remember.checked = d.remember;
+  state.signupDraft = null;
+}
+
 function signInView() {
   const st = state.shared.status || {};
   const mode = state.signin.mode;
@@ -1671,9 +1718,23 @@ document.addEventListener('submit', async (e) => {
   button.disabled = true;
   try {
     if (mode === 'signup' && f.password.value !== f.confirm.value) return fail({ error: 'invalid', message: 'The two passwords don\'t match.' });
-    if (mode === 'signin' || mode === 'signup') {
-      const r = mode === 'signin' ? await signIn(state.settings, val('username'), f.password.value) : await signUp(state.settings, val('community'), val('username'), f.password.value);
+    if (mode === 'signup') {
+      // Check the community password (and get the players to pick from), then ask the setup questions. The account
+      // is created when they're answered.
+      const r = await peekGames(state.settings, val('community'));
       if (!r.ok) return fail(r.error === 'not-allowed' ? { error: 'not-allowed', message: 'That community password isn\'t right.' } : r);
+      const names = displayNames(r.games || []);
+      const players = playerTable(r.games || []).map((p) => ({ key: p.key, name: names.get(p.key) || p.name })).filter((x) => x.name);
+      state.setup = { username: val('username'), password: f.password.value, community: val('community'), remember, players };
+      state.setupRates = '';
+      state.claimPick = null;
+      state.shared.status = null;
+      render();
+      return;
+    }
+    if (mode === 'signin') {
+      const r = await signIn(state.settings, val('username'), f.password.value);
+      if (!r.ok) return fail(r);
       webAuth.setAccount(r.token, r.account.username, remember);
       setProfile(r.account);
     } else {
@@ -1831,6 +1892,52 @@ document.addEventListener('submit', async (e) => {
 const claimError = (r) => (r.error === 'unknown-action' ? 'The shared store needs updating before this works.' : r.message || 'Couldn\'t do that. Try again in a moment.');
 
 document.addEventListener('click', async (e) => {
+  // The setup after signing up: pick an answer, finish, or skip.
+  const rates = e.target.closest('[data-setup-rates]');
+  if (rates) {
+    state.setupRates = rates.dataset.setupRates;
+    document.querySelectorAll('[data-setup-rates]').forEach((b) => b.setAttribute('aria-pressed', String(b === rates)));
+    $('#rates-hint').textContent = RATES_HINT[state.setupRates];
+    $('[data-setup-done]').disabled = false;
+    return;
+  }
+  // Back to the sign-up form (nothing has been created yet).
+  if (e.target.closest('[data-setup-back]')) { state.signupDraft = state.setup; state.setup = null; state.claimPick = null; state.signin.mode = 'signup'; render(); return; }
+  const done = e.target.closest('[data-setup-done]');
+  if (done) {
+    const d = state.setup;
+    const pick = playerChoices().find((x) => x.key === state.claimPick);
+    const hide = state.setupRates === 'hide';
+    done.disabled = true;
+    // Create the account. If that fails (a taken username, say), go back to the form to fix it.
+    const r = await signUp(state.settings, d.community, d.username, d.password).catch((err) => ({ ok: false, message: err.message }));
+    if (!r.ok) {
+      state.shared.status = { error: r.error || 'failed', message: r.error === 'not-allowed' ? 'That community password isn\'t right.' : r.message };
+      state.signupDraft = d; state.setup = null; state.signin.mode = 'signup';
+      render();
+      return;
+    }
+    webAuth.setAccount(r.token, r.account.username, d.remember);
+    setProfile(r.account);
+    state.setup = null;
+    // Then the answers. The account exists now, so a problem here is shown in Data & settings rather than undone.
+    let problem = null;
+    if (pick) {
+      const c = await claimPlayer(state.settings, pick.key, pick.name).catch((err) => ({ ok: false, message: err.message }));
+      if (c.ok) setProfile(c.account); else problem = claimError(c);
+    }
+    const p = await setPrivate(state.settings, hide).catch((err) => ({ ok: false, message: err.message }));
+    if (p.ok) setProfile(p.account); else problem = problem || claimError(p);
+    if (myPlayer() && hide) quietPlayers.add(myPlayer());
+    state.claimPick = null;
+    state.shared.status = null;
+    state.signin.open = false;
+    if (problem) state.tab = 'data';
+    await load();
+    await syncShared();
+    if (problem) { const m = $('#claim-msg'); if (m) { m.className = 'msg err'; m.textContent = problem; } }
+    return;
+  }
   const claim = e.target.closest('[data-claim]');
   const un = e.target.closest('[data-unclaim]');
   const remove = e.target.closest('[data-claim-remove]');

@@ -111,12 +111,15 @@ function setupGate() {
     const button = $('gate-submit');
     button.disabled = true;
     const s = await getSettings();
+    // Creating an account: check the community password (and get the players to pick from), then the setup questions.
+    // The account is created when they're answered, so Back (or closing the popup) leaves nothing behind.
     const body = mode === 'signup'
-      ? { action: 'signup', key: f.community.value, username: f.username.value.trim(), password: f.password.value }
+      ? { action: 'read', key: f.community.value }
       : { action: 'signin', username: f.username.value.trim(), password: f.password.value };
     const r = await call(storeUrl(s), body).catch((err) => ({ ok: false, message: err.message }));
     button.disabled = false;
-    if (!r.ok) { $('signin-msg').textContent = r.error === 'not-allowed' ? 'That community password isn\'t right.' : r.message || 'Couldn\'t sign in. Try again in a moment.'; return; }
+    if (!r.ok) { $('signin-msg').textContent = r.error === 'not-allowed' ? (mode === 'signup' ? 'That community password isn\'t right.' : r.message || 'That password isn\'t right.') : r.message || 'Couldn\'t sign in. Try again in a moment.'; return; }
+    if (mode === 'signup') return showSetup({ username: f.username.value.trim(), password: f.password.value, community: f.community.value, games: r.games || [] });
     await saveSettings(signedIn(r));
     form.reset();
     start();
@@ -174,10 +177,91 @@ function fitStats() {
 async function start() {
   const gate = await needsSignIn();
   $('gate').hidden = !gate;
+  $('setup').hidden = true;
   $('main').hidden = gate;
   document.body.classList.toggle('gate-on', gate);
   if (gate) { $('signin').reset(); setGateMode('signin'); $('signin').elements.username.focus(); return; }
   await showMain();
+}
+
+// ---------- setup: creating an account, after the sign-up form ----------
+const RATES_HINT = {
+  '': 'Choose whether to see other players\' win rates and share your own.',
+  show: 'See everyone\'s win rates and share yours.',
+  hide: 'You won\'t see anyone\'s win rate, and yours won\'t be visible to others.',
+};
+let setupRates = '';
+// Everyone in these games, by the name they use most (a number added when two share a name).
+function playerList(games) {
+  const names = new Map();
+  for (const g of games) for (const p of g.players || []) {
+    const key = p.userId || (p.username ? `name:${p.username.toLowerCase()}` : null);
+    if (!key || !p.username) continue;
+    const m = names.get(key) || new Map();
+    m.set(p.username, (m.get(p.username) || 0) + 1);
+    names.set(key, m);
+  }
+  const list = [...names].map(([key, m]) => ({ key, name: [...m].sort((a, b) => b[1] - a[1])[0][0] }));
+  list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const seen = new Map();
+  for (const x of list) { const n = (seen.get(x.name.toLowerCase()) || 0) + 1; seen.set(x.name.toLowerCase(), n); if (n > 1) x.label = `${x.name} (${n})`; }
+  return list;
+}
+
+// Who's logged in to botc.app in an open tab, to pick them to begin with.
+async function botcUser() {
+  const tabs = await chrome.tabs.query({ url: 'https://botc.app/*' });
+  const results = await Promise.all(tabs.map((t) => ping(t.id).catch(() => null)));
+  return (results.map((r) => r && r.status && r.status.me).find(Boolean)) || null;
+}
+
+async function showSetup(draft) {
+  $('gate').hidden = true;
+  $('setup').hidden = false;
+  $('setup-msg').textContent = '';
+  // Win rates: no answer picked to begin with; Continue waits for one.
+  let loaded = false;
+  const setRates = (v) => {
+    setupRates = v;
+    document.querySelectorAll('[data-rates]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rates === v)));
+    $('setup-hint').textContent = RATES_HINT[v];
+    $('setup-done').disabled = !loaded || !v;
+  };
+  document.querySelectorAll('[data-rates]').forEach((b) => { b.onclick = () => setRates(b.dataset.rates); });
+  setRates('');
+  const select = $('setup-player');
+  select.innerHTML = '<option value="">Loading players…</option>';
+  // Continue also waits for who's on botc.app (picked to begin with), so the answer is never sent half-loaded.
+  const list = playerList(draft.games);
+  const me = await botcUser();
+  loaded = true;
+  setRates(setupRates);
+  if (me && me.id && !list.some((x) => x.key === me.id)) list.unshift({ key: me.id, name: me.username || me.id, label: `${me.username || me.id} (on botc.app now)` });
+  select.innerHTML = `<option value="">${list.length ? 'Choose your player…' : 'No players recorded yet'}</option>`
+    + list.map((x) => `<option value="${esc(x.key)}">${esc(x.label || x.name)}</option>`).join('');
+  if (me && me.id) select.value = me.id;
+  // Back to the form, as it was filled in.
+  $('setup-back').onclick = () => { $('setup').hidden = true; $('gate').hidden = false; $('signin-msg').textContent = ''; };
+  $('setup-done').onclick = async () => {
+    $('setup-done').disabled = true;
+    const s = await getSettings();
+    const r = await call(storeUrl(s), { action: 'signup', key: draft.community, username: draft.username, password: draft.password }).catch((err) => ({ ok: false, message: err.message }));
+    if (!r.ok) {
+      // A taken username, say: back to the form to fix it.
+      $('setup').hidden = true; $('gate').hidden = false;
+      $('signin-msg').textContent = r.error === 'not-allowed' ? 'That community password isn\'t right.' : r.message || 'Couldn\'t create the account. Try again in a moment.';
+      return;
+    }
+    // Then the answers (the account exists now, so they can be fixed on the dashboard if one doesn't go through).
+    const token = r.token;
+    const pick = list.find((x) => x.key === select.value);
+    if (pick) await call(storeUrl(s), { action: 'claim', token, player: pick.key, name: pick.name }).catch(() => null);
+    await call(storeUrl(s), { action: 'set-private', token, private: setupRates === 'hide' }).catch(() => null);
+    // Having answered, the popup won't claim a botc.app player for you later.
+    await saveSettings({ ...signedIn(r), autoClaimedFor: r.account.username });
+    $('signin').reset();
+    start();
+  };
 }
 
 // Games recorded here (not counting ones you chose not to record), and who won the last one. A game is saved when it

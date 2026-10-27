@@ -7,8 +7,8 @@
 //     With both selected, games also narrow to those where each selected player held one of the types.
 //     With only characters selected, the seats are whoever held those characters.
 
-import { playerKey, displayName } from './stats.js?v=7834be4561';
-import { ALL_CHARACTERS } from './characters.js?v=7834be4561';
+import { playerKey, displayName } from './stats.js?v=53ca64fd43';
+import { ALL_CHARACTERS } from './characters.js?v=53ca64fd43';
 
 export const TYPES = ['townsfolk', 'outsider', 'minion', 'demon', 'traveller'];
 const rate = (w, n) => (n ? w / n : null);

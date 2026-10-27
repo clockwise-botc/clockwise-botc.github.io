@@ -121,6 +121,9 @@ export async function checkKey(settings, key) {
 const accountCall = (settings, body) => { const c = creds(settings); return c.url ? call(c.url, body) : Promise.resolve({ ok: false, error: 'no-backend' }); };
 export const signUp = (settings, communityPassword, username, password) => accountCall(settings, { action: 'signup', key: communityPassword, username, password });
 export const signIn = (settings, username, password) => accountCall(settings, { action: 'signin', username, password });
+// The games anyone with the community password can see: checks that password, and lists the players to pick from
+// before an account exists.
+export const peekGames = (settings, communityPassword) => accountCall(settings, { action: 'read', key: communityPassword });
 // Still signed in? (A password change elsewhere, or an editor's reset, signs this device out.)
 export const whoAmI = (settings) => { const c = creds(settings); return c.token ? accountCall(settings, { action: 'ping', token: c.token }) : Promise.resolve(null); };
 export const changePassword = (settings, password, newPassword) => accountCall(settings, { action: 'change-password', token: creds(settings).token, password, newPassword });

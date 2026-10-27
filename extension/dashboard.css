@@ -501,6 +501,20 @@ td.nowrap { white-space: nowrap; }
 /* ---------- shared games ---------- */
 /* Website sign-in: just the logo and the password until it's accepted. */
 body.signed-out .tabs, body.signed-out #filters { display: none !important; }
+body.setting-up .tabs, body.setting-up #filters { display: none !important; }
+/* The questions after signing up, in the sign-in card. */
+.setup { max-width: 460px; gap: 12px; }
+.setup-q { display: grid; gap: 8px; width: 100%; margin-top: 14px; text-align: left; }
+.setup-q .field-head { font-size: 15px; color: var(--ink); }
+.setup-q .sub.small { margin: -4px 0 2px; }
+.setup-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
+.setup-opt { border: 1.5px solid var(--border); padding: 11px 14px; font-size: 14.5px; }
+.setup-opt:hover:not([aria-pressed="true"]) { border-color: var(--ink-2); color: var(--ink); }
+.setup-opt[aria-pressed="true"] { border-color: var(--ink); }
+.setup-q #rates-hint { margin: 4px 0 0; min-height: 2.9em; }
+.setup [data-setup-done]:disabled { opacity: .45; cursor: default; }
+.setup [data-setup-done] { width: 100%; margin-top: 16px; }
+.setup #claim-msg:empty { display: none; }
 .signin { max-width: 420px; margin: 8vh auto; text-align: center; display: grid; gap: 10px; justify-items: center; padding: 36px 32px; }
 .signin h2 { font-size: 34px; margin: 4px 0 0; }
 .signin form { display: grid; gap: 14px; width: 100%; margin-top: 8px; }

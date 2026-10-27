@@ -3,8 +3,8 @@
 //   Extension, sharing: everyone's games from the shared store, plus this browser's games not uploaded yet.
 //   Website (community dashboard): everyone's games, after the community password.
 // Downloads are cached (chrome.storage in the extension, IndexedDB on the website) and topped up incrementally.
-import { BACKEND_URL, SITE_URL } from './config.js?v=7834be4561';
-import { call, pull, ping, editPatch } from './shared.js?v=7834be4561';
+import { BACKEND_URL, SITE_URL } from './config.js?v=53ca64fd43';
+import { call, pull, ping, editPatch } from './shared.js?v=53ca64fd43';
 
 // Set by web-config.js on the community website.
 export const WEB = (typeof window !== 'undefined' && window.CLOCKWISE_WEB) || null;
@@ -121,6 +121,9 @@ export async function checkKey(settings, key) {
 const accountCall = (settings, body) => { const c = creds(settings); return c.url ? call(c.url, body) : Promise.resolve({ ok: false, error: 'no-backend' }); };
 export const signUp = (settings, communityPassword, username, password) => accountCall(settings, { action: 'signup', key: communityPassword, username, password });
 export const signIn = (settings, username, password) => accountCall(settings, { action: 'signin', username, password });
+// The games anyone with the community password can see: checks that password, and lists the players to pick from
+// before an account exists.
+export const peekGames = (settings, communityPassword) => accountCall(settings, { action: 'read', key: communityPassword });
 // Still signed in? (A password change elsewhere, or an editor's reset, signs this device out.)
 export const whoAmI = (settings) => { const c = creds(settings); return c.token ? accountCall(settings, { action: 'ping', token: c.token }) : Promise.resolve(null); };
 export const changePassword = (settings, password, newPassword) => accountCall(settings, { action: 'change-password', token: creds(settings).token, password, newPassword });

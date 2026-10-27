@@ -55,6 +55,17 @@
     .gate input::placeholder { color: var(--ink-2); opacity: .7; }
     .gate input:focus { border-color: var(--accent); }
     .gate .btn { height: 46px; font-size: 15px; }
+    .setup .q { display: grid; gap: 3px; justify-self: stretch; text-align: left; margin-top: 10px; }
+    .setup .q b { font-size: 14.5px; }
+    .setup .community-select { width: 100%; }
+    .setup .opts { justify-self: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .setup .opt { border: 1.5px solid var(--border); padding: 9px 8px; font-size: 13.5px; }
+    .setup .opt:hover:not([aria-pressed="true"]) { border-color: var(--ink-2); color: var(--ink); }
+    .setup .opt[aria-pressed="true"] { border-color: var(--ink); }
+    .setup #setup-hint { justify-self: stretch; text-align: left; min-height: 3.2em; }
+    .setup #setup-done:disabled { opacity: .45; cursor: default; }
+    .setup #setup-done { justify-self: stretch; margin-top: 6px; }
+    .setup .msg:empty { display: none; }
     .gate .forgot { color: var(--ink-2); font-size: 14px; margin: 12px 0 0; }
     .btn { font: inherit; font-weight: 700; padding: 10px 16px; border-radius: 999px; border: 0; cursor: pointer; }
     .btn.primary { background: var(--accent); color: #fff; }
@@ -83,6 +94,22 @@
         <span class="msg" id="signin-msg" role="alert"></span>
         <p class="forgot" data-signin-only>Forgot your password? Ask an editor to set a new one.</p>
       </form>
+    </div>
+    <!-- Creating an account, after the form: which player you are, and whether to see player win rates. -->
+    <div class="gate setup" id="setup" hidden>
+      <img src="icons/logo-dark.png" alt="" width="56" height="56">
+      <h2>Welcome</h2>
+      <p class="muted">Two quick things before you start.</p>
+      <div class="q"><b>Which player are you?</b></div>
+      <select class="community-select" id="setup-player" aria-label="Which player are you?"><option value="">Loading players…</option></select>
+      <div class="q"><b>Would you like to see player win rates?</b></div>
+      <div class="opts" role="group" aria-label="Player win rates">
+        <button class="choice opt" data-rates="show" aria-pressed="false">Show win rates</button><button class="choice opt" data-rates="hide" aria-pressed="false">Hide win rates</button>
+      </div>
+      <p class="muted small" id="setup-hint"></p>
+      <button class="btn primary" id="setup-done">Continue</button>
+      <span class="msg" id="setup-msg" role="alert"></span>
+      <button class="linkish muted" id="setup-back">Back</button>
     </div>
     <div id="main" hidden>
     <div class="status"><span class="dot" id="dot"></span><span id="status">Checking…</span></div>
