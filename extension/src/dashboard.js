@@ -2,6 +2,7 @@ import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNam
 import { predictOutcome, tuneOutcomeModel } from './insights.js';
 import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js';
 import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js';
+import { communityMembers, MIN_MEMBER_GAMES } from './members.js';
 import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js';
 import { renderData, handleDataClick, handleImport } from './dataview.js';
 import { renderGrimoire } from './grimoire.js';
@@ -97,6 +98,11 @@ function writeHash() {
 // ---------- lookups ----------
 let playerNames = new Map(); // account → the name shown (their most-used), for players and storytellers
 let playerKeys = new Set(); // accounts that have played (not only storytold)
+// Each community's members (members.js), and players from games without a community. Rankings and player
+// lists only show members of the communities being looked at, so people from another group's lobby who
+// sat down with one of us don't turn up there (the games they played with us still count for us).
+let members = new Map();
+let freeKeys = new Set();
 let images = makeImages(null);
 let artAsked = false;
 let roleMeta = {}; // per character: [first night, other nights, reminders, setup, edition], from botc.app
@@ -110,7 +116,14 @@ const myPlayer = () => (state.profile && state.profile.claim ? state.profile.cla
 const iAmQuiet = () => !!(state.profile && state.profile.claim && state.profile.profile && state.profile.profile.private);
 const ratesHidden = (key) => iAmQuiet() || quietPlayers.has(key);
 // A ranking of players by win rate, without those who hide theirs (and none at all for someone who hides them).
-const ranked = (rows, keyOf = (r) => r.key) => (iAmQuiet() ? [] : rows.filter((r) => !quietPlayers.has(keyOf(r))));
+const ranked = (rows, keyOf = (r) => r.key) => (iAmQuiet() ? [] : rows.filter((r) => !quietPlayers.has(keyOf(r)) && isMember(keyOf(r))));
+// A member of any of the communities picked in the filter (all of them when none is picked). You always are.
+function isMember(key) {
+  if (key === myPlayer() || freeKeys.has(key)) return true;
+  const ids = state.filters.communities.length ? state.filters.communities : [...members.keys()];
+  return ids.some((c) => members.has(c) && members.get(c).has(key));
+}
+const memberRows = (rows, keyOf = (r) => r.key) => rows.filter((r) => isMember(keyOf(r)));
 const playerLink = uiPlayerLink;
 // Everyone who has played, for "Your player": [{ key, name }] by name, with a number added when two share a name.
 function playerChoices() {
@@ -286,7 +299,7 @@ const gamesCards = {
   balance: (G) => balanceCard(overview(G)),
   playerCount: (G) => playerCountCard(G),
   players: (G) => {
-    const rows = playerTable(G).map((p) => ({ key: p.key, name: p.name, games: p.plays })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
+    const rows = memberRows(playerTable(G)).map((p) => ({ key: p.key, name: p.name, games: p.plays })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
     return rows.length > 1 ? frequencyCard('freq-players', 'Most frequent players', 'Who has played the most games. Click a name to see their stats.', rows, (r) => playerLink(r.key, r.name)) : '';
   },
   storytellers: (G) => {
@@ -725,8 +738,8 @@ function playerSections(G, sel, seats, base) {
     const key = sel.players[0];
     const rel = relations(G, key);
     // Players who hide their win rates aren't ranked on anyone else's page either.
-    rel.teammates = rel.teammates.filter((r) => !quietPlayers.has(r.key));
-    rel.rivals = rel.rivals.filter((r) => !quietPlayers.has(r.key));
+    rel.teammates = rel.teammates.filter((r) => !quietPlayers.has(r.key) && isMember(r.key));
+    rel.rivals = rel.rivals.filter((r) => !quietPlayers.has(r.key) && isMember(r.key));
     const noms = nominationStats(G, [key]);
     const quiet = ratesHidden(key);
     out.push(quiet ? quietHero(st) : playerHero(base, key, st));
@@ -992,15 +1005,23 @@ function gamesList(G) {
   return `<div class="card games-card"><p class="sub">Click a game to see its grimoire: who sat where, their characters, who died and the storyteller's reminder tokens. You can also fix its details there.</p>
     ${shown.map((g) => {
       const demons = g.players.filter((p) => p.team === 'demon').map((p) => p.roleName).join(', ');
-      return `<details class="game ${g.excluded ? 'excluded' : ''}" data-game="${esc(g.id)}" ${state.openGame === g.id ? 'open' : ''}>
+      return `<details class="game ${g.excluded || g.outside ? 'excluded' : ''}" data-game="${esc(g.id)}" ${state.openGame === g.id ? 'open' : ''}>
         <summary><span>${fmtDate(g.endedAt)}<br><span class="muted">${fmtTime(g.endedAt)}</span></span>
           <span><b>${esc(g.script.name || 'Unknown script')}</b> · ${g.playerCount} players${g.travellerCount ? ` + ${plural(g.travellerCount, 'traveller')}` : ''} · ${plural(g.days, 'day')}<br><span class="muted">Demon: ${esc(demons || 'unknown')}${g.notes ? ` · ${esc(g.notes)}` : ''}</span></span>
-          <span class="pills">${g.community ? `<span class="pill">${esc(communityName(state.settings, g.community))}</span>` : ''}<span class="pill ${g.winner}">${cap(g.winner)} won</span></span></summary>
+          <span class="pills">${g.outside ? '<span class="pill">Other lobby</span>' : g.community ? `<span class="pill">${esc(communityName(state.settings, g.community))}</span>` : ''}<span class="pill ${g.winner}">${cap(g.winner)} won</span></span></summary>
         ${state.openGame === g.id ? gameDetail(g) : ''}
       </details>`;
     }).join('')}
     ${G.length > shown.length ? `<button class="btn" data-more-games>Show ${Math.min(25, G.length - shown.length)} more</button>` : ''}
   </div>`;
+}
+
+// For a game that looks like it's from another group's lobby (or one counted anyway): count it for its community.
+function countAnywayBox(g) {
+  const name = esc(communityName(state.settings, g.community));
+  return `<label class="gm-check"><input type="checkbox" data-count-anyway="${esc(g.id)}" ${g.outside ? '' : 'checked'}><span><b>Count for ${name}</b><span>${g.outside
+    ? `Looks like another group's lobby: fewer than half the players have played ${MIN_MEMBER_GAMES}+ ${name} games, and neither has the storyteller. It isn't in the stats.`
+    : `Counted for ${name} by hand.`}</span></span></label>`;
 }
 
 function gameDetail(g) {
@@ -1029,6 +1050,7 @@ function gameDetail(g) {
         <label class="gm-field"><span class="field-label">Storyteller</span><input type="text" value="${esc(g.storytellers.map((s) => s.username).filter(Boolean).join(', '))}" placeholder="Not recorded — type a name" data-st="${esc(g.id)}"></label>
         <label class="gm-field gm-wide"><span class="field-label">Notes</span><textarea rows="2" placeholder="Anything to remember about this game" data-notes="${esc(g.id)}">${esc(g.notes || '')}</textarea></label>
       </div>
+      ${g.outside || (g.counts === 'chosen' && g.communityManual) ? countAnywayBox(g) : ''}
       <label class="gm-check"><input type="checkbox" data-exclude="${esc(g.id)}" ${g.excluded ? 'checked' : ''}><span><b>Exclude from stats</b><span>The game stays in this list but doesn't count towards anything on the Stats tab.</span></span></label>
       </fieldset>
       <div class="gm-foot">
@@ -1118,7 +1140,7 @@ function statsView() {
   const st = seatSel ? seatStats(seats) : null;
   const top = hasSelection(sel) ? null : topWinRate(base);
   // Without player win rates: whoever has played the most games instead.
-  const busiest = hasSelection(sel) || !iAmQuiet() ? null : playerTable(base).sort((a, b) => b.plays - a.plays || a.name.localeCompare(b.name))[0] || null;
+  const busiest = hasSelection(sel) || !iAmQuiet() ? null : memberRows(playerTable(base)).sort((a, b) => b.plays - a.plays || a.name.localeCompare(b.name))[0] || null;
   // Players whose win rates this page leaves out.
   const quietPick = sel.players.some(ratesHidden);
   const onePlayer = sel.players.length === 1 ? sel.players[0] : null;
@@ -1195,7 +1217,7 @@ function statsView() {
 
 // ---------- filters & dropdowns ----------
 function populateFilters() {
-  const all = state.games;
+  const all = state.games.filter((g) => !g.outside);
   const opts = (name, values, allLabel, label = (v) => v) => {
     const sel = $(`[data-filter="${name}"]`);
     const cur = state.filters[name];
@@ -1229,7 +1251,7 @@ function renderCommunityFilter() {
 function setupDropdowns() {
   const defs = {
     // Your own player (if you've claimed one) comes first.
-    players: { label: 'Players', nameOf: nameOf, options: () => [...playerKeys].map((value) => ({ value, label: nameOf(value), sub: value === myPlayer() ? 'You' : '' }))
+    players: { label: 'Players', nameOf: nameOf, options: () => [...playerKeys].filter((k) => isMember(k) || state.sel.players.includes(k)).map((value) => ({ value, label: nameOf(value), sub: value === myPlayer() ? 'You' : '' }))
       .sort((a, b) => (b.value === myPlayer()) - (a.value === myPlayer()) || a.label.localeCompare(b.label)) },
     characters: { label: 'Characters', nameOf: charName, options: () => [...charInfo.values()].map((c) => ({ value: c.roleId, label: c.name, sub: teamOne(c.team) })).sort((a, b) => a.label.localeCompare(b.label)) },
     types: { label: 'Character type', nameOf: teamOne, options: () => TYPES.map((t) => ({ value: t, label: teamOne(t) })) },
@@ -1505,6 +1527,10 @@ async function load() {
   state.shared = { ...state.shared, on: !!c.url, hasPassword: canReadWith(c), account: c.token ? { username: c.username } : null, canEdit: !c.url || !!c.editorKey, cacheAt: cache && cache.at };
   const map = c.url ? mergeGames(local, cache) : local;
   state.games = Object.values(map).map((g) => ({ ...g, community: gameCommunity(state.settings, g) }));
+  // Games from another group's lobby are kept but left out of the stats (members.js).
+  const cm = communityMembers(state.games.filter((g) => !g.excluded), state.settings);
+  members = cm.members;
+  for (const g of state.games) { g.counts = cm.status.get(g.id) || null; g.outside = g.counts === 'outside'; }
   state.lastSync = WEB ? null : await api.get('lastSync', null);
   // botc.app's art: the extension reads it itself; the website gets it from the shared store.
   const meta = (cache && cache.meta) || {};
@@ -1520,7 +1546,8 @@ async function load() {
   quietPlayers = new Set((cache && cache.privatePlayers) || []);
   playerNames = displayNames(state.games);
   useDisplayNames(playerNames);
-  playerKeys = new Set(playerTable(state.games).map((p) => p.key));
+  playerKeys = new Set(playerTable(state.games.filter((g) => !g.outside)).map((p) => p.key));
+  freeKeys = new Set(playerTable(state.games.filter((g) => !g.community && !g.excluded)).map((p) => p.key));
   charInfo = new Map(characterTable(state.games, null).map((c) => [c.roleId, c]));
   populateFilters();
   if (!dropdowns.players) setupDropdowns();
@@ -1635,6 +1662,7 @@ document.addEventListener('change', async (e) => {
     state.expanded.clear();
     render();
   } else if (t.dataset.exclude) { await updateGame(t.dataset.exclude, { excluded: t.checked }); await load(); }
+  else if (t.dataset.countAnyway) { await updateGame(t.dataset.countAnyway, { communityManual: t.checked }); await load(); }
   else if (t.dataset.notes) { await updateGame(t.dataset.notes, { notes: t.value }); }
   else if (t.dataset.st) {
     const names = t.value.split(',').map((n) => n.trim()).filter(Boolean);
