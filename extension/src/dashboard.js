@@ -5,7 +5,7 @@ import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from '.
 import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js';
 import { renderData, handleDataClick, handleImport } from './dataview.js';
 import { playstyles } from './playstyles.js';
-import { tableTalk, nominationPairs, votePairs, MEASURES } from './tabletalk.js';
+import { tableTalk, nominationPairs, votePairs, enemies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js';
 import { talkCell, talkChartCard, talkChartBody, talkChartNote, talkChartSub, scatterCard, scatterSvg, scatterNote, scatterPick, SCATTER_MAX, TALK_SIDES } from './tabletalkview.js';
 import { renderGrimoire } from './grimoire.js';
 import { makeImages } from './images.js';
@@ -25,7 +25,7 @@ const api = {
 };
 
 // ---------- state ----------
-const TABS = ['stats', 'styles', 'games', 'data'];
+const TABS = ['stats', 'me', 'styles', 'games', 'data'];
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('dash.prefs')) || {}; } catch { return {}; } })();
 const state = {
   tab: readTab(),
@@ -776,6 +776,24 @@ function talkCard(base, key) {
   return card('Around the grimoire', `Per day alive, next to the average player in the same games (overall, as good, as evil). ${steadyNote} Only games recorded from the start count. Hover for the counts.`,
     `<div class="table-wrap"><table class="tt"><thead><tr><th></th><th>Overall</th><th>As good</th><th>As evil</th></tr></thead><tbody>${rows}</tbody></table></div>`, 'wide');
 }
+// Biggest enemy (tabletalk.js `enemies`): the top score, with the four things behind it, and the next two.
+function enemyCard(base, key) {
+  const [top, ...rest] = enemies(base, key);
+  if (!top) return '';
+  const me = esc(nameOf(key)), them = esc(top.name);
+  const times = (n) => (n === 1 ? 'time' : 'times');
+  const tiles = [
+    [top.theyNom.n, `${times(top.theyNom.n)} ${them} nominated ${me} (${top.theyNom.exp.toFixed(1)} expected)`],
+    [top.iNom.n, `${times(top.iNom.n)} ${me} nominated ${them} (${top.iNom.exp.toFixed(1)} expected)`],
+    top.theyVote && [pct(top.theyVote.rate), `of ${me}'s nominations ${them} voted on (usually ${pct(top.theyVote.base)})`],
+    top.iVote && [pct(top.iVote.rate), `of ${them}'s nominations ${me} voted on (usually ${pct(top.iVote.base)})`],
+  ].filter(Boolean).map(([b, t]) => `<div><b>${b}</b><span>${t}</span></div>`).join('');
+  const how = 'Nominations and votes between the two, each next to what\'s typical. Being nominated or voted on counts more than doing it, and nominations count more than votes.';
+  const next = rest.slice(0, 2).map((r) => playerLink(r.key, r.name));
+  return card(`Biggest enemy <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, `Out of everyone with at least ${ENEMY_MIN_GAMES} games together.`,
+    `<p class="enemy-name">${playerLink(top.key, top.name)} <span class="muted">· ${plural(top.games, 'game')} together</span></p><div class="mini-tiles">${tiles}</div>${next.length ? `<p class="sub">Next: ${next.join(', ')}</p>` : ''}`);
+}
+
 function pairsCards(base, key) {
   const { nominates, nominatedBy } = nominationPairs(base, key);
   const cols = (who) => [colPlayer(who), colNum('Nominations', (r) => r.n), colNum('Games together', (r) => r.games)];
@@ -855,6 +873,7 @@ function playerSections(G, sel, seats, base) {
       <div><b>${noms.votes}</b><span>votes cast</span></div>
       <div><b>${pct(noms.voteAccuracy)}</b><span>of their votes were on evil players</span></div></div>`));
     out.push(talkCard(base, key));
+    out.push(enemyCard(base, key));
     out.push(pairsCards(base, key));
     out.push(votePairCards(base, key));
     const counts = (rows, name) => rows.map((r) => ({ name: name(r), games: r.plays })).sort((a, b) => b.games - a.games);
@@ -1224,13 +1243,13 @@ function awardTiles(base) {
   const detective = best('good', 'enemyExecs', (p) => p.t.tracked);
   if (detective.length) {
     const p = detective[0];
-    out.push(tile(`Top detective${info('As good: the most evil players executed from their nominations, per game (3+ games as good).')}`, names(detective),
+    out.push(tile(`Best detective${info('As good: the most evil players executed from their nominations, per game (3+ games as good).')}`, names(detective),
       detective.length > 1 ? `${p.values.enemyExecs.raw.toFixed(2)} evil players executed per game from their nominations` : `${plural(p.t.enemyExecs, 'evil player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
   const framer = best('evil', 'enemyExecs', (p) => p.t.tracked);
   if (framer.length) {
     const p = framer[0];
-    out.push(tile(`Top framer${info('As evil: the most good players executed from their nominations, per game (3+ games as evil).')}`, names(framer),
+    out.push(tile(`Best framer${info('As evil: the most good players executed from their nominations, per game (3+ games as evil).')}`, names(framer),
       framer.length > 1 ? `${p.values.enemyExecs.raw.toFixed(2)} good players executed per game from their nominations` : `${plural(p.t.enemyExecs, 'good player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
   const survivor = best('all', 'survived', (p) => p.t.known);
@@ -1240,6 +1259,20 @@ function awardTiles(base) {
       survivor.length > 1 ? `alive at the end of ${pct(p.values.survived.raw)} of their games` : `alive at the end of ${alive} of ${plural(p.t.known, 'game')}`, 'award'));
   }
   return out.length ? `<div class="tiles awards">${out.join('')}</div>` : '';
+}
+
+// "My stats": your own player page, without having to find yourself first.
+function myView() {
+  const me = myPlayer();
+  if (!me) {
+    const signedIn = !!state.profile;
+    return `<div class="card my-pick"><h3>Which player are you?</h3>${signedIn
+      ? '<p class="sub">Pick yourself once and this tab will show your stats.</p><div class="toolbar claim-form"><div class="claim-picker" data-claim-picker></div><button class="btn primary" type="button" data-claim>Claim</button></div><p class="msg" id="claim-msg"></p>'
+      : `<p class="sub">${WEB ? 'Sign in' : 'Sign in from the extension\'s popup'} and pick yourself, and this tab will show your stats.</p>`}</div>`;
+  }
+  const keep = state.sel;
+  state.sel = { ...emptySelection(), players: [me] };
+  try { return statsView(); } finally { state.sel = keep; }
 }
 
 function stylesView() {
@@ -1424,7 +1457,8 @@ function render() {
   document.querySelectorAll('[data-tab]').forEach((b) => { if (b.closest('.tabs')) b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)); });
   $('#filters').hidden = state.tab === 'data';
   document.body.classList.toggle('tab-styles', state.tab === 'styles');
-  const views = { stats: statsView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
+  document.body.classList.toggle('tab-me', state.tab === 'me');
+  const views = { stats: statsView, me: myView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
   keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab](); });
   // Editors' account list loads the first time Data & settings is opened.
   mountClaimPicker();

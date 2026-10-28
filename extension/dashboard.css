@@ -667,6 +667,9 @@ table.tt td:first-child { color: var(--ink-2); max-width: 160px; }
 /* Playstyles tab: cards stacked full width; the player, character and type pickers don't apply there. */
 .grid.stack { grid-template-columns: 1fr; }
 body.tab-styles [data-ms="players"], body.tab-styles [data-ms="characters"], body.tab-styles [data-ms="types"] { display: none; }
+body.tab-me [data-ms="players"], body.tab-me [data-ms="characters"], body.tab-me [data-ms="types"] { display: none; }
+.enemy-name { font-size: 22px; font-weight: 700; margin: 4px 0 14px; }
+.enemy-name .muted { font-size: 14px; font-weight: 400; }
 .grid.stack > .card { grid-column: 1 / -1; }
 
 /* Around the grimoire bars and scatter dots: plum for all games, Townsfolk blue as good, Minion rust as evil. You stay in ink. */

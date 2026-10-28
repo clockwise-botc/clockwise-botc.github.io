@@ -221,3 +221,68 @@ export function votePairs(games, key, { minChances = 3 } = {}) {
   // Against: my votes, so my usual rate. By: their votes, so each voter's own usual rate.
   return { against: finish(against, () => key), by: finish(by, (r) => r.key), usual: baseOf(key) };
 }
+
+// Biggest enemy: the player `key` has the most friction with, from four things between the two of them:
+//   they nominate `key`   (weight ENEMY_WEIGHTS.theyNominate)
+//   `key` nominates them  (iNominate)
+//   they vote on `key`'s nominations  (theyVote)
+//   `key` votes on their nominations  (iVote)
+// Nominations weigh a little more than votes, and being targeted a little more than targeting. Each is measured
+// against what's typical rather than counted, so playing lots of games together doesn't make an enemy:
+//   nominations: how many there were next to how many you'd expect if nominators picked anyone at the table
+//     (each nomination is one of the other seated players), as log((count + 1) / (expected + 1));
+//   votes: the voter's rate on the other's nominations next to their usual rate (votePairs), as log(rate / usual).
+// The four are put on the same scale (standardised across everyone they've played at least `minGames` games with)
+// and averaged with the weights. The top score is the biggest enemy.
+export const ENEMY_WEIGHTS = { theyNominate: 1.5, iNominate: 1.25, theyVote: 1.25, iVote: 1 };
+export const ENEMY_MIN_GAMES = 3;
+export function enemies(games, key, { minGames = ENEMY_MIN_GAMES } = {}) {
+  const rows = new Map();
+  const row = (p) => {
+    const k = playerKey(p);
+    if (!rows.has(k)) rows.set(k, { key: k, name: displayName(k, p.username), games: 0, iNom: { n: 0, exp: 0 }, theyNom: { n: 0, exp: 0 } });
+    return rows.get(k);
+  };
+  for (const g of games) {
+    const me = g.players.find((p) => playerKey(p) === key);
+    if (!me) continue;
+    const others = g.players.filter((p) => playerKey(p) && playerKey(p) !== key);
+    for (const p of others) row(p).games++;
+    const seated = g.players.filter((p) => !p.isTraveller);
+    const bySeat = new Map(g.players.map((p) => [p.seat, p]));
+    for (const n of g.nominations || []) {
+      if (n.type === 'exile') continue;
+      const from = bySeat.get(n.nominatorSeat), to = bySeat.get(n.nomineeSeat);
+      if (!from || !to) continue;
+      const pool = seated.filter((p) => p.seat !== from.seat);
+      if (!pool.length) continue;
+      if (from.seat === me.seat) {
+        for (const q of pool) if (playerKey(q)) { const r = row(q); r.iNom.exp += 1 / pool.length; if (q.seat === to.seat) r.iNom.n++; }
+      } else if (playerKey(from) && pool.some((q) => q.seat === me.seat)) {
+        const r = row(from); r.theyNom.exp += 1 / pool.length; if (to.seat === me.seat) r.theyNom.n++;
+      }
+    }
+  }
+  const { against, by } = votePairs(games, key, { minChances: 1 });
+  const voteOf = (list) => new Map(list.filter((r) => r.base > 0).map((r) => [r.key, r]));
+  const iVoteOf = voteOf(against), theyVoteOf = voteOf(by);
+  const list = [...rows.values()].filter((r) => r.games >= minGames).map((r) => {
+    const iVote = iVoteOf.get(r.key) || null, theyVote = theyVoteOf.get(r.key) || null;
+    return { ...r, iVote, theyVote, parts: {
+      theyNominate: Math.log((r.theyNom.n + 1) / (r.theyNom.exp + 1)),
+      iNominate: Math.log((r.iNom.n + 1) / (r.iNom.exp + 1)),
+      theyVote: theyVote ? Math.log(theyVote.shrunk / theyVote.base) : 0,
+      iVote: iVote ? Math.log(iVote.shrunk / iVote.base) : 0,
+    } };
+  });
+  const wsum = Object.values(ENEMY_WEIGHTS).reduce((a, b) => a + b, 0);
+  for (const r of list) r.z = {};
+  for (const id of Object.keys(ENEMY_WEIGHTS)) {
+    const xs = list.map((r) => r.parts[id]);
+    const mean = xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
+    const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / (xs.length || 1));
+    for (const r of list) r.z[id] = sd > 0 ? (r.parts[id] - mean) / sd : 0;
+  }
+  for (const r of list) r.score = Object.entries(ENEMY_WEIGHTS).reduce((s, [id, w]) => s + w * r.z[id], 0) / wsum;
+  return list.sort((a, b) => b.score - a.score || b.games - a.games || a.name.localeCompare(b.name));
+}
