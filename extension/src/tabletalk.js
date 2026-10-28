@@ -117,7 +117,8 @@ export function gapOf(id, value, avg) {
 
 // For each side ('all', 'good', 'evil'): every player's totals, raw and shrunk rates and gap from the table average.
 // `listed`: has enough games on that side to be shown in the all-player chart and table.
-export function tableTalk(games) {
+// minGames: games a player needs to be listed (the Playstyles tab's "Min. games"); MIN_GAMES by default.
+export function tableTalk(games, { minGames = null } = {}) {
   const recs = seatRecords(games);
   const out = {};
   for (const side of ['all', 'good', 'evil']) {
@@ -136,9 +137,9 @@ export function tableTalk(games) {
         const value = table[id] === null ? null : (c + m.shrink * table[id]) / (n + m.shrink);
         rates[id] = { raw: n ? c / n : null, n, value, gap: value === null ? null : gapOf(id, value, table[id]) };
       }
-      return { ...pl, games: pl.t.games, rates, listed: pl.t.games >= MIN_GAMES[side] };
+      return { ...pl, games: pl.t.games, rates, listed: pl.t.games >= (minGames ?? MIN_GAMES[side]) };
     });
-    out[side] = { players: players.sort((a, b) => b.games - a.games || a.name.localeCompare(b.name)), table, listed: players.filter((p) => p.listed).length, minGames: MIN_GAMES[side], seats: pooled.games };
+    out[side] = { players: players.sort((a, b) => b.games - a.games || a.name.localeCompare(b.name)), table, listed: players.filter((p) => p.listed).length, minGames: minGames ?? MIN_GAMES[side], seats: pooled.games };
   }
   return out;
 }

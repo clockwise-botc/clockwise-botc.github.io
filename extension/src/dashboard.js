@@ -32,6 +32,7 @@ const state = {
   talkView: { measure: 'loud', side: 'all', expanded: false }, // Around the grimoire chart: measure, games, all players shown
   scatterView: { kind: 'noms', side: 'all', chosen: null }, // Playstyles scatter: nominations or votes, games, players picked (null = default)
   styleSide: 'all', // Playstyles: one toggle (all games, as good, as evil) for the chart, the scatter and win rates
+  minGames: 3, // Playstyles: games a player needs (2–10) to be on the chart, the scatter and win rates
   filters: { communities: Array.isArray(prefs.communities) ? prefs.communities : [], script: '', storyteller: '', days: '' },
   sel: readHash(),
   expanded: new Set(),
@@ -720,9 +721,9 @@ function heldSections(G, sel, seats, base) {
 
 // ---------- around the grimoire (per day alive, next to the average) ----------
 // Worked out once per set of games: the main page's chart and the player page both use it.
-let talkCache = { games: null, out: null };
-function talk(base) {
-  if (talkCache.games !== base) talkCache = { games: base, out: tableTalk(base) };
+let talkCache = { games: null, min: null, out: null };
+function talk(base, min = null) {
+  if (talkCache.games !== base || talkCache.min !== min) talkCache = { games: base, min, out: tableTalk(base, { minGames: min }) };
   return talkCache.out;
 }
 // The Around the grimoire chart and the scatter redraw in place (so the scatter's picker stays open while picking).
@@ -730,7 +731,7 @@ const talkHelpers = () => ({ playerLink, me: myPlayer() });
 function refreshTalkChart() {
   const body = $('#tt-chart'), note = $('#tt-note');
   if (!body) return;
-  const T = talk(baseGames());
+  const T = talk(baseGames(), state.minGames);
   body.innerHTML = talkChartBody(T, state.talkView, talkHelpers());
   note.textContent = talkChartNote(T, state.talkView, talkHelpers());
   const sub = $('.tt-chart-card > .sub');
@@ -740,7 +741,7 @@ let scatterPicker = null;
 function refreshScatter(message = '') {
   const body = $('#sc-body'), note = $('#sc-note');
   if (!body) return;
-  const T = talk(baseGames());
+  const T = talk(baseGames(), state.minGames);
   body.innerHTML = scatterSvg(T, state.scatterView, talkHelpers());
   note.innerHTML = scatterNote(T, state.scatterView, talkHelpers()) + (message ? ` <b class="sc-warn">${esc(message)}</b>` : '');
   if (scatterPicker) scatterPicker.refresh();
@@ -751,7 +752,7 @@ function mountScatterPicker() {
   const root = $('[data-ms-scatter]');
   scatterPicker = null;
   if (!root) return;
-  const pick = () => scatterPick(talk(baseGames()), state.scatterView, talkHelpers());
+  const pick = () => scatterPick(talk(baseGames(), state.minGames), state.scatterView, talkHelpers());
   scatterPicker = multiSelect(root, {
     label: 'Players shown', nameOf, noAll: true,
     summary: () => `Players shown: ${pick().shown.length}`,
@@ -1244,15 +1245,17 @@ function awardTiles(base) {
 function stylesView() {
   if (!state.games.length) return noGames();
   const base = baseGames();
-  const T = talk(base);
+  const T = talk(base, state.minGames);
   const side = state.styleSide;
   state.talkView.side = side;
   state.scatterView.side = side;
-  const toggle = `<div class="ps-toolbar"><div class="toggles" role="group" aria-label="Which games">${TALK_SIDES.map(([v, l]) => `<button class="toggle" data-style-side="${v}" aria-pressed="${v === side}">${l}</button>`).join('')}</div></div>`;
+  const minPick = `<label class="ps-min">Min. games <select data-min-games aria-label="Minimum games to be included">${[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `<option value="${n}"${n === state.minGames ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`;
+  const toggle = `<div class="ps-toolbar"><div class="toggles" role="group" aria-label="Which games">${TALK_SIDES.map(([v, l]) => `<button class="toggle" data-style-side="${v}" aria-pressed="${v === side}">${l}</button>`).join('')}</div>${minPick}</div>`;
   // Win rates for the picked games, most-played first (rather than ranked by win rate). Travellers count, as on the
-  // player page; 3+ games (overall or on that side).
-  const pick = { all: [(p) => p.games, (p) => p.winRate, 'neutral', 3], good: [(p) => p.goodGames, (p) => p.goodWinRate, 'good', 3], evil: [(p) => p.evilGames, (p) => p.evilWinRate, 'evil', 3] }[side];
-  const [n, rate, cls, min] = pick;
+  // player page; "Min. games" games (overall or on that side).
+  const pick = { all: [(p) => p.games, (p) => p.winRate, 'neutral'], good: [(p) => p.goodGames, (p) => p.goodWinRate, 'good'], evil: [(p) => p.evilGames, (p) => p.evilWinRate, 'evil'] }[side];
+  const [n, rate, cls] = pick;
+  const min = state.minGames;
   // Players who hide their win rates are left out, and someone hiding their own sees no win rates (ranked()).
   const rows = ranked(playerRows(base)).filter((p) => n(p) >= min);
   const winCard = iAmQuiet() ? '' : card('Win rates', `Players with ${min}+ games${side === 'all' ? '' : ` as ${side}`}. Click a column to sort.`, sortable(`ps-wins-${side}`, [colPlayer(), colNum('Games', n),
@@ -1786,6 +1789,7 @@ document.addEventListener('toggle', (e) => {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset.minGames !== undefined) { state.minGames = Number(t.value) || 3; render(); return; }
   if (t.dataset.scatterKind !== undefined || t.dataset.scatterSide !== undefined) {
     if (t.dataset.scatterKind !== undefined) state.scatterView.kind = t.value; else state.scatterView.side = t.value;
     render();
