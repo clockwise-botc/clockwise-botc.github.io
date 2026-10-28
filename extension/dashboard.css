@@ -678,6 +678,4 @@ body.tab-styles [data-ms="players"], body.tab-styles [data-ms="characters"], bod
 .sc.side-good .sc-pt.me circle:last-child, .sc.side-evil .sc-pt.me circle:last-child { fill: var(--ink); }
 /* Playstyles: the one games toggle under the awards. */
 .ps-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0 0 18px; }
-.ps-min { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
-.ps-min select { height: 44px; padding-top: 0; padding-bottom: 0; line-height: 1.2; min-width: 76px; }
 .sc-warn { color: var(--ink); font-weight: 600; }

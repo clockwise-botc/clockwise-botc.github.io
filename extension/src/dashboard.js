@@ -32,7 +32,7 @@ const state = {
   talkView: { measure: 'loud', side: 'all', expanded: false }, // Around the grimoire chart: measure, games, all players shown
   scatterView: { kind: 'noms', side: 'all', chosen: null }, // Playstyles scatter: nominations or votes, games, players picked (null = default)
   styleSide: 'all', // Playstyles: one toggle (all games, as good, as evil) for the chart, the scatter and win rates
-  minGames: 3, // Playstyles: games a player needs (2–10) to be on the chart, the scatter and win rates
+  minGames: 3, // Playstyles: games a player needs to be on the chart, the scatter and win rates (fixed for now)
   filters: { communities: Array.isArray(prefs.communities) ? prefs.communities : [], script: '', storyteller: '', days: '' },
   sel: readHash(),
   expanded: new Set(),
@@ -1249,10 +1249,9 @@ function stylesView() {
   const side = state.styleSide;
   state.talkView.side = side;
   state.scatterView.side = side;
-  const minPick = `<label class="ps-min">Min. games <select data-min-games aria-label="Minimum games to be included">${[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `<option value="${n}"${n === state.minGames ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`;
-  const toggle = `<div class="ps-toolbar"><div class="toggles" role="group" aria-label="Which games">${TALK_SIDES.map(([v, l]) => `<button class="toggle" data-style-side="${v}" aria-pressed="${v === side}">${l}</button>`).join('')}</div>${minPick}</div>`;
+  const toggle = `<div class="ps-toolbar"><div class="toggles" role="group" aria-label="Which games">${TALK_SIDES.map(([v, l]) => `<button class="toggle" data-style-side="${v}" aria-pressed="${v === side}">${l}</button>`).join('')}</div></div>`;
   // Win rates for the picked games, most-played first (rather than ranked by win rate). Travellers count, as on the
-  // player page; "Min. games" games (overall or on that side).
+  // player page; at least state.minGames games (overall or on that side).
   const pick = { all: [(p) => p.games, (p) => p.winRate, 'neutral'], good: [(p) => p.goodGames, (p) => p.goodWinRate, 'good'], evil: [(p) => p.evilGames, (p) => p.evilWinRate, 'evil'] }[side];
   const [n, rate, cls] = pick;
   const min = state.minGames;
@@ -1789,7 +1788,6 @@ document.addEventListener('toggle', (e) => {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
-  if (t.dataset.minGames !== undefined) { state.minGames = Number(t.value) || 3; render(); return; }
   if (t.dataset.scatterKind !== undefined || t.dataset.scatterSide !== undefined) {
     if (t.dataset.scatterKind !== undefined) state.scatterView.kind = t.value; else state.scatterView.side = t.value;
     render();
