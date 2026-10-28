@@ -613,13 +613,18 @@ table.tt td:first-child { color: var(--ink-2); max-width: 160px; }
 .tt-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
 /* Same height as the filter pills; vertical padding off so the text isn't clipped. */
 .tt-controls select { height: 44px; padding-top: 0; padding-bottom: 0; line-height: 1.2; min-width: 150px; max-width: 100%; }
-.tt-controls .ms { flex: 0 1 220px; min-width: 170px; }
+.tt-controls .ms { flex: 0 1 260px; min-width: 250px; }
 .tt-note { margin: 0 0 10px; }
 .tt-row .rk { display: inline-block; min-width: 2.2em; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .tt-tag { font-size: 11px; font-weight: 700; color: var(--ink-2); background: var(--wash); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
 .tt-tag.muted { font-weight: 500; color: var(--muted); }
 .tt-skip .tt-track { height: 18px; }
-.tt-skip .tt-track span { position: absolute; left: 50%; top: 1px; transform: translateX(-50%); padding: 0 8px; background: var(--surface); color: var(--muted); font-size: 12px; white-space: nowrap; }
+.tt-skip .tt-track button { position: absolute; left: 50%; top: 0; transform: translateX(-50%); padding: 0 8px; background: var(--surface); color: var(--muted); font-size: 12px; white-space: nowrap; text-decoration-style: dotted; }
+.tt-skip .tt-track button:hover { color: var(--accent); }
+/* "average" over the line: hover (or focus) for the value. The right column's heading says what the numbers are. */
+.tt-axis span.avg { cursor: help; text-decoration: underline dotted var(--axis); text-underline-offset: 3px; }
+.tt-axis .v.head { font-size: 11px; font-weight: 600; color: var(--ink-2); white-space: normal; line-height: 1.2; }
+.tt-chart .show-all { margin-top: 8px; }
 .tt-chart { display: grid; }
 .tt-row { display: grid; grid-template-columns: minmax(90px, 170px) 1fr 96px; gap: 12px; align-items: center; padding: 3px 6px; border-radius: 8px; }
 .tt-row:not(.tt-axis):hover { background: var(--wash); }

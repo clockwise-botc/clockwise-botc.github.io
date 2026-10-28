@@ -8,7 +8,8 @@
 //     ☐ wren
 //
 // cfg: { label, options: () => [{ value, label, sub }], selected: () => [values], onChange: (values) => void, nameOf: (value) => text,
-//        single }  single: pick one; no checkboxes or Selected/All rows, and the list closes on a pick.
+//        single, fixedLabel }  single: pick one; no checkboxes or Selected/All rows, and the list closes on a pick.
+//        fixedLabel: always show the label when closed (the page says what's picked), e.g. "+ Add players to the chart".
 import { esc } from './ui.js';
 
 const CHEVRON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -28,6 +29,7 @@ export function multiSelect(root, cfg) {
   let open = false, query = '', onlySelected = false, active = 0, items = [];
 
   const summary = () => {
+    if (cfg.fixedLabel) return cfg.label;
     const s = cfg.selected();
     if (!s.length) return cfg.label;
     const first = cfg.nameOf(s[0]);
@@ -36,7 +38,7 @@ export function multiSelect(root, cfg) {
 
   function draw() {
     const s = cfg.selected();
-    root.classList.toggle('has-value', s.length > 0);
+    root.classList.toggle('has-value', s.length > 0 && !cfg.fixedLabel);
     root.classList.toggle('open', open);
     input.setAttribute('aria-expanded', String(open));
     input.placeholder = open ? 'Search…' : summary();

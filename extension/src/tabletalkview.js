@@ -27,11 +27,12 @@ export function talkCell(T, pl, id, side) {
   return `<div class="tt-cell" data-tip="${esc(tipFor(id, pl, T, side))}"><b>${m.fmt(r.value)}</b><span class="small">${esc(gapLine(id, r.gap, T.table[id]))}</span>${pl.listed ? '' : '<span class="small muted">few games</span>'}</div>`;
 }
 
-// The main page's chart: players on one measure, as a bar from the average (the line) to their value, highest first.
-// With many players it shows the top and bottom TOP_N, plus you (your claimed player) and anyone added by hand, with
-// a marker for how many players sit between.
-// view: { measure, side, added: [keys] }   h: { playerLink, me }
+// The At the table chart: players on one measure, as a bar from the average (the line) to their value, highest first.
+// With more than 2 × TOP_N players it shows the top and bottom TOP_N (plus you), with "Show all" to expand.
+// view: { measure, side, expanded }   h: { playerLink, me }
 export const TOP_N = 10;
+// What the number on the right of each bar is.
+const VALUE_HEAD = { loud: 'Nominations / day', nominated: 'Nominated / day', voter: 'Voted on', nomOther: 'On other team', voteOther: 'On other team', life: 'Of game alive' };
 
 function chartRows(talk, view, h) {
   const T = talk[view.side];
@@ -39,16 +40,16 @@ function chartRows(talk, view, h) {
   const has = (p) => p.rates[id].value !== null;
   const listed = T.players.filter((p) => p.listed && has(p)).sort((a, b) => b.rates[id].value - a.rates[id].value);
   const rank = new Map(listed.map((p, i) => [p.key, i + 1]));
-  const extra = new Set([h.me, ...view.added].filter(Boolean));
-  const keep = listed.length <= 2 * TOP_N ? listed : listed.filter((p, i) => i < TOP_N || i >= listed.length - TOP_N || extra.has(p.key));
-  // You and added players are shown even with few games (marked), in value order.
-  const others = T.players.filter((p) => extra.has(p.key) && !rank.has(p.key) && has(p));
-  const shown = [...keep, ...others].sort((a, b) => b.rates[id].value - a.rates[id].value);
-  return { T, id, listed, rank, shown, extra, added: view.added.filter((k) => T.players.some((p) => p.key === k)) };
+  const folded = listed.length > 2 * TOP_N && !view.expanded;
+  const keep = folded ? listed.filter((p, i) => i < TOP_N || i >= listed.length - TOP_N || p.key === h.me) : listed;
+  // You are shown even with few games (marked), in value order.
+  const me = T.players.find((p) => p.key === h.me && !rank.has(p.key) && has(p));
+  const shown = [...keep, ...(me ? [me] : [])].sort((a, b) => b.rates[id].value - a.rates[id].value);
+  return { T, id, listed, rank, shown, folded, meShown: shown.some((p) => p.key === h.me) };
 }
 
 export function talkChartBody(talk, view, h) {
-  const { T, id, listed, rank, shown } = chartRows(talk, view, h);
+  const { T, id, listed, rank, shown, folded } = chartRows(talk, view, h);
   const m = MEASURES[id];
   const avg = T.table[id];
   if (avg === null || !shown.length) return '<p class="muted">Not enough games yet.</p>';
@@ -63,12 +64,13 @@ export function talkChartBody(talk, view, h) {
     return `<div class="tt-row${me ? ' sel' : ''}" data-tip="${esc(tipFor(id, p, T, view.side) + (k ? `\nNumber ${k} of ${listed.length}` : ''))}">
       <div class="name"><span class="rk">${k || ''}</span>${h.playerLink(p.key, p.name)}${me ? ' <span class="tt-tag">you</span>' : ''}${p.listed ? '' : ' <span class="tt-tag muted">few games</span>'}</div>
       <div class="tt-track"><i class="tt-bar ${x >= 50 ? 'up' : 'down'}" style="left:${l.toFixed(2)}%;width:${Math.max(w, 0.4).toFixed(2)}%"></i><b class="tt-dot" style="left:${x.toFixed(2)}%"></b></div>
-      <div class="v"><b>${m.fmt(r.value)}</b> <span class="muted">${r.gap.about ? '±0' : `${r.gap.d > 0 ? '+' : '−'}${m.gap(Math.abs(r.gap.d)).replace(/ pts?$/, '')}`}</span></div>
+      <div class="v"><b>${m.fmt(r.value)}</b></div>
     </div>`;
   };
-  // A marker wherever ranked players are left out between two shown ones (or before the first / after the last).
-  const skip = (n) => (n > 0 ? `<div class="tt-row tt-skip"><div></div><div class="tt-track bare"><span>⋯ ${plural(n, 'more player')}</span></div><div></div></div>` : '');
-  let html = `<div class="tt-side side-${view.side}"><div class="tt-row tt-axis" aria-hidden="true"><div></div><div class="tt-track bare"><span style="left:0">${m.fmt(avg - reach)}</span><span class="avg" style="left:50%">average</span><span style="right:0">${m.fmt(avg + reach)}</span></div><div></div></div>`;
+  // Where players are left out between two shown ones: a marker that also expands the list.
+  const skip = (n) => (n > 0 ? `<div class="tt-row tt-skip"><div></div><div class="tt-track bare"><button type="button" class="lnk" data-talk-expand>⋯ ${plural(n, 'more player')}</button></div><div></div></div>` : '');
+  const avgTip = `Average for everyone${view.side === 'all' ? '' : ` ${sideWords(view.side)}`}: ${m.fmt(avg)} (${m.label.toLowerCase()})`;
+  let html = `<div class="tt-side side-${view.side}"><div class="tt-row tt-axis"><div></div><div class="tt-track bare"><span style="left:0" aria-hidden="true">${m.fmt(avg - reach)}</span><span class="avg" style="left:50%" data-tip="${esc(avgTip)}" tabindex="0">average</span><span style="right:0" aria-hidden="true">${m.fmt(avg + reach)}</span></div><div class="v head">${esc(VALUE_HEAD[id] || m.label)}</div></div>`;
   let last = 0;
   for (const p of shown) {
     const k = rank.get(p.key);
@@ -76,26 +78,25 @@ export function talkChartBody(talk, view, h) {
     html += row(p);
   }
   html += skip(listed.length - last);
-  return `${html}</div>`;
+  html += '</div>';
+  if (listed.length > 2 * TOP_N) html += `<button type="button" class="btn small show-all" data-talk-expand>${folded ? `Show all ${listed.length}` : `Show top and bottom ${TOP_N}`}</button>`;
+  return html;
 }
 
 // What's shown, in words, under the controls.
 export function talkChartNote(talk, view, h) {
-  const { T, listed, extra, added } = chartRows(talk, view, h);
-  const parts = [];
-  if (listed.length > 2 * TOP_N) parts.push(`the top and bottom ${TOP_N} of ${listed.length} players`);
-  else parts.push(`all ${plural(listed.length, 'player')}`);
-  if (h.me && extra.has(h.me) && T.players.some((p) => p.key === h.me)) parts.push('you');
-  const byHand = added.filter((k) => k !== h.me).length;
-  if (byHand) parts.push(`${byHand} added`);
-  return `Showing ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]}.`;
+  const { listed, folded, meShown, rank } = chartRows(talk, view, h);
+  const base = folded ? `the top and bottom ${TOP_N} of ${listed.length} players` : `all ${plural(listed.length, 'player')}`;
+  // Only mention you when you're there because you're you (not already in the top or bottom).
+  const extraMe = folded && meShown && !(rank.get(h.me) <= TOP_N || rank.get(h.me) > listed.length - TOP_N);
+  return `Showing ${base}${extraMe ? ' and you' : ''}.`;
 }
 
 export const talkChartSub = (talk, view) => `Players with ${talk[view.side].minGames}+ games${view.side === 'all' ? '' : ` ${sideWords(view.side)} (games where they kept one alignment)`}. The line is the average; hover a bar for the counts.`;
 
 export function talkChartCard(talk, view, h) {
   const select = (attr, options, cur, label) => `<select ${attr} aria-label="${label}">${options.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-  const controls = `<div class="tt-controls">${select('data-talk-measure', Object.entries(MEASURES).map(([k, x]) => [k, x.label]), view.measure, 'Measure')}<div data-ms-talk></div></div>`;
+  const controls = `<div class="tt-controls">${select('data-talk-measure', Object.entries(MEASURES).map(([k, x]) => [k, x.label]), view.measure, 'Measure')}</div>`;
   return card('At the table', talkChartSub(talk, view), `${controls}<p class="tt-note small muted" id="tt-note">${esc(talkChartNote(talk, view, h))}</p><div class="tt-chart" id="tt-chart">${talkChartBody(talk, view, h)}</div>`, 'wide tt-chart-card');
 }
 
@@ -117,10 +118,45 @@ function ticks(lo, hi, want = 5) {
   return out;
 }
 
+// Who's on the scatter. Everyone with enough games can be; by default at most SCATTER_MAX, picked to cover the spread
+// (each next pick is the player furthest from everyone picked so far, on both axes scaled to their range), starting
+// with you. Players added by hand (view.added) come on top of those.
+export const SCATTER_MAX = 20;
+export function scatterPick(talk, view, h) {
+  const T = talk[view.side], S = SCATTER[view.kind];
+  const cands = T.players.filter((p) => (p.listed || p.key === h.me) && p.rates[S.x].value !== null && p.rates[S.y].n > 0);
+  let picked = cands;
+  if (cands.length > SCATTER_MAX) {
+    const xs = cands.map((p) => p.rates[S.x].value), ys = cands.map((p) => p.rates[S.y].value);
+    const rx = Math.max(...xs) - Math.min(...xs) || 1, ry = Math.max(...ys) - Math.min(...ys) || 1;
+    const pt = (p) => [p.rates[S.x].value / rx, p.rates[S.y].value / ry];
+    const d2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+    const mid = [xs.reduce((a, b) => a + b, 0) / xs.length / rx, ys.reduce((a, b) => a + b, 0) / ys.length / ry];
+    const me = cands.find((p) => p.key === h.me);
+    picked = [me || cands.reduce((best, p) => (d2(pt(p), mid) > d2(pt(best), mid) ? p : best))];
+    const near = new Map(cands.map((p) => [p.key, d2(pt(p), pt(picked[0]))]));
+    while (picked.length < SCATTER_MAX) {
+      const next = cands.filter((p) => !picked.includes(p)).reduce((best, p) => (!best || near.get(p.key) > near.get(best.key) || (near.get(p.key) === near.get(best.key) && p.games > best.games) ? p : best), null);
+      picked.push(next);
+      for (const p of cands) near.set(p.key, Math.min(near.get(p.key), d2(pt(p), pt(next))));
+    }
+  }
+  const def = new Set(picked.map((p) => p.key));
+  const added = new Set((view.added || []).filter((k) => !def.has(k)));
+  return { cands, def, shown: cands.filter((p) => def.has(p.key) || added.has(p.key)), added };
+}
+
+export function scatterNote(talk, view, h) {
+  const { cands, def, added } = scatterPick(talk, view, h);
+  if (cands.length <= SCATTER_MAX) return `Showing all ${plural(cands.length, 'player')}.`;
+  const names = cands.filter((p) => added.has(p.key)).map((p) => p.name);
+  return `Showing ${def.size} of ${cands.length} players, picked to cover the spread.${names.length ? ` Added: ${names.join(', ')}.` : ''}`;
+}
+
 export function scatterSvg(talk, view, h) {
   const T = talk[view.side], S = SCATTER[view.kind];
   const mx = MEASURES[S.x], my = MEASURES[S.y];
-  const pts = T.players.filter((p) => (p.listed || p.key === h.me) && p.rates[S.x].value !== null && p.rates[S.y].n > 0);
+  const pts = scatterPick(talk, view, h).shown;
   if (pts.length < 2) return '<p class="muted">Not enough games yet.</p>';
   const W = 680, H = 440, L = 56, R = 16, TOP = 16, B = 46;
   const xs = pts.map((p) => p.rates[S.x].value), ys = pts.map((p) => p.rates[S.y].value);
@@ -166,8 +202,9 @@ export function scatterSvg(talk, view, h) {
 export function scatterCard(talk, view, h) {
   const T = talk[view.side];
   const select = (attr, options, cur, label) => `<select ${attr} aria-label="${label}">${options.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-  const controls = `<div class="tt-controls">${select('data-scatter-kind', SCATTER_KINDS, view.kind, 'Chart')}</div>`;
   const what = view.kind === 'noms' ? 'nominations per day alive' : 'share of nominations they voted on while alive';
   const sub = `Across: ${what}. Up: share on the other team. Dashed lines: the average. Players with ${T.minGames}+ games${view.side === 'all' ? '' : ` ${sideWords(view.side)}`}; hover a dot for the counts.`;
-  return card(view.kind === 'noms' ? 'Who they nominate' : 'Who they vote for', sub, `${controls}<div class="sc-wrap">${scatterSvg(talk, view, h)}</div>`, 'wide sc-card');
+  // The picker only appears when some players aren't on the chart, and only lists those.
+  const more = scatterPick(talk, view, h).cands.length > SCATTER_MAX ? '<div data-ms-scatter></div>' : '';
+  return card(view.kind === 'noms' ? 'Who they nominate' : 'Who they vote for', sub, `<div class="tt-controls">${select('data-scatter-kind', SCATTER_KINDS, view.kind, 'Chart')}${more}</div><p class="tt-note small muted" id="sc-note">${esc(scatterNote(talk, view, h))}</p><div class="sc-wrap" id="sc-body">${scatterSvg(talk, view, h)}</div>`, 'wide sc-card');
 }

@@ -6,7 +6,7 @@ import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne
 import { renderData, handleDataClick, handleImport } from './dataview.js';
 import { playstyles } from './playstyles.js';
 import { tableTalk, nominationPairs, votePairs, MEASURES } from './tabletalk.js';
-import { talkCell, talkChartCard, talkChartBody, talkChartNote, talkChartSub, scatterCard, TALK_SIDES } from './tabletalkview.js';
+import { talkCell, talkChartCard, talkChartBody, talkChartNote, talkChartSub, scatterCard, scatterSvg, scatterNote, scatterPick, TALK_SIDES } from './tabletalkview.js';
 import { renderGrimoire } from './grimoire.js';
 import { makeImages } from './images.js';
 import { characterToken, installTokenStyle } from './tokens.js';
@@ -29,8 +29,8 @@ const TABS = ['stats', 'styles', 'games', 'data'];
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('dash.prefs')) || {}; } catch { return {}; } })();
 const state = {
   tab: readTab(),
-  talkView: { measure: 'loud', side: 'all', added: [] }, // main page's At the table chart: measure, games, players added by hand
-  scatterView: { kind: 'noms', side: 'all' }, // Playstyles nominations / votes scatter
+  talkView: { measure: 'loud', side: 'all', expanded: false }, // At the table chart: measure, games, all players shown
+  scatterView: { kind: 'noms', side: 'all', added: [] }, // Playstyles scatter: nominations or votes, games, players added by hand
   styleSide: 'all', // Playstyles: one toggle (all games, as good, as evil) for the chart, the scatter and win rates
   filters: { communities: Array.isArray(prefs.communities) ? prefs.communities : [], script: '', storyteller: '', days: '' },
   sel: readHash(),
@@ -725,9 +725,8 @@ function talk(base) {
   if (talkCache.games !== base) talkCache = { games: base, out: tableTalk(base) };
   return talkCache.out;
 }
-// The main page's chart: you are always in it; the picker adds anyone else. Redrawn in place, so the picker stays open.
+// The At the table chart and the scatter redraw in place (so the scatter's picker stays open while picking).
 const talkHelpers = () => ({ playerLink, me: myPlayer() });
-let talkPicker = null;
 function refreshTalkChart() {
   const body = $('#tt-chart'), note = $('#tt-note');
   if (!body) return;
@@ -736,19 +735,27 @@ function refreshTalkChart() {
   note.textContent = talkChartNote(T, state.talkView, talkHelpers());
   const sub = $('.tt-chart-card > .sub');
   if (sub) sub.textContent = talkChartSub(T, state.talkView);
-  if (talkPicker) talkPicker.refresh();
 }
-function mountTalkPicker() {
-  const root = $('[data-ms-talk]');
-  talkPicker = null;
+let scatterPicker = null;
+function refreshScatter() {
+  const body = $('#sc-body'), note = $('#sc-note');
+  if (!body) return;
+  const T = talk(baseGames());
+  body.innerHTML = scatterSvg(T, state.scatterView, talkHelpers());
+  note.textContent = scatterNote(T, state.scatterView, talkHelpers());
+  if (scatterPicker) scatterPicker.refresh();
+}
+// "Add players to the chart": only the players not already on it by default.
+function mountScatterPicker() {
+  const root = $('[data-ms-scatter]');
+  scatterPicker = null;
   if (!root) return;
-  talkPicker = multiSelect(root, {
-    label: 'Add players', nameOf,
-    options: () => talk(baseGames())[state.talkView.side].players
-      .map((p) => ({ value: p.key, label: p.name, sub: p.key === myPlayer() ? 'You' : plural(p.games, 'game') }))
-      .sort((a, b) => a.label.localeCompare(b.label)),
-    selected: () => state.talkView.added,
-    onChange: (values) => { state.talkView.added = values; refreshTalkChart(); },
+  const pick = () => scatterPick(talk(baseGames()), state.scatterView, talkHelpers());
+  scatterPicker = multiSelect(root, {
+    label: '+ Add players to the chart', fixedLabel: true, nameOf,
+    options: () => { const { cands, def } = pick(); return cands.filter((p) => !def.has(p.key)).map((p) => ({ value: p.key, label: p.name, sub: plural(p.games, 'game') })).sort((a, b) => a.label.localeCompare(b.label)); },
+    selected: () => [...pick().added],
+    onChange: (values) => { state.scatterView.added = values; refreshScatter(); },
   });
 }
 
@@ -1410,7 +1417,7 @@ function render() {
   keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab](); });
   // Editors' account list loads the first time Data & settings is opened.
   mountClaimPicker();
-  mountTalkPicker();
+  mountScatterPicker();
   fillRows();
   fitLists();
   if (state.tab === 'data' && state.accounts === undefined && state.shared.on && state.shared.canEdit && creds(state.settings).editorKey) { state.accounts = null; loadAccounts(); }
@@ -1698,7 +1705,7 @@ async function updateLocal(id, patch, resend) {
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-filter-community],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-style-side],#clear-sel');
+  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-filter-community],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-style-side],[data-talk-expand],#clear-sel');
   if (!t) return;
   // Under an open game: switch between seat-by-seat and nominations, or show the settings. No full redraw,
   // so the grimoire stays put.
@@ -1740,6 +1747,7 @@ document.addEventListener('click', async (e) => {
     return;
   }
   if (t.dataset.styleSide) { state.styleSide = t.dataset.styleSide; render(); return; }
+  if (t.dataset.talkExpand !== undefined) { state.talkView.expanded = !state.talkView.expanded; refreshTalkChart(); return; }
   if (t.dataset.tab) { state.tab = t.dataset.tab; state.openGame = null; writeHash(); render(); window.scrollTo(0, 0); return; }
   if (t.id === 'clear-sel') { setSelection((s) => Object.assign(s, emptySelection())); return; }
   if (t.dataset.addPlayer) { state.tab = 'stats'; addTo('players', t.dataset.addPlayer); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
