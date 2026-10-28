@@ -1,4 +1,4 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, players as playerRows } from './stats.js';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js';
 import { predictOutcome, tuneOutcomeModel } from './insights.js';
 import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js';
 import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js';
@@ -6,7 +6,7 @@ import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne
 import { renderData, handleDataClick, handleImport } from './dataview.js';
 import { playstyles } from './playstyles.js';
 import { tableTalk, nominationPairs, votePairs, MEASURES } from './tabletalk.js';
-import { talkCell, talkChartCard, talkChartBody, talkChartNote, talkChartSub, scatterCard, scatterSvg, scatterNote, scatterPick, SCATTER_MAX, TALK_SIDES } from './tabletalkview.js';
+import { talkCell, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js';
 import { renderGrimoire } from './grimoire.js';
 import { makeImages } from './images.js';
 import { characterToken, installTokenStyle } from './tokens.js';
@@ -29,10 +29,10 @@ const TABS = ['stats', 'styles', 'games', 'data'];
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('dash.prefs')) || {}; } catch { return {}; } })();
 const state = {
   tab: readTab(),
-  talkView: { measure: 'loud', side: 'all', expanded: false }, // Around the grimoire chart: measure, games, all players shown
-  scatterView: { kind: 'noms', side: 'all', chosen: null }, // Playstyles scatter: nominations or votes, games, players picked (null = default)
-  styleSide: 'all', // Playstyles: one toggle (all games, as good, as evil) for the chart, the scatter and win rates
-  minGames: 3, // Playstyles: games a player needs (2–10) to be on the chart, the scatter and win rates
+  talkView: { measure: 'loud', side: 'all', extra: [] }, // Around the grimoire chart: measure, games, players always shown
+  scatterView: { kind: 'noms', side: 'all', mode: 'spread', chosen: null }, // Playstyles scatter: nominations or votes, games, who's shown (spread, all, choose) and the chosen
+  statsView: null, // the Stats tab's view last picked: 'stats' (Overview) or 'styles' (Playstyles)
+  minGames: 5, // Playstyles: games a player needs to be on the charts
   filters: { communities: Array.isArray(prefs.communities) ? prefs.communities : [], script: '', storyteller: '', days: '' },
   sel: readHash(),
   expanded: new Set(),
@@ -80,7 +80,7 @@ const communityButtons = (attr, on, extra = '', options = communityOptions()) =>
 const $ = (sel) => document.querySelector(sel);
 const ctx = { state, api, load: () => load(), communityOptions,
   tools: { WEB, creds, siteUrl, checkKey, webAuth, cacheClear, forgetAccount: () => forgetAccount(), syncShared: () => syncShared(), nameOf: (key, fallback) => (playerNames.has(key) ? playerNames.get(key) : fallback || key), playerChoices: () => playerChoices() },
-  // For Data & settings: is botc.app's token art in use, and if not, why.
+  // For Settings: is botc.app's token art in use, and if not, why.
   art: () => ({ loaded: !!images.tokenStyle, fonts: document.documentElement.classList.contains('token-font'), roles: Object.keys(roleMeta).length, error: state.artError || (images.styleError || '') }) };
 
 // The tab and selection live in the URL, so a view can be bookmarked and survives a refresh.
@@ -192,6 +192,11 @@ function storytellerTable(games) {
 }
 
 // One gentle highlight rather than a ranking: the best record among players with a fair number of games.
+function topWinRate(base) {
+  const min = Math.max(5, Math.ceil(base.length * 0.1));
+  return ranked(playerTable(base)).filter((p) => p.plays >= min).sort((a, b) => b.winRate - a.winRate || b.plays - a.plays)[0] || null;
+}
+
 // "Characters that help good / evil": how often good wins when each is in play, against all games in the filters.
 // `what` names the characters ("Characters", "Outsiders"); `keep` narrows them, e.g. to one type.
 function swingCards(base, what, keep = () => true) {
@@ -727,35 +732,66 @@ function talk(base, min = null) {
   return talkCache.out;
 }
 // The Around the grimoire chart and the scatter redraw in place (so the scatter's picker stays open while picking).
-const talkHelpers = () => ({ playerLink, me: myPlayer() });
+// width: the scatter's room (so it's drawn at its real size); the last one measured until the card is on the page.
+let scatterWidth = 0;
+const talkHelpers = () => { const b = $('#sc-body'); if (b && b.clientWidth) scatterWidth = b.clientWidth; return { playerLink, me: myPlayer(), width: scatterWidth || 680 }; };
 function refreshTalkChart() {
-  const body = $('#tt-chart'), note = $('#tt-note');
+  const body = $('#tt-chart');
   if (!body) return;
   const T = talk(baseGames(), state.minGames);
   body.innerHTML = talkChartBody(T, state.talkView, talkHelpers());
-  note.textContent = talkChartNote(T, state.talkView, talkHelpers());
   const sub = $('.tt-chart-card > .sub');
   if (sub) sub.textContent = talkChartSub(T, state.talkView);
+  if (alwaysPicker) alwaysPicker.refresh();
+}
+// "Always show" on the Around the grimoire chart: players added to its top and bottom 10. You're always on it (ticked,
+// and can't be unticked).
+let alwaysPicker = null;
+function mountAlwaysPicker() {
+  const root = $('[data-ms-always]');
+  alwaysPicker = null;
+  if (!root) return;
+  const me = myPlayer();
+  const extra = () => state.talkView.extra.filter((k) => k !== me);
+  alwaysPicker = multiSelect(root, {
+    label: `Show top & bottom ${TOP_N}, plus`, nameOf, noAll: true,
+    summary: () => { const n = extra().length; return me ? (n ? `You + ${plural(n, 'player')}` : 'You') : (n ? plural(n, 'player') : 'No one'); },
+    options: () => talkCandidates(talk(baseGames(), state.minGames), state.talkView, me)
+      .map((p) => ({ value: p.key, label: p.name, sub: p.key === me ? 'You' : '', locked: p.key === me }))
+      .sort((a, b) => (b.value === me) - (a.value === me) || a.label.localeCompare(b.label)),
+    selected: () => [...(me ? [me] : []), ...extra()],
+    onChange: (values) => { state.talkView.extra = values.filter((k) => k !== me); refreshTalkChart(); },
+  });
 }
 let scatterPicker = null;
+// Redraw the scatter at its new width when the window changes size.
+let scatterResize = 0;
+window.addEventListener('resize', () => { clearTimeout(scatterResize); scatterResize = setTimeout(() => { if ($('#sc-body')) refreshScatter(); }, 150); });
 function refreshScatter(message = '') {
   const body = $('#sc-body'), note = $('#sc-note');
   if (!body) return;
   const T = talk(baseGames(), state.minGames);
   body.innerHTML = scatterSvg(T, state.scatterView, talkHelpers());
-  note.innerHTML = scatterNote(T, state.scatterView, talkHelpers()) + (message ? ` <b class="sc-warn">${esc(message)}</b>` : '');
+  // The line under the heading only says something when a pick couldn't be made.
+  note.hidden = !message;
+  note.innerHTML = message ? `<b class="sc-warn">${esc(message)}</b>` : '';
   if (scatterPicker) scatterPicker.refresh();
 }
-// "Players shown": everyone who can be on the chart, ticked if they are. Ticking adds, unticking removes, up to
-// SCATTER_MAX; Reset (in the line under it) goes back to the default.
+// "Show players" on the scatter, one dropdown: 20 across the chart, all players, or "Choose players…", which turns the
+// same list into everyone who can be on it, ticked if they are (starting from whoever is shown). Ticking adds,
+// unticking removes, up to SCATTER_MAX.
 function mountScatterPicker() {
   const root = $('[data-ms-scatter]');
   scatterPicker = null;
   if (!root) return;
   const pick = () => scatterPick(talk(baseGames(), state.minGames), state.scatterView, talkHelpers());
+  const presets = [{ value: 'spread', label: `${SCATTER_DEFAULT} players spread across the chart` }, { value: 'all', label: 'All players' }];
   scatterPicker = multiSelect(root, {
-    label: 'Players shown', nameOf, noAll: true,
-    summary: () => `Players shown: ${pick().shown.length}`,
+    label: 'Show', nameOf, noAll: true, presets, chooseLabel: 'Choose players…',
+    preset: () => (state.scatterView.mode === 'choose' ? null : state.scatterView.mode || 'spread'),
+    onPreset: (v) => { state.scatterView.mode = v; refreshScatter(); },
+    onChoose: () => { state.scatterView.chosen = pick().shown.map((p) => p.key); state.scatterView.mode = 'choose'; refreshScatter(); },
+    summary: () => (state.scatterView.mode === 'choose' ? plural(pick().shown.length, 'selected player') : presets.find((o) => o.value === (state.scatterView.mode || 'spread')).label),
     options: () => pick().cands.map((p) => ({ value: p.key, label: p.name, sub: p.key === myPlayer() ? 'You' : plural(p.games, 'game') })).sort((a, b) => a.label.localeCompare(b.label)),
     selected: () => pick().shown.map((p) => p.key),
     onChange: (values) => {
@@ -1108,7 +1144,7 @@ function gameDetail(g) {
     </div>
     <div class="game-menu" ${state.gameMenu ? '' : 'hidden'}>
       <h4>Game settings</h4>
-      ${canEdit ? '' : `<p class="sub" style="margin:0">This game is shared with everyone, so changing or deleting it needs an editor key. ${WEB ? 'Add one under Data & settings.' : 'Add one in Data & settings.'}</p>`}
+      ${canEdit ? '' : `<p class="sub" style="margin:0">This game is shared with everyone, so changing or deleting it needs an editor key. ${WEB ? 'Add one under Settings.' : 'Add one in Settings.'}</p>`}
       <fieldset class="gm-fields" ${canEdit ? '' : 'disabled'}>
       <div class="gm-grid">
         <div class="gm-field"><span class="field-label">Community</span><div class="toggles">${communityButtons('data-game-community', g.community ? [g.community] : [], `${g.id}|`, gameCommunityOptions())}</div></div>
@@ -1162,12 +1198,6 @@ function perGameTile(types, plays, games) {
 
 // Average length, with the shortest and longest game underneath.
 // How many different people have played in these games (travellers included), and how many sit down in a typical game.
-function playersTile(G) {
-  const keys = new Set(G.flatMap((g) => g.players.map(playerKey)).filter(Boolean));
-  const counts = G.map((g) => g.playerCount || g.players.filter((p) => !p.isTraveller).length).filter(Boolean);
-  const avg = counts.length ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : null;
-  return tile('Players', keys.size, avg ? `about ${avg} around the grimoire per game` : '');
-}
 
 function lengthTile(G, o) {
   if (o.avgDays === null || !G.length) return tile('Average game length', '–');
@@ -1187,8 +1217,57 @@ function summaryLine(G, base, sel) {
   return `<p class="summary">${hasSelection(sel) ? `<b>${G.length}</b> of ${plural(base.length, 'game')}` : `<b>${plural(base.length, 'game')}</b>`}${scope.length ? ` in ${esc(scope.join(' · '))}` : ''}${parts.length ? `, ${parts.join(', ')}` : ''}.</p>`;
 }
 
+// Clears the community, script and storyteller filters (Playstyles' Clear, and its breadcrumb level).
+function clearScope() {
+  Object.assign(state.filters, { communities: [], script: '', storyteller: '' });
+  savePrefs();
+  populateFilters();
+  setSelection(() => {});
+}
+
+// The community, script and storyteller filters, as words for a phrase. The script names the games ("Bad Moon Rising
+// games"); the community is where they were played and the storyteller who ran them: "in Escape, storytold by kaz".
+const scopeOn = () => !!(state.filters.communities.length || state.filters.script || state.filters.storyteller);
+function scopeWords() {
+  const f = state.filters;
+  return [f.communities.length ? `in ${listWords(f.communities.map((c) => communityName(state.settings, c)))}` : '',
+    f.storyteller ? `storytold by ${nameOf(f.storyteller)}` : ''].filter(Boolean).join(', ');
+}
+// "Games", or "Bad Moon Rising games" with a script picked, then where and by whom: "Bad Moon Rising games in Escape".
+const gamesPhrase = () => [state.filters.script ? `${state.filters.script} games` : 'Games', scopeWords()].filter(Boolean).join(' ');
+
+// Where you are on the Stats tab, once anything is picked: "← Stats › wren as the Amnesiac in Escape". One phrase
+// for everything picked, not a path, since the filters don't nest. "← Stats" goes back to the overview with every
+// filter cleared. Playstyles has its own level: "← Stats › Playstyles › Games in Rhap".
+function crumbs(G, base, sel) {
+  const styles = state.tab === 'styles';
+  if (!styles && !anyFilter(sel)) return '';
+  const who = listWords(sel.players.map(nameOf));
+  const what = sel.players.length && (sel.characters.length || sel.types.length) ? `${who} as ${heldRole(sel).as}`
+    : sel.players.length ? who
+    // Several characters picked: games where all of them were in play.
+    : sel.characters.length ? `${state.filters.script ? `${state.filters.script} games` : 'Games'} with ${listWords(sel.characters.map((c) => `the ${charName(c)}`))} in play${sel.types.length ? `, looking at ${listWords(sel.types.map(teamLabel))}` : ''}`
+    : sel.types.length ? listWords(sel.types.map(teamLabel))
+    : '';
+  // With nothing picked, the games themselves ("Bad Moon Rising games in Escape"); otherwise what's picked, then
+  // which games ("wren as Townsfolk in Bad Moon Rising games in Escape").
+  // (A character on its own already starts with the games: "Bad Moon Rising games with the Imp in play, in Escape".)
+  const gamesFirst = sel.characters.length && !sel.players.length;
+  const which = state.filters.script && !gamesFirst ? `in ${state.filters.script} games${scopeWords() ? ` ${scopeWords()}` : ''}` : scopeWords();
+  const phrase = !what ? gamesPhrase() : [what, which].filter(Boolean).join(what.endsWith('in play') || what.includes(', looking at') ? ', ' : ' ');
+  const sep = '<span class="crumb-sep" aria-hidden="true">›</span>';
+  const back = '<button type="button" class="crumb-back" data-crumb-back title="Back to the stats overview, with no filters"><span aria-hidden="true">←</span> Stats</button>';
+  if (styles) {
+    // Playstyles, then what its filters narrow it to; "Playstyles" clears those filters.
+    return `<nav class="crumbs" aria-label="Where you are">${back}${sep}${scopeOn()
+      ? `<button type="button" class="crumb-back crumb-mid" data-crumb-styles title="Playstyles, with no filters">Playstyles</button>${sep}<span class="crumb-here">${esc(gamesPhrase())}</span>`
+      : '<span class="crumb-here">Playstyles</span>'}</nav>`;
+  }
+  return `<nav class="crumbs" aria-label="Where you are">${back}${sep}<span class="crumb-here">${esc(phrase)}</span></nav>`;
+}
+
 function noGames() {
-  return `<div class="empty card"><h2>No games recorded yet</h2><p>Keep botc.app open in a tab while you play. Each game is saved automatically when the storyteller reveals the grimoire.</p><p class="muted">Already have data? Import it from Data &amp; settings.</p></div>`;
+  return `<div class="empty card"><h2>No games recorded yet</h2><p>Keep botc.app open in a tab while you play. Each game is saved automatically when the storyteller reveals the grimoire.</p><p class="muted">Already have data? Import it from Settings.</p></div>`;
 }
 
 function gamesView() {
@@ -1237,7 +1316,7 @@ function awardTiles(base) {
   if (survivor.length) {
     const p = survivor[0], alive = p.t.fates.survivedWon + p.t.fates.survivedLost;
     out.push(tile(`Best survivor${info('Alive at the end of the largest share of their games (3+ games).')}`, names(survivor),
-      survivor.length > 1 ? `alive at the end of ${pct(p.values.survived.raw)} of their games` : `alive at the end of ${alive} of ${plural(p.t.known, 'game')}`, 'award'));
+      survivor.length > 1 ? `alive at the end of ${pct(p.values.survived.raw)} of their games` : `alive at the end of ${alive} of ${plural(p.t.known, 'game')}`, 'award feature'));
   }
   return out.length ? `<div class="tiles awards">${out.join('')}</div>` : '';
 }
@@ -1246,25 +1325,11 @@ function stylesView() {
   if (!state.games.length) return noGames();
   const base = baseGames();
   const T = talk(base, state.minGames);
-  const side = state.styleSide;
-  state.talkView.side = side;
-  state.scatterView.side = side;
-  const minPick = `<label class="ps-min">Min. games <select data-min-games aria-label="Minimum games to be included">${[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `<option value="${n}"${n === state.minGames ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`;
-  const toggle = `<div class="ps-toolbar"><div class="toggles" role="group" aria-label="Which games">${TALK_SIDES.map(([v, l]) => `<button class="toggle" data-style-side="${v}" aria-pressed="${v === side}">${l}</button>`).join('')}</div>${minPick}</div>`;
-  // Win rates for the picked games, most-played first (rather than ranked by win rate). Travellers count, as on the
-  // player page; "Min. games" games (overall or on that side).
-  const pick = { all: [(p) => p.games, (p) => p.winRate, 'neutral'], good: [(p) => p.goodGames, (p) => p.goodWinRate, 'good'], evil: [(p) => p.evilGames, (p) => p.evilWinRate, 'evil'] }[side];
-  const [n, rate, cls] = pick;
-  const min = state.minGames;
-  // Players who hide their win rates are left out, and someone hiding their own sees no win rates (ranked()).
-  const rows = ranked(playerRows(base)).filter((p) => n(p) >= min);
-  const winCard = iAmQuiet() ? '' : card('Win rates', `Players with ${min}+ games${side === 'all' ? '' : ` as ${side}`}. Click a column to sort.`, sortable(`ps-wins-${side}`, [colPlayer(), colNum('Games', n),
-    colRate('Win rate', rate, n, cls)], rows, { sort: 1, empty: 'Not enough games yet.' }), 'wide');
-  return `${awardTiles(base)}${toggle}<div class="grid stack">${talkChartCard(T, state.talkView, talkHelpers())}${scatterCard(T, state.scatterView, talkHelpers())}${winCard}</div>`;
+  return `${crumbs(base, base, state.sel)}${awardTiles(base)}<div class="grid stack">${talkChartCard(T, state.talkView, talkHelpers())}${scatterCard(T, state.scatterView, talkHelpers())}</div>`;
 }
 
 function statsView() {
-  if (!state.games.length) return `<div class="empty card"><h2>No games recorded yet</h2><p>Keep botc.app open in a tab while you play. Each game is saved automatically when the storyteller reveals the grimoire.</p><p class="muted">Already have data? Import it from Data &amp; settings.</p></div>`;
+  if (!state.games.length) return `<div class="empty card"><h2>No games recorded yet</h2><p>Keep botc.app open in a tab while you play. Each game is saved automatically when the storyteller reveals the grimoire.</p><p class="muted">Already have data? Import it from Settings.</p></div>`;
   const base = baseGames();
   const sel = state.sel;
   const G = selectGames(base, sel);
@@ -1277,6 +1342,9 @@ function statsView() {
   const st = seatSel ? seatStats(seats) : null;
   // Players whose win rates this page leaves out.
   const quietPick = sel.players.some(ratesHidden);
+  const top = hasSelection(sel) ? null : topWinRate(base);
+  // Without player win rates: whoever has played the most games instead.
+  const busiest = hasSelection(sel) || !iAmQuiet() ? null : playerTable(base).sort((a, b) => b.plays - a.plays || a.name.localeCompare(b.name))[0] || null;
   const onePlayer = sel.players.length === 1 ? sel.players[0] : null;
   const storytold = onePlayer ? (storytellerTable(base).find((r) => r.key === onePlayer) || { games: 0 }).games : 0;
   const held = sel.players.length && (sel.characters.length || sel.types.length);
@@ -1320,7 +1388,8 @@ function statsView() {
   ] : [
     tile('Games', o.n, G.length ? `${fmtDate(G[G.length - 1].endedAt)} – ${fmtDate(G[0].endedAt)}` : '', 'hero'),
     lengthTile(G, o),
-    playersTile(G),
+    busiest ? tile('Most games played', `<span style="font-size:${Math.min(1, 11 / Math.max(1, [...busiest.name].length)).toFixed(2)}em">${playerLink(busiest.key, busiest.name)}</span>`, plural(busiest.plays, 'game'), 'highlight feature') : '',
+    top ? tile('Highest win rate', `<span style="font-size:${Math.min(1, 11 / Math.max(1, [...top.name].length)).toFixed(2)}em">${playerLink(top.key, top.name)}</span>`, `won ${pct(top.winRate)} of ${plural(top.plays, 'game')}`, 'highlight feature') : '',
   ];
   const pr = wantsPrediction(G, base, sel) ? predictOutcome(base, sel.characters, { tune: tunedFor(base) }) : null;
   if (pr) {
@@ -1343,8 +1412,8 @@ function statsView() {
   // One player: their character collection, below the cards (it's the full page width, and never a spare).
   if (G.length && onePlayer && !held) sections += collectionCard(onePlayer, st);
   const more = G.length ? `<p class="see-games"><button class="btn" data-tab="games">See ${G.length === 1 ? 'this game' : `these ${G.length} games`} →</button></p>` : '';
-  // With no filters the Games tile already says how many games there are, so the line would only repeat it.
-  const lead = anyFilter(sel) ? summaryLine(G, base, sel).replace('class="summary"', 'class="summary lead"') : '';
+  // With no filters the Games tile already says how many games there are, so there's no breadcrumb.
+  const lead = crumbs(G, base, sel);
   return `${lead}<div class="tiles">${tiles.join('')}</div>${sections}${more}`;
 }
 
@@ -1396,7 +1465,6 @@ function setupDropdowns() {
 
 function renderPickers() {
   Object.values(dropdowns).forEach((d) => d.refresh());
-  $('#clear-sel').hidden = !hasSelection(state.sel);
 }
 
 function setSelection(fn) {
@@ -1421,14 +1489,24 @@ function render() {
   document.body.classList.toggle('signed-out', gate || !!state.setup);
   if (state.setup) { $('#filters').hidden = true; $('#view').innerHTML = setupView(); mountClaimPicker(); return; }
   if (gate) { $('#filters').hidden = true; $('#view').innerHTML = signInView(); refillSignUp(); return; }
-  document.querySelectorAll('[data-tab]').forEach((b) => { if (b.closest('.tabs')) b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)); });
+  // Playstyles is a view of the Stats tab (picked in the dropdown at the start of the filters).
+  const tabShown = state.tab === 'styles' ? 'stats' : state.tab;
+  document.querySelectorAll('[data-tab]').forEach((b) => { if (b.closest('.tabs')) b.setAttribute('aria-selected', String(b.dataset.tab === tabShown)); });
+  $('#stats-view').value = state.tab === 'styles' ? 'styles' : 'stats';
+  document.body.classList.toggle('tab-stats', tabShown === 'stats');
   $('#filters').hidden = state.tab === 'data';
   document.body.classList.toggle('tab-styles', state.tab === 'styles');
+  // On Playstyles, Clear clears the filters it has (community, script, storyteller).
+  $('#clear-sel').hidden = state.tab === 'styles' ? !scopeOn() : !hasSelection(state.sel);
   const views = { stats: statsView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
   keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab](); });
-  // Editors' account list loads the first time Data & settings is opened.
+  // Editors' account list loads the first time Settings is opened.
   mountClaimPicker();
+  mountAlwaysPicker();
   mountScatterPicker();
+  // The scatter was drawn before its card was on the page; redraw it at the card's width if that's different.
+  const sc = $('#sc-body .sc');
+  if (sc && Math.abs(Number(sc.getAttribute('width')) - $('#sc-body').clientWidth) > 2) refreshScatter();
   fillRows();
   fitLists();
   if (state.tab === 'data' && state.accounts === undefined && state.shared.on && state.shared.canEdit && creds(state.settings).editorKey) { state.accounts = null; loadAccounts(); }
@@ -1550,7 +1628,7 @@ function keepOpenForms(redraw) {
 // ---------- shared games: sign-in and status ----------
 // Creating an account on the website, after the sign-up form: which player you are, and whether to see player win
 // rates (no answer picked to begin with). The account is only created on Continue, so Back leaves nothing behind.
-// Both can be changed later in Data & settings.
+// Both can be changed later in Settings.
 const RATES_HINT = {
   '': 'Choose whether to see other players\' win rates and share your own.',
   show: 'See everyone\'s win rates and share yours.',
@@ -1561,7 +1639,7 @@ function setupView() {
   const opt = (v, label) => `<button type="button" class="toggle setup-opt" data-setup-rates="${v}" aria-pressed="${rates === v}">${label}</button>`;
   const picker = playerChoices().length
     ? '<div class="claim-picker" data-claim-picker></div>'
-    : '<p class="sub small">No games have been recorded yet, so there\'s no one to pick. You can do this later in Data &amp; settings.</p>';
+    : '<p class="sub small">No games have been recorded yet, so there\'s no one to pick. You can do this later in Settings.</p>';
   return `<div class="signin card setup">
     <img class="logo" src="icons/logo-dark.png" alt="" width="64" height="64">
     <h2>Welcome</h2>
@@ -1716,7 +1794,7 @@ async function updateLocal(id, patch, resend) {
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-filter-community],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-style-side],[data-talk-expand],[data-scatter-reset],#clear-sel');
+  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-filter-community],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-crumb-back],[data-crumb-styles],#clear-sel');
   if (!t) return;
   // Under an open game: switch between seat-by-seat and nominations, or show the settings. No full redraw,
   // so the grimoire stays put.
@@ -1757,11 +1835,25 @@ document.addEventListener('click', async (e) => {
     await load();
     return;
   }
-  if (t.dataset.styleSide) { state.styleSide = t.dataset.styleSide; render(); return; }
-  if (t.dataset.talkExpand !== undefined) { state.talkView.expanded = !state.talkView.expanded; refreshTalkChart(); return; }
-  if (t.dataset.scatterReset !== undefined) { state.scatterView.chosen = null; refreshScatter(); return; }
-  if (t.dataset.tab) { state.tab = t.dataset.tab; state.openGame = null; writeHash(); render(); window.scrollTo(0, 0); return; }
+  if (t.dataset.tab) {
+    // The Stats tab opens the stats view picked last (Overview or Playstyles).
+    if (t.dataset.tab === 'stats' && t.closest('.tabs')) state.tab = state.statsView || 'stats';
+    else state.tab = t.dataset.tab;
+    state.openGame = null; writeHash(); render(); window.scrollTo(0, 0); return;
+  }
+  if (t.id === 'clear-sel' && state.tab === 'styles') { clearScope(); return; }
   if (t.id === 'clear-sel') { setSelection((s) => Object.assign(s, emptySelection())); return; }
+  if (t.dataset.crumbStyles !== undefined) { clearScope(); return; }
+  // "← Stats": the overview, with every filter cleared.
+  if (t.dataset.crumbBack !== undefined) {
+    Object.assign(state.filters, { communities: [], script: '', storyteller: '', days: '' });
+    savePrefs();
+    state.tab = state.statsView = 'stats';
+    populateFilters();
+    setSelection((s) => Object.assign(s, emptySelection()));
+    window.scrollTo(0, 0);
+    return;
+  }
   if (t.dataset.addPlayer) { state.tab = 'stats'; addTo('players', t.dataset.addPlayer); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (t.dataset.addChar) { state.tab = 'stats'; addTo('characters', t.dataset.addChar); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (t.dataset.addType) { state.tab = 'stats'; addTo('types', t.dataset.addType); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -1789,12 +1881,13 @@ document.addEventListener('toggle', (e) => {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
-  if (t.dataset.minGames !== undefined) { state.minGames = Number(t.value) || 3; render(); return; }
+  if (t.id === 'stats-view') { state.tab = state.statsView = t.value; writeHash(); render(); return; }
   if (t.dataset.scatterKind !== undefined || t.dataset.scatterSide !== undefined) {
     if (t.dataset.scatterKind !== undefined) state.scatterView.kind = t.value; else state.scatterView.side = t.value;
     render();
     return;
   }
+  // The dropdowns in each chart's question.
   if (t.dataset.talkMeasure !== undefined || t.dataset.talkSide !== undefined) {
     if (t.dataset.talkMeasure !== undefined) state.talkView.measure = t.value; else state.talkView.side = t.value;
     refreshTalkChart();
@@ -2091,7 +2184,7 @@ document.addEventListener('click', async (e) => {
     webAuth.setAccount(r.token, r.account.username, d.remember);
     setProfile(r.account);
     state.setup = null;
-    // Then the answers. The account exists now, so a problem here is shown in Data & settings rather than undone.
+    // Then the answers. The account exists now, so a problem here is shown in Settings rather than undone.
     let problem = null;
     if (pick) {
       const c = await claimPlayer(state.settings, pick.key, pick.name).catch((err) => ({ ok: false, message: err.message }));

@@ -17,23 +17,22 @@
     </a>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="stats">Stats</button>
-      <button role="tab" data-tab="styles">Playstyles</button>
       <button role="tab" data-tab="games">Games</button>
-      <button role="tab" data-tab="data">Data &amp; settings</button>
+      <button role="tab" data-tab="data">Settings</button>
     </nav>
   </header>
 
   <section class="filters" id="filters" aria-label="Filters">
     <div class="filter-row">
+      <!-- Which stats view: the overview, or playstyles (which has fewer filters, so a line sets it apart). -->
+      <select id="stats-view" class="stats-view" aria-label="Stats view">
+        <option value="stats">Overview</option>
+        <option value="styles">Playstyles</option>
+      </select>
+      <span class="filter-divider" aria-hidden="true"></span>
       <div class="toggles" id="community-filter" role="group" aria-label="Community"></div>
       <select data-filter="script" aria-label="Script"></select>
       <select data-filter="storyteller" aria-label="Storyteller"></select>
-      <select data-filter="days" aria-label="Period">
-        <option value="">All time</option>
-        <option value="30">Last 30 days</option>
-        <option value="90">Last 90 days</option>
-        <option value="365">Last year</option>
-      </select>
       <div data-ms="players"></div>
       <div data-ms="characters"></div>
       <div data-ms="types"></div>
