@@ -227,16 +227,21 @@ export function votePairs(games, key, { minChances = 3 } = {}) {
 //   `key` nominates them  (iNominate)
 //   they vote on `key`'s nominations  (theyVote)
 //   `key` votes on their nominations  (iVote)
-// Nominations weigh a little more than votes, and being targeted a little more than targeting. Each is measured
-// against what's typical rather than counted, so playing lots of games together doesn't make an enemy:
-//   nominations: how many there were next to how many you'd expect if nominators picked anyone at the table
-//     (each nomination is one of the other seated players), as log((count + 1) / (expected + 1));
-//   votes: the voter's rate on the other's nominations next to their usual rate (votePairs), as log(rate / usual).
-// The four are put on the same scale (standardised across everyone they've played at least `minGames` games with)
-// and averaged with the weights. The top score is the biggest enemy.
+// Nominations weigh a little more than votes, and being targeted a little more than targeting.
+// Each part is what happened next to what you'd expect, so playing lots of games together doesn't by itself make an
+// enemy:
+//   nominations: games where one nominated the other at least once, next to the games you'd expect if nominators
+//     picked anyone at the table (per game, so one heated game counts once);
+//   votes: votes on the other's nominations, next to the voter's usual rate times their chances (votePairs).
+// Each part's lean, log((observed + 0.5) / (expected + 0.5)), is weighted by games together: n / (n + ENEMY_PRIOR_GAMES).
+// So a pair's own numbers count for half at ENEMY_PRIOR_GAMES games together, less before and more after, and a
+// steady lean over many games outweighs a burst over a few. (The 0.5 only keeps zero counts finite.)
+// The four are then put on the same scale (standardised across everyone they've played at least `minGames` games
+// with) and averaged with the weights. The top score is the worst enemy; the bottom one is the best ally.
 export const ENEMY_WEIGHTS = { theyNominate: 1.5, iNominate: 1.25, theyVote: 1.25, iVote: 1 };
 export const ENEMY_MIN_GAMES = 3;
-export function enemies(games, key, { minGames = ENEMY_MIN_GAMES } = {}) {
+export const ENEMY_PRIOR_GAMES = 10;
+export function enemies(games, key, { minGames = ENEMY_MIN_GAMES, priorGames = ENEMY_PRIOR_GAMES } = {}) {
   const rows = new Map();
   const row = (p) => {
     const k = playerKey(p);
@@ -250,6 +255,9 @@ export function enemies(games, key, { minGames = ENEMY_MIN_GAMES } = {}) {
     for (const p of others) { const r = row(p); r.games++; r.last = Math.max(r.last, g.endedAt || 0); }
     const seated = g.players.filter((p) => !p.isTraveller);
     const bySeat = new Map(g.players.map((p) => [p.seat, p]));
+    // Per game: whether each pair nominated at least once, and the chance of that if every pick were random
+    // (1 minus the chance that none of the nominator's nominations landed on them).
+    const iMiss = new Map(), iHit = new Set(), theyMiss = new Map(), theyHit = new Set();
     for (const n of g.nominations || []) {
       if (n.type === 'exile') continue;
       const from = bySeat.get(n.nominatorSeat), to = bySeat.get(n.nomineeSeat);
@@ -257,22 +265,34 @@ export function enemies(games, key, { minGames = ENEMY_MIN_GAMES } = {}) {
       const pool = seated.filter((p) => p.seat !== from.seat);
       if (!pool.length) continue;
       if (from.seat === me.seat) {
-        for (const q of pool) if (playerKey(q)) { const r = row(q); r.iNom.exp += 1 / pool.length; if (q.seat === to.seat) r.iNom.n++; }
+        for (const q of pool) {
+          const k = playerKey(q);
+          if (!k || k === key) continue;
+          iMiss.set(k, (iMiss.has(k) ? iMiss.get(k) : 1) * (1 - 1 / pool.length));
+          if (q.seat === to.seat) iHit.add(k);
+        }
       } else if (playerKey(from) && pool.some((q) => q.seat === me.seat)) {
-        const r = row(from); r.theyNom.exp += 1 / pool.length; if (to.seat === me.seat) r.theyNom.n++;
+        const k = playerKey(from);
+        theyMiss.set(k, (theyMiss.has(k) ? theyMiss.get(k) : 1) * (1 - 1 / pool.length));
+        if (to.seat === me.seat) theyHit.add(k);
       }
     }
+    for (const [k, miss] of iMiss) { const r = rows.get(k); if (r) { r.iNom.exp += 1 - miss; if (iHit.has(k)) r.iNom.n++; } }
+    for (const [k, miss] of theyMiss) { const r = rows.get(k); if (r) { r.theyNom.exp += 1 - miss; if (theyHit.has(k)) r.theyNom.n++; } }
   }
   const { against, by } = votePairs(games, key, { minChances: 1 });
   const voteOf = (list) => new Map(list.filter((r) => r.base > 0).map((r) => [r.key, r]));
   const iVoteOf = voteOf(against), theyVoteOf = voteOf(by);
   const list = [...rows.values()].filter((r) => r.games >= minGames).map((r) => {
     const iVote = iVoteOf.get(r.key) || null, theyVote = theyVoteOf.get(r.key) || null;
-    return { ...r, iVote, theyVote, parts: {
-      theyNominate: Math.log((r.theyNom.n + 1) / (r.theyNom.exp + 1)),
-      iNominate: Math.log((r.iNom.n + 1) / (r.iNom.exp + 1)),
-      theyVote: theyVote ? Math.log(theyVote.shrunk / theyVote.base) : 0,
-      iVote: iVote ? Math.log(iVote.shrunk / iVote.base) : 0,
+    const w = r.games / (r.games + priorGames);
+    const lean = (obs, exp) => w * Math.log((obs + 0.5) / (exp + 0.5));
+    const votes = (v) => (v ? lean(v.votes, v.base * v.chances) : 0);
+    return { ...r, iVote, theyVote, weight: w, parts: {
+      theyNominate: lean(r.theyNom.n, r.theyNom.exp),
+      iNominate: lean(r.iNom.n, r.iNom.exp),
+      theyVote: votes(theyVote),
+      iVote: votes(iVote),
     } };
   });
   const wsum = Object.values(ENEMY_WEIGHTS).reduce((a, b) => a + b, 0);
