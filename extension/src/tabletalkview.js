@@ -118,15 +118,17 @@ function ticks(lo, hi, want = 5) {
   return out;
 }
 
-// Who's on the scatter. Everyone with enough games can be; by default at most SCATTER_MAX, picked to cover the spread
-// (each next pick is the player furthest from everyone picked so far, on both axes scaled to their range), starting
-// with you. Players added by hand (view.added) come on top of those.
-export const SCATTER_MAX = 20;
+// Who's on the scatter. Everyone with enough games can be. By default SCATTER_DEFAULT of them: you first, then each
+// next pick is the player furthest from everyone picked so far (both axes scaled to their range), so the chart covers
+// the spread. view.chosen (set from "Players shown") replaces the default with exactly those players, up to
+// SCATTER_MAX.
+export const SCATTER_DEFAULT = 20;
+export const SCATTER_MAX = 50;
 export function scatterPick(talk, view, h) {
   const T = talk[view.side], S = SCATTER[view.kind];
   const cands = T.players.filter((p) => (p.listed || p.key === h.me) && p.rates[S.x].value !== null && p.rates[S.y].n > 0);
   let picked = cands;
-  if (cands.length > SCATTER_MAX) {
+  if (cands.length > SCATTER_DEFAULT) {
     const xs = cands.map((p) => p.rates[S.x].value), ys = cands.map((p) => p.rates[S.y].value);
     const rx = Math.max(...xs) - Math.min(...xs) || 1, ry = Math.max(...ys) - Math.min(...ys) || 1;
     const pt = (p) => [p.rates[S.x].value / rx, p.rates[S.y].value / ry];
@@ -135,29 +137,31 @@ export function scatterPick(talk, view, h) {
     const me = cands.find((p) => p.key === h.me);
     picked = [me || cands.reduce((best, p) => (d2(pt(p), mid) > d2(pt(best), mid) ? p : best))];
     const near = new Map(cands.map((p) => [p.key, d2(pt(p), pt(picked[0]))]));
-    while (picked.length < SCATTER_MAX) {
+    while (picked.length < SCATTER_DEFAULT) {
       const next = cands.filter((p) => !picked.includes(p)).reduce((best, p) => (!best || near.get(p.key) > near.get(best.key) || (near.get(p.key) === near.get(best.key) && p.games > best.games) ? p : best), null);
       picked.push(next);
       for (const p of cands) near.set(p.key, Math.min(near.get(p.key), d2(pt(p), pt(next))));
     }
   }
   const def = new Set(picked.map((p) => p.key));
-  const added = new Set((view.added || []).filter((k) => !def.has(k)));
-  return { cands, def, shown: cands.filter((p) => def.has(p.key) || added.has(p.key)), added };
+  const keys = view.chosen ? new Set(view.chosen) : def;
+  return { cands, def, shown: cands.filter((p) => keys.has(p.key)), custom: !!view.chosen };
 }
 
+// The line under the controls: what's shown, and a way back to the default once it's been changed.
 export function scatterNote(talk, view, h) {
-  const { cands, def, added } = scatterPick(talk, view, h);
-  if (cands.length <= SCATTER_MAX) return `Showing all ${plural(cands.length, 'player')}.`;
-  const names = cands.filter((p) => added.has(p.key)).map((p) => p.name);
-  return `Showing ${def.size} of ${cands.length} players, picked to cover the spread.${names.length ? ` Added: ${names.join(', ')}.` : ''}`;
+  const { cands, shown, custom } = scatterPick(talk, view, h);
+  if (custom) return `Showing ${shown.length} of ${plural(cands.length, 'player')}, picked by you. <button type="button" class="lnk" data-scatter-reset>Reset</button>`;
+  if (cands.length <= SCATTER_DEFAULT) return `Showing all ${plural(cands.length, 'player')}.`;
+  return `Showing ${shown.length} of ${cands.length} players, spread across the chart${h.me && shown.some((p) => p.key === h.me) ? ', including you' : ''}.`;
 }
 
 export function scatterSvg(talk, view, h) {
   const T = talk[view.side], S = SCATTER[view.kind];
   const mx = MEASURES[S.x], my = MEASURES[S.y];
-  const pts = scatterPick(talk, view, h).shown;
-  if (pts.length < 2) return '<p class="muted">Not enough games yet.</p>';
+  const { shown: pts, custom } = scatterPick(talk, view, h);
+  if (custom && !pts.length) return '<p class="muted">No players picked. Tick some in "Players shown".</p>';
+  if (pts.length < 2 && !custom) return '<p class="muted">Not enough games yet.</p>';
   const W = 680, H = 440, L = 56, R = 16, TOP = 16, B = 46;
   const xs = pts.map((p) => p.rates[S.x].value), ys = pts.map((p) => p.rates[S.y].value);
   const ax = T.table[S.x], ay = T.table[S.y];
@@ -204,7 +208,7 @@ export function scatterCard(talk, view, h) {
   const select = (attr, options, cur, label) => `<select ${attr} aria-label="${label}">${options.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
   const what = view.kind === 'noms' ? 'nominations per day alive' : 'share of nominations they voted on while alive';
   const sub = `Across: ${what}. Up: share on the other team. Dashed lines: the average. Players with ${T.minGames}+ games${view.side === 'all' ? '' : ` ${sideWords(view.side)}`}; hover a dot for the counts.`;
-  // The picker only appears when some players aren't on the chart, and only lists those.
-  const more = scatterPick(talk, view, h).cands.length > SCATTER_MAX ? '<div data-ms-scatter></div>' : '';
-  return card(view.kind === 'noms' ? 'Who they nominate' : 'Who they vote for', sub, `<div class="tt-controls">${select('data-scatter-kind', SCATTER_KINDS, view.kind, 'Chart')}${more}</div><p class="tt-note small muted" id="sc-note">${esc(scatterNote(talk, view, h))}</p><div class="sc-wrap" id="sc-body">${scatterSvg(talk, view, h)}</div>`, 'wide sc-card');
+  // "Players shown": everyone who can be on the chart, ticked if they are.
+  const more = scatterPick(talk, view, h).cands.length > 1 ? '<div data-ms-scatter></div>' : '';
+  return card(view.kind === 'noms' ? 'Who they nominate' : 'Who they vote for', sub, `<div class="tt-controls">${select('data-scatter-kind', SCATTER_KINDS, view.kind, 'Chart')}${more}</div><p class="tt-note small muted" id="sc-note">${scatterNote(talk, view, h)}</p><div class="sc-wrap" id="sc-body">${scatterSvg(talk, view, h)}</div>`, 'wide sc-card');
 }
