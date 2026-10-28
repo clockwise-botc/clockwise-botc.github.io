@@ -341,6 +341,7 @@ details.game .body > * { min-width: 0; }
 
 /* single-player top row */
 .span-all { grid-column: 1 / -1; }
+.grid.pair-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); }
 .grid.four { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .ring-track { fill: var(--wash); }
 .rings path { stroke: var(--surface); stroke-width: 2; }
@@ -728,6 +729,10 @@ body:not(.tab-stats) .stats-view, body:not(.tab-stats) .filter-divider { display
   .filter-row > .stats-view { flex: 1 1 100%; }
   .filter-divider { flex: 1 1 100%; height: 1px; width: auto; margin: 0; }
 }
+/* My stats is one player's page (yours), so the player, character and type pickers don't apply there either. */
+body.tab-me [data-ms="players"], body.tab-me [data-ms="characters"], body.tab-me [data-ms="types"] { display: none !important; }
+.enemy-name { font-size: 22px; font-weight: 700; margin: 4px 0 14px; }
+.enemy-name .muted { font-size: 14px; font-weight: 400; }
 .grid.stack > .card { grid-column: 1 / -1; }
 
 /* Around the grimoire bars and scatter dots: plum for all games, Townsfolk blue as good, Minion rust as evil. You stay in ink. */

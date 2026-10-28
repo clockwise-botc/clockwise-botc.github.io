@@ -5,7 +5,7 @@ import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from '.
 import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js';
 import { renderData, handleDataClick, handleImport } from './dataview.js';
 import { playstyles } from './playstyles.js';
-import { tableTalk, nominationPairs, votePairs, MEASURES } from './tabletalk.js';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js';
 import { talkCell, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js';
 import { renderGrimoire } from './grimoire.js';
 import { makeImages } from './images.js';
@@ -25,7 +25,7 @@ const api = {
 };
 
 // ---------- state ----------
-const TABS = ['stats', 'styles', 'games', 'data'];
+const TABS = ['stats', 'me', 'styles', 'games', 'data'];
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('dash.prefs')) || {}; } catch { return {}; } })();
 const state = {
   tab: readTab(),
@@ -812,6 +812,27 @@ function talkCard(base, key) {
   return card('Around the grimoire', `Per day alive, next to the average player in the same games (overall, as good, as evil). ${steadyNote} Only games recorded from the start count. Hover for the counts.`,
     `<div class="table-wrap"><table class="tt"><thead><tr><th></th><th>Overall</th><th>As good</th><th>As evil</th></tr></thead><tbody>${rows}</tbody></table></div>`, 'wide');
 }
+// Worst enemy and best ally (tabletalk.js `enemies`): the highest friction score and the lowest, with the four
+// things behind it, and the next two. An enemy needs a score above the middle, an ally one below it.
+function relationCard(base, key, kind) {
+  const all = enemies(base, key);
+  const list = (kind === 'ally' ? allies(all) : all).filter((r) => (kind === 'ally' ? r.score < 0 : r.score > 0));
+  const [top, ...rest] = list;
+  if (!top) return '';
+  const me = esc(nameOf(key)), them = esc(top.name);
+  const games = (n) => (n === 1 ? 'game' : 'games');
+  const tiles = [
+    [top.theyNom.n, `${games(top.theyNom.n)} where ${them} nominated ${me} (${top.theyNom.exp.toFixed(1)} expected)`],
+    [top.iNom.n, `${games(top.iNom.n)} where ${me} nominated ${them} (${top.iNom.exp.toFixed(1)} expected)`],
+    top.theyVote && [pct(top.theyVote.rate), `of ${me}'s nominations ${them} voted on (usually ${pct(top.theyVote.base)})`],
+    top.iVote && [pct(top.iVote.rate), `of ${them}'s nominations ${me} voted on (usually ${pct(top.iVote.base)})`],
+  ].filter(Boolean).map(([b, t]) => `<div><b>${b}</b><span>${t}</span></div>`).join('');
+  const how = `Nominations and votes between the two, each next to what's typical${kind === 'ally' ? ': the player they clash with least' : ''}. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes. The more games together, the more their numbers count.`;
+  const next = rest.slice(0, 2).map((r) => playerLink(r.key, r.name));
+  return card(`${kind === 'ally' ? 'Best ally' : 'Worst enemy'} <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, `Out of everyone with at least ${ENEMY_MIN_GAMES} games together.`,
+    `<p class="enemy-name">${playerLink(top.key, top.name)} <span class="muted">· ${plural(top.games, 'game')} together</span></p><div class="mini-tiles">${tiles}</div>${next.length ? `<p class="sub">Next: ${next.join(', ')}</p>` : ''}`);
+}
+
 function pairsCards(base, key) {
   const { nominates, nominatedBy } = nominationPairs(base, key);
   const cols = (who) => [colPlayer(who), colNum('Nominations', (r) => r.n), colNum('Games together', (r) => r.games)];
@@ -848,8 +869,8 @@ function playerSections(G, sel, seats, base) {
     rel.rivals = rel.rivals.filter((r) => !quietPlayers.has(r.key));
     const noms = nominationStats(G, [key]);
     const quiet = ratesHidden(key);
+    // How they do: results, then when they die, by script and by community.
     out.push(quiet ? quietHero(st) : playerHero(base, key, st));
-    out.push(mostPlayedByType(st));
     if (quiet) out.push(card(`When ${esc(label)} dies`, `Survived to the end in ${pct(st.survivalRate)} of games.`, deathBars(st.deathTiming, st.plays)));
     else out.push(card(`How ${esc(label)} does`, 'Overall, and by the type of character they held. Click a type to see only those games.', rateRows([
       ['Overall', st.winRate, st.plays, 'neutral'],
@@ -858,31 +879,23 @@ function playerSections(G, sel, seats, base) {
       ...TYPES.map((team) => st.byTeam.find((t) => t.team === team) || { team, plays: 0, winRate: null })
         .map((t) => [typeLink(t.team), t.winRate, t.plays, isEvilTeam(t.team) ? 'evil' : t.team === 'traveller' ? 'neutral' : 'good']),
     ]) + `<p class="sub" style="margin:10px 0 0">Survived to the end in ${pct(st.survivalRate)} of games.</p>`));
-    const draws = tokenDraws(seats);
-    if (draws.games) out.push(card('Tokens drawn', `How often ${esc(nameOf(key))} drew each kind of token (the character they started with; travellers left out). The line on each bar marks the chance, from the setups of these games.`, drawRows([
-      ['Good', draws.good, 'good'], ['Evil', draws.evil, 'evil'],
-      ...draws.byType.map((r) => [typeLink(r.key), r, isEvilTeam(r.key) ? 'evil' : 'good', teamOne(r.key)]),
-    ], draws.games)));
+    if (!quiet) out.push(card(`When ${esc(label)} dies`, `Survived to the end in ${pct(st.survivalRate)} of games.`, deathBars(st.deathTiming, st.plays)));
+    const counts = (rows, name) => rows.map((r) => ({ name: name(r), games: r.plays })).sort((a, b) => b.games - a.games);
+    if (st.byScript.length > 1) out.push(quiet ? frequencyCard('sel-scripts', 'By script', '', counts(st.byScript, (r) => r.key), (r) => esc(r.name)) : card('By script', '', rateRows(st.byScript.map((s) => [esc(s.key), s.winRate, s.plays, 'neutral']), 'sel-scripts')));
+    if (state.filters.communities.length !== 1 && st.byCommunity.length > 1) out.push(quiet ? frequencyCard('sel-communities', 'By community', '', counts(st.byCommunity, (r) => communityName(state.settings, r.key)), (r) => esc(r.name)) : card('By community', '', rateRows(st.byCommunity.map((s) => [esc(communityName(state.settings, s.key)), s.winRate, s.plays, 'neutral']), 'sel-communities')));
+    // What they play.
+    out.push(mostPlayedByType(st));
     // Only what they've played; the collection at the bottom of the page shows the rest.
     const { playedIds, all } = collection(st);
     out.push(card('Characters played', `Played ${playedIds.size} of ${all.length} characters. Click a character to see how this player does with it. Click a column to sort.`,
       sortable('p-chars', [colChar(), { label: 'Type', value: (c) => -TYPES.indexOf(c.team), cell: (c) => td(esc(teamOne(c.team))) }, colNum('Plays', (c) => c.plays), ...(quiet ? [] : [colRate('Win rate', (c) => c.winRate, (c) => c.plays, charCls)])],
         st.byCharacter, { sort: 2 })));
-    if (quiet) {
-      const byCount = (rows, n) => rows.map((r) => ({ key: r.key, name: r.name, games: n(r) })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
-      out.push(frequencyCard('p-mates', 'Most often on the same team', `Who has been on ${esc(nameOf(key))}'s side most often (at least 3 games together). Click a name to see them together.`, byCount(rel.teammates, (r) => r.same), (r) => playerLink(r.key, r.name)));
-      out.push(frequencyCard('p-rivals', 'Most often on the other team', `Who has been on the opposite side to ${esc(nameOf(key))} most often (at least 3 games).`, byCount(rel.rivals, (r) => r.opposite), (r) => playerLink(r.key, r.name)));
-    } else {
-      const mateCols = [colPlayer('Teammate'), colNum('Games', (r) => r.same), colRate('Win rate', (r) => r.sameRate, (r) => r.same)];
-      const rivalCols = [colPlayer('Opponent'), colNum('Games', (r) => r.opposite), { ...colRate('Win rate', (r) => r.oppositeRate, (r) => r.opposite), value: (r) => -r.oppositeRate }];
-      out.push(card('Wins most with', `${esc(nameOf(key))}'s win rate when on the same team as each player (at least 3 games together). Click a name to see them together.`,
-        sortable('p-mates', mateCols, rel.teammates, { sort: 2, empty: 'Not enough games together yet.' })));
-      out.push(card('Struggles most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
-        sortable('p-rivals', rivalCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
-      const beatCols = [colPlayer('Opponent'), colNum('Games', (r) => r.opposite), colRate('Win rate', (r) => r.oppositeRate, (r) => r.opposite)];
-      out.push(card('Wins most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
-        sortable('p-beats', beatCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
-    }
+    const draws = tokenDraws(seats);
+    if (draws.games) out.push(card('Tokens drawn', `How often ${esc(nameOf(key))} drew each kind of token (the character they started with; travellers left out). The line on each bar marks the chance, from the setups of these games.`, drawRows([
+      ['Good', draws.good, 'good'], ['Evil', draws.evil, 'evil'],
+      ...draws.byType.map((r) => [typeLink(r.key), r, isEvilTeam(r.key) ? 'evil' : 'good', teamOne(r.key)]),
+    ], draws.games)));
+    // How they play: nominations and votes, and next to everyone else.
     out.push(card('Nominations and votes', 'From recorded nominations in these games.', `<div class="mini-tiles">
       <div><b>${noms.made}</b><span>nominations made</span></div>
       <div><b>${pct(noms.accuracy)}</b><span>of their nominations were on evil players</span></div>
@@ -891,12 +904,30 @@ function playerSections(G, sel, seats, base) {
       <div><b>${noms.votes}</b><span>votes cast</span></div>
       <div><b>${pct(noms.voteAccuracy)}</b><span>of their votes were on evil players</span></div></div>`));
     out.push(talkCard(base, key));
-    out.push(pairsCards(base, key));
-    out.push(votePairCards(base, key));
-    const counts = (rows, name) => rows.map((r) => ({ name: name(r), games: r.plays })).sort((a, b) => b.games - a.games);
-    if (!quiet) out.push(card(`When ${esc(label)} dies`, `Survived to the end in ${pct(st.survivalRate)} of games.`, deathBars(st.deathTiming, st.plays)));
-    if (st.byScript.length > 1) out.push(quiet ? frequencyCard('sel-scripts', 'By script', '', counts(st.byScript, (r) => r.key), (r) => esc(r.name)) : card('By script', '', rateRows(st.byScript.map((s) => [esc(s.key), s.winRate, s.plays, 'neutral']), 'sel-scripts')));
-    if (state.filters.communities.length !== 1 && st.byCommunity.length > 1) out.push(quiet ? frequencyCard('sel-communities', 'By community', '', counts(st.byCommunity, (r) => communityName(state.settings, r.key)), (r) => esc(r.name)) : card('By community', '', rateRows(st.byCommunity.map((s) => [esc(communityName(state.settings, s.key)), s.winRate, s.plays, 'neutral']), 'sel-communities')));
+    // Who with: ally and enemy side by side, then teammates and opponents, then nominations and votes pair by pair.
+    const peopleCards = [];
+    if (quiet) {
+      const byCount = (rows, n) => rows.map((r) => ({ key: r.key, name: r.name, games: n(r) })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
+      peopleCards.push(frequencyCard('p-mates', 'Most often on the same team', `Who has been on ${esc(nameOf(key))}'s side most often (at least 3 games together). Click a name to see them together.`, byCount(rel.teammates, (r) => r.same), (r) => playerLink(r.key, r.name)));
+      peopleCards.push(frequencyCard('p-rivals', 'Most often on the other team', `Who has been on the opposite side to ${esc(nameOf(key))} most often (at least 3 games).`, byCount(rel.rivals, (r) => r.opposite), (r) => playerLink(r.key, r.name)));
+    } else {
+      const mateCols = [colPlayer('Teammate'), colNum('Games', (r) => r.same), colRate('Win rate', (r) => r.sameRate, (r) => r.same)];
+      const rivalCols = [colPlayer('Opponent'), colNum('Games', (r) => r.opposite), { ...colRate('Win rate', (r) => r.oppositeRate, (r) => r.opposite), value: (r) => -r.oppositeRate }];
+      peopleCards.push(card('Wins most with', `${esc(nameOf(key))}'s win rate when on the same team as each player (at least 3 games together). Click a name to see them together.`,
+        sortable('p-mates', mateCols, rel.teammates, { sort: 2, empty: 'Not enough games together yet.' })));
+      peopleCards.push(card('Struggles most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
+        sortable('p-rivals', rivalCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
+      const beatCols = [colPlayer('Opponent'), colNum('Games', (r) => r.opposite), colRate('Win rate', (r) => r.oppositeRate, (r) => r.opposite)];
+      peopleCards.push(card('Wins most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
+        sortable('p-beats', beatCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
+    }
+    // Who with, in full-width rows that stay together at any width: ally and enemy, teammates and opponents (above),
+    // then nominations pair by pair and votes pair by pair.
+    const together = (...cards) => { const c = cards.filter(Boolean); return c.length ? `<div class="span-all"><div class="grid pair-row">${c.join('')}</div></div>` : ''; };
+    out.push(together(relationCard(base, key, 'ally'), relationCard(base, key, 'enemy')));
+    out.push(together(...peopleCards));
+    out.push(together(pairsCards(base, key)));
+    out.push(together(votePairCards(base, key)));
   } else {
     const grp = groupRelations(G, sel.players);
     const names = sel.players.map(nameOf);
@@ -1151,7 +1182,7 @@ function gameDetail(g) {
         <label class="gm-field"><span class="field-label">Storyteller</span><input type="text" value="${esc(g.storytellers.map((s) => s.username).filter(Boolean).join(', '))}" placeholder="Not recorded — type a name" data-st="${esc(g.id)}"></label>
         <label class="gm-field gm-wide"><span class="field-label">Notes</span><textarea rows="2" placeholder="Anything to remember about this game" data-notes="${esc(g.id)}">${esc(g.notes || '')}</textarea></label>
       </div>
-      <label class="gm-check"><input type="checkbox" data-exclude="${esc(g.id)}" ${g.excluded ? 'checked' : ''}><span><b>Exclude from stats</b><span>The game stays in this list but doesn't count towards anything on the Stats tab.</span></span></label>
+      <label class="gm-check"><input type="checkbox" data-exclude="${esc(g.id)}" ${g.excluded ? 'checked' : ''}><span><b>Exclude from stats</b><span>The game stays in this list but doesn't count towards any stats.</span></span></label>
       </fieldset>
       <div class="gm-foot">
         <span class="muted">Room “${esc(g.room)}” · recorded by ${esc((g.recorders && g.recorders.length ? g.recorders.join(', ') : (g.capturedBy && g.capturedBy.username)) || 'unknown')}${g.pending ? ' · not uploaded yet' : ''}</span>
@@ -1236,12 +1267,13 @@ function scopeWords() {
 // "Games", or "Bad Moon Rising games" with a script picked, then where and by whom: "Bad Moon Rising games in Escape".
 const gamesPhrase = () => [state.filters.script ? `${state.filters.script} games` : 'Games', scopeWords()].filter(Boolean).join(' ');
 
-// Where you are on the Stats tab, once anything is picked: "← Stats › wren as the Amnesiac in Escape". One phrase
-// for everything picked, not a path, since the filters don't nest. "← Stats" goes back to the overview with every
-// filter cleared. Playstyles has its own level: "← Stats › Playstyles › Games in Rhap".
+// Where you are on the Community tab, once anything is picked: "← Community › wren as the Amnesiac in Escape". One phrase
+// for everything picked, not a path, since the filters don't nest. "← Community" goes back to the overview with every
+// filter cleared. Playstyles has its own level: "← Community › Playstyles › Games in Rhap".
 function crumbs(G, base, sel) {
   const styles = state.tab === 'styles';
-  if (!styles && !anyFilter(sel)) return '';
+  // My stats is its own tab (always your page), so it has no breadcrumb.
+  if (state.tab === 'me' || (!styles && !anyFilter(sel))) return '';
   const who = listWords(sel.players.map(nameOf));
   const what = sel.players.length && (sel.characters.length || sel.types.length) ? `${who} as ${heldRole(sel).as}`
     : sel.players.length ? who
@@ -1256,7 +1288,7 @@ function crumbs(G, base, sel) {
   const which = state.filters.script && !gamesFirst ? `in ${state.filters.script} games${scopeWords() ? ` ${scopeWords()}` : ''}` : scopeWords();
   const phrase = !what ? gamesPhrase() : [what, which].filter(Boolean).join(what.endsWith('in play') || what.includes(', looking at') ? ', ' : ' ');
   const sep = '<span class="crumb-sep" aria-hidden="true">›</span>';
-  const back = '<button type="button" class="crumb-back" data-crumb-back title="Back to the stats overview, with no filters"><span aria-hidden="true">←</span> Stats</button>';
+  const back = '<button type="button" class="crumb-back" data-crumb-back title="Back to the community overview, with no filters"><span aria-hidden="true">←</span> Community</button>';
   if (styles) {
     // Playstyles, then what its filters narrow it to; "Playstyles" clears those filters.
     return `<nav class="crumbs" aria-label="Where you are">${back}${sep}${scopeOn()
@@ -1289,36 +1321,52 @@ function awardTiles(base) {
     if (!R.featureIds.includes(id)) return [];
     const rated = R.players.filter((p) => p.values[id].raw !== null && counted(p) >= R.minGames);
     const top = Math.max(...rated.map((p) => p.values[id].raw));
-    return top > 0 ? rated.filter((p) => Math.abs(p.values[id].raw - top) < 1e-9).sort((a, b) => a.name.localeCompare(b.name)) : [];
+    if (!(top > 0)) return [];
+    // One winner. A tie goes to whoever has more games behind the rate, then whoever played most recently, then the name.
+    const tied = rated.filter((p) => Math.abs(p.values[id].raw - top) < 1e-9);
+    return [tied.sort((a, b) => counted(b) - counted(a) || (lastPlayed.get(b.key) || 0) - (lastPlayed.get(a.key) || 0) || a.name.localeCompare(b.name))[0]];
   };
-  // One name, or several sharing the award ("Lauren, Mitchell & perzo"); more than three are counted instead.
+  const lastPlayed = new Map();
+  for (const g of base) for (const p of g.players) { const k = playerKey(p); if (k) lastPlayed.set(k, Math.max(lastPlayed.get(k) || 0, g.endedAt || 0)); }
   const names = (ps) => {
-    if (ps.length > 3) return `${ps.length} players tie`;
-    const links = ps.map((p) => playerLink(p.key, p.name));
-    const chars = ps.reduce((n, p) => n + [...p.name].length, 0) + (ps.length - 1) * 2;
-    return `<span style="font-size:${Math.min(1, 11 / Math.max(1, chars)).toFixed(2)}em">${links.length > 1 ? `${links.slice(0, -1).join(', ')} &amp; ${links[links.length - 1]}` : links[0]}</span>`;
+    const p = ps[0];
+    return `<span style="font-size:${Math.min(1, 11 / Math.max(1, [...p.name].length)).toFixed(2)}em">${playerLink(p.key, p.name)}</span>`;
   };
   const info = (text) => ` <span class="info" data-tip="${esc(text)}" aria-label="${esc(text)}">ⓘ</span>`;
   const out = [];
   const detective = best('good', 'enemyExecs', (p) => p.t.tracked);
   if (detective.length) {
     const p = detective[0];
-    out.push(tile(`Top detective${info('As good: the most evil players executed from their nominations, per game (3+ games as good).')}`, names(detective),
-      detective.length > 1 ? `${p.values.enemyExecs.raw.toFixed(2)} evil players executed per game from their nominations` : `${plural(p.t.enemyExecs, 'evil player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
+    out.push(tile(`Best detective${info('As good: the most evil players executed from their nominations, per game (3+ games as good).')}`, names(detective),
+      `${plural(p.t.enemyExecs, 'evil player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
   const framer = best('evil', 'enemyExecs', (p) => p.t.tracked);
   if (framer.length) {
     const p = framer[0];
-    out.push(tile(`Top framer${info('As evil: the most good players executed from their nominations, per game (3+ games as evil).')}`, names(framer),
-      framer.length > 1 ? `${p.values.enemyExecs.raw.toFixed(2)} good players executed per game from their nominations` : `${plural(p.t.enemyExecs, 'good player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
+    out.push(tile(`Best framer${info('As evil: the most good players executed from their nominations, per game (3+ games as evil).')}`, names(framer),
+      `${plural(p.t.enemyExecs, 'good player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
   const survivor = best('all', 'survived', (p) => p.t.known);
   if (survivor.length) {
     const p = survivor[0], alive = p.t.fates.survivedWon + p.t.fates.survivedLost;
     out.push(tile(`Best survivor${info('Alive at the end of the largest share of their games (3+ games).')}`, names(survivor),
-      survivor.length > 1 ? `alive at the end of ${pct(p.values.survived.raw)} of their games` : `alive at the end of ${alive} of ${plural(p.t.known, 'game')}`, 'award feature'));
+      `alive at the end of ${alive} of ${plural(p.t.known, 'game')}`, 'award feature'));
   }
   return out.length ? `<div class="tiles awards">${out.join('')}</div>` : '';
+}
+
+// "My stats": your own player page, without having to find yourself first.
+function myView() {
+  const me = myPlayer();
+  if (!me) {
+    const signedIn = !!state.profile;
+    return `<div class="card my-pick"><h3>Which player are you?</h3>${signedIn
+      ? '<p class="sub">Pick yourself once and this tab will show your stats.</p><div class="toolbar claim-form"><div class="claim-picker" data-claim-picker></div><button class="btn primary" type="button" data-claim>Claim</button></div><p class="msg" id="claim-msg"></p>'
+      : `<p class="sub">${WEB ? 'Sign in' : 'Sign in from the extension\'s popup'} and pick yourself, and this tab will show your stats.</p>`}</div>`;
+  }
+  const keep = state.sel;
+  state.sel = { ...emptySelection(), players: [me] };
+  try { return statsView(); } finally { state.sel = keep; }
 }
 
 function stylesView() {
@@ -1496,9 +1544,11 @@ function render() {
   document.body.classList.toggle('tab-stats', tabShown === 'stats');
   $('#filters').hidden = state.tab === 'data';
   document.body.classList.toggle('tab-styles', state.tab === 'styles');
-  // On Playstyles, Clear clears the filters it has (community, script, storyteller).
-  $('#clear-sel').hidden = state.tab === 'styles' ? !scopeOn() : !hasSelection(state.sel);
-  const views = { stats: statsView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
+  // On Playstyles and My stats, Clear clears the filters they have (community, script, storyteller).
+  const scopeOnly = state.tab === 'styles' || state.tab === 'me';
+  $('#clear-sel').hidden = scopeOnly ? !scopeOn() : !hasSelection(state.sel);
+  document.body.classList.toggle('tab-me', state.tab === 'me');
+  const views = { stats: statsView, me: myView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
   keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab](); });
   // Editors' account list loads the first time Settings is opened.
   mountClaimPicker();
@@ -1841,10 +1891,10 @@ document.addEventListener('click', async (e) => {
     else state.tab = t.dataset.tab;
     state.openGame = null; writeHash(); render(); window.scrollTo(0, 0); return;
   }
-  if (t.id === 'clear-sel' && state.tab === 'styles') { clearScope(); return; }
+  if (t.id === 'clear-sel' && (state.tab === 'styles' || state.tab === 'me')) { clearScope(); return; }
   if (t.id === 'clear-sel') { setSelection((s) => Object.assign(s, emptySelection())); return; }
   if (t.dataset.crumbStyles !== undefined) { clearScope(); return; }
-  // "← Stats": the overview, with every filter cleared.
+  // "← Community": the overview, with every filter cleared.
   if (t.dataset.crumbBack !== undefined) {
     Object.assign(state.filters, { communities: [], script: '', storyteller: '', days: '' });
     savePrefs();

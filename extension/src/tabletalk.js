@@ -221,3 +221,92 @@ export function votePairs(games, key, { minChances = 3 } = {}) {
   // Against: my votes, so my usual rate. By: their votes, so each voter's own usual rate.
   return { against: finish(against, () => key), by: finish(by, (r) => r.key), usual: baseOf(key) };
 }
+
+// Worst enemy: the player `key` has the most friction with, from four things between the two of them:
+//   they nominate `key`   (weight ENEMY_WEIGHTS.theyNominate)
+//   `key` nominates them  (iNominate)
+//   they vote on `key`'s nominations  (theyVote)
+//   `key` votes on their nominations  (iVote)
+// Nominations weigh a little more than votes, and being targeted a little more than targeting.
+// Each part is what happened next to what you'd expect, so playing lots of games together doesn't by itself make an
+// enemy:
+//   nominations: games where one nominated the other at least once, next to the games you'd expect if nominators
+//     picked anyone at the table (per game, so one heated game counts once);
+//   votes: votes on the other's nominations, next to the voter's usual rate times their chances (votePairs).
+// Each part's lean, log((observed + 0.5) / (expected + 0.5)), is weighted by games together: n / (n + ENEMY_PRIOR_GAMES).
+// So a pair's own numbers count for half at ENEMY_PRIOR_GAMES games together, less before and more after, and a
+// steady lean over many games outweighs a burst over a few. (The 0.5 only keeps zero counts finite.)
+// The four are then put on the same scale (standardised across everyone they've played at least `minGames` games
+// with) and averaged with the weights. The top score is the worst enemy; the bottom one is the best ally.
+export const ENEMY_WEIGHTS = { theyNominate: 1.5, iNominate: 1.25, theyVote: 1.25, iVote: 1 };
+export const ENEMY_MIN_GAMES = 3;
+export const ENEMY_PRIOR_GAMES = 10;
+export function enemies(games, key, { minGames = ENEMY_MIN_GAMES, priorGames = ENEMY_PRIOR_GAMES } = {}) {
+  const rows = new Map();
+  const row = (p) => {
+    const k = playerKey(p);
+    if (!rows.has(k)) rows.set(k, { key: k, name: displayName(k, p.username), games: 0, last: 0, iNom: { n: 0, exp: 0 }, theyNom: { n: 0, exp: 0 } });
+    return rows.get(k);
+  };
+  for (const g of games) {
+    const me = g.players.find((p) => playerKey(p) === key);
+    if (!me) continue;
+    const others = g.players.filter((p) => playerKey(p) && playerKey(p) !== key);
+    for (const p of others) { const r = row(p); r.games++; r.last = Math.max(r.last, g.endedAt || 0); }
+    const seated = g.players.filter((p) => !p.isTraveller);
+    const bySeat = new Map(g.players.map((p) => [p.seat, p]));
+    // Per game: whether each pair nominated at least once, and the chance of that if every pick were random
+    // (1 minus the chance that none of the nominator's nominations landed on them).
+    const iMiss = new Map(), iHit = new Set(), theyMiss = new Map(), theyHit = new Set();
+    for (const n of g.nominations || []) {
+      if (n.type === 'exile') continue;
+      const from = bySeat.get(n.nominatorSeat), to = bySeat.get(n.nomineeSeat);
+      if (!from || !to) continue;
+      const pool = seated.filter((p) => p.seat !== from.seat);
+      if (!pool.length) continue;
+      if (from.seat === me.seat) {
+        for (const q of pool) {
+          const k = playerKey(q);
+          if (!k || k === key) continue;
+          iMiss.set(k, (iMiss.has(k) ? iMiss.get(k) : 1) * (1 - 1 / pool.length));
+          if (q.seat === to.seat) iHit.add(k);
+        }
+      } else if (playerKey(from) && pool.some((q) => q.seat === me.seat)) {
+        const k = playerKey(from);
+        theyMiss.set(k, (theyMiss.has(k) ? theyMiss.get(k) : 1) * (1 - 1 / pool.length));
+        if (to.seat === me.seat) theyHit.add(k);
+      }
+    }
+    for (const [k, miss] of iMiss) { const r = rows.get(k); if (r) { r.iNom.exp += 1 - miss; if (iHit.has(k)) r.iNom.n++; } }
+    for (const [k, miss] of theyMiss) { const r = rows.get(k); if (r) { r.theyNom.exp += 1 - miss; if (theyHit.has(k)) r.theyNom.n++; } }
+  }
+  const { against, by } = votePairs(games, key, { minChances: 1 });
+  const voteOf = (list) => new Map(list.filter((r) => r.base > 0).map((r) => [r.key, r]));
+  const iVoteOf = voteOf(against), theyVoteOf = voteOf(by);
+  const list = [...rows.values()].filter((r) => r.games >= minGames).map((r) => {
+    const iVote = iVoteOf.get(r.key) || null, theyVote = theyVoteOf.get(r.key) || null;
+    const w = r.games / (r.games + priorGames);
+    const lean = (obs, exp) => w * Math.log((obs + 0.5) / (exp + 0.5));
+    const votes = (v) => (v ? lean(v.votes, v.base * v.chances) : 0);
+    return { ...r, iVote, theyVote, weight: w, parts: {
+      theyNominate: lean(r.theyNom.n, r.theyNom.exp),
+      iNominate: lean(r.iNom.n, r.iNom.exp),
+      theyVote: votes(theyVote),
+      iVote: votes(iVote),
+    } };
+  });
+  const wsum = Object.values(ENEMY_WEIGHTS).reduce((a, b) => a + b, 0);
+  for (const r of list) r.z = {};
+  for (const id of Object.keys(ENEMY_WEIGHTS)) {
+    const xs = list.map((r) => r.parts[id]);
+    const mean = xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
+    const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / (xs.length || 1));
+    for (const r of list) r.z[id] = sd > 0 ? (r.parts[id] - mean) / sd : 0;
+  }
+  for (const r of list) r.score = Object.entries(ENEMY_WEIGHTS).reduce((s, [id, w]) => s + w * r.z[id], 0) / wsum;
+  // Ties go to more games together, then the most recent game together, then the name.
+  return list.sort((a, b) => b.score - a.score || tieBreak(a, b));
+}
+const tieBreak = (a, b) => b.games - a.games || b.last - a.last || a.name.localeCompare(b.name);
+// Best ally: the lowest scores first, with the same tie-breaks as enemies().
+export const allies = (list) => [...list].sort((a, b) => a.score - b.score || tieBreak(a, b));
