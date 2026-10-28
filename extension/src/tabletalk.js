@@ -18,7 +18,8 @@
 import { playerKey, displayName } from './stats.js';
 import { ALL_CHARACTERS } from './characters.js';
 
-export const MIN_GAMES = { all: 5, good: 3, evil: 3 };
+// Games a player needs to be listed: 3 everywhere for now, while there aren't many games yet.
+export const MIN_GAMES = { all: 3, good: 3, evil: 3 };
 const SHRINK = { perDay: 8, votes: 20, life: 3, other: 5 }; // pretend days, vote chances, games, nominations
 const TEAM_OF = new Map(ALL_CHARACTERS.map(([id, , team]) => [id, team]));
 const homeSide = (team) => (team === 'townsfolk' || team === 'outsider' ? 'good' : team === 'minion' || team === 'demon' ? 'evil' : null);

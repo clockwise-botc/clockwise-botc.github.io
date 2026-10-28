@@ -9,7 +9,8 @@ import { playerKey, displayName } from './stats.js';
 
 export const SIDES = ['good', 'evil', 'all'];
 const SHRINK = 5; // pretend games at the table-wide rate added to every player's own
-export const MIN_GAMES = { good: 5, evil: 3, all: 5 };
+// Games a player needs on a side to be included: 3 everywhere for now, while there aren't many games yet.
+export const MIN_GAMES = { good: 3, evil: 3, all: 3 };
 
 // One per seat, in the order a game unfolds. "Early" means by the end of Day 2.
 export const FATES = [

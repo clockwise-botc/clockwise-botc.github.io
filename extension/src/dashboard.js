@@ -1192,14 +1192,16 @@ function gamesView() {
 }
 
 // Awards: whose nominations get the most evil players executed (as good), the most good players executed (as evil),
-// and who most often survives to the end. Once a player has enough games (5 as good, 3 as evil, 5 overall) it's their
+// and who most often survives to the end. Once a player has enough games (3 on that side, or overall) it's their
 // own rate that counts, not how many games they've played: a tie is shared rather than going to whoever plays more.
 // Only games recorded from the start count for the nomination awards.
 function awardTiles(base) {
-  const best = (side, id) => {
+  // The minimum applies to the games each award is worked out from: games recorded from the start for the nomination
+  // awards, games with a known end for the survivor.
+  const best = (side, id, counted) => {
     const R = playstyles(base, side);
     if (!R.featureIds.includes(id)) return [];
-    const rated = R.players.filter((p) => p.values[id].raw !== null);
+    const rated = R.players.filter((p) => p.values[id].raw !== null && counted(p) >= R.minGames);
     const top = Math.max(...rated.map((p) => p.values[id].raw));
     return top > 0 ? rated.filter((p) => Math.abs(p.values[id].raw - top) < 1e-9).sort((a, b) => a.name.localeCompare(b.name)) : [];
   };
@@ -1212,22 +1214,22 @@ function awardTiles(base) {
   };
   const info = (text) => ` <span class="info" data-tip="${esc(text)}" aria-label="${esc(text)}">ⓘ</span>`;
   const out = [];
-  const detective = best('good', 'enemyExecs');
+  const detective = best('good', 'enemyExecs', (p) => p.t.tracked);
   if (detective.length) {
     const p = detective[0];
-    out.push(tile(`Top detective${info('As good: the most evil players executed from their nominations, per game (5+ games as good).')}`, names(detective),
+    out.push(tile(`Top detective${info('As good: the most evil players executed from their nominations, per game (3+ games as good).')}`, names(detective),
       detective.length > 1 ? `${p.values.enemyExecs.raw.toFixed(2)} evil players executed per game from their nominations` : `${plural(p.t.enemyExecs, 'evil player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
-  const framer = best('evil', 'enemyExecs');
+  const framer = best('evil', 'enemyExecs', (p) => p.t.tracked);
   if (framer.length) {
     const p = framer[0];
     out.push(tile(`Top framer${info('As evil: the most good players executed from their nominations, per game (3+ games as evil).')}`, names(framer),
       framer.length > 1 ? `${p.values.enemyExecs.raw.toFixed(2)} good players executed per game from their nominations` : `${plural(p.t.enemyExecs, 'good player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
-  const survivor = best('all', 'survived');
+  const survivor = best('all', 'survived', (p) => p.t.known);
   if (survivor.length) {
     const p = survivor[0], alive = p.t.fates.survivedWon + p.t.fates.survivedLost;
-    out.push(tile(`Best survivor${info('Alive at the end of the largest share of their games (5+ games).')}`, names(survivor),
+    out.push(tile(`Best survivor${info('Alive at the end of the largest share of their games (3+ games).')}`, names(survivor),
       survivor.length > 1 ? `alive at the end of ${pct(p.values.survived.raw)} of their games` : `alive at the end of ${alive} of ${plural(p.t.known, 'game')}`, 'award'));
   }
   return out.length ? `<div class="tiles awards">${out.join('')}</div>` : '';
@@ -1242,8 +1244,8 @@ function stylesView() {
   state.scatterView.side = side;
   const toggle = `<div class="ps-toolbar"><div class="toggles" role="group" aria-label="Which games">${TALK_SIDES.map(([v, l]) => `<button class="toggle" data-style-side="${v}" aria-pressed="${v === side}">${l}</button>`).join('')}</div></div>`;
   // Win rates for the picked games, most-played first (rather than ranked by win rate). Travellers count, as on the
-  // player page; 5+ games overall or 3+ on a side.
-  const pick = { all: [(p) => p.games, (p) => p.winRate, 'neutral', 5], good: [(p) => p.goodGames, (p) => p.goodWinRate, 'good', 3], evil: [(p) => p.evilGames, (p) => p.evilWinRate, 'evil', 3] }[side];
+  // player page; 3+ games (overall or on that side).
+  const pick = { all: [(p) => p.games, (p) => p.winRate, 'neutral', 3], good: [(p) => p.goodGames, (p) => p.goodWinRate, 'good', 3], evil: [(p) => p.evilGames, (p) => p.evilWinRate, 'evil', 3] }[side];
   const [n, rate, cls, min] = pick;
   // Players who hide their win rates are left out, and someone hiding their own sees no win rates (ranked()).
   const rows = ranked(playerRows(base)).filter((p) => n(p) >= min);
