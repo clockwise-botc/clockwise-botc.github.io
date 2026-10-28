@@ -1,4 +1,4 @@
-// "At the table": how loud or quiet each player is, how often they're nominated, how often they vote, how long they
+// "Around the grimoire": how loud or quiet each player is, how often they're nominated, how often they vote, how long they
 // live, and who they nominate (and get nominated by) most. Pure functions (no DOM).
 //
 // Everything is per DAY ALIVE, so someone killed on Night 1 isn't counted as quiet. A player is alive on day d if they

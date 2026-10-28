@@ -29,7 +29,7 @@ const TABS = ['stats', 'styles', 'games', 'data'];
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('dash.prefs')) || {}; } catch { return {}; } })();
 const state = {
   tab: readTab(),
-  talkView: { measure: 'loud', side: 'all', expanded: false }, // At the table chart: measure, games, all players shown
+  talkView: { measure: 'loud', side: 'all', expanded: false }, // Around the grimoire chart: measure, games, all players shown
   scatterView: { kind: 'noms', side: 'all', added: [] }, // Playstyles scatter: nominations or votes, games, players added by hand
   styleSide: 'all', // Playstyles: one toggle (all games, as good, as evil) for the chart, the scatter and win rates
   filters: { communities: Array.isArray(prefs.communities) ? prefs.communities : [], script: '', storyteller: '', days: '' },
@@ -718,14 +718,14 @@ function heldSections(G, sel, seats, base) {
   return out.join('');
 }
 
-// ---------- at the table (per day alive, with percentiles) ----------
+// ---------- around the grimoire (per day alive, next to the average) ----------
 // Worked out once per set of games: the main page's chart and the player page both use it.
 let talkCache = { games: null, out: null };
 function talk(base) {
   if (talkCache.games !== base) talkCache = { games: base, out: tableTalk(base) };
   return talkCache.out;
 }
-// The At the table chart and the scatter redraw in place (so the scatter's picker stays open while picking).
+// The Around the grimoire chart and the scatter redraw in place (so the scatter's picker stays open while picking).
 const talkHelpers = () => ({ playerLink, me: myPlayer() });
 function refreshTalkChart() {
   const body = $('#tt-chart'), note = $('#tt-note');
@@ -766,7 +766,7 @@ function talkCard(base, key) {
   const me = find('all');
   if (!me) return '';
   const steadyNote = 'As good / as evil only count games where they kept one alignment the whole game.';
-  return card('At the table', `Per day alive, next to the average player in the same games (overall, as good, as evil). ${steadyNote} Only games recorded from the start count. Hover for the counts.`,
+  return card('Around the grimoire', `Per day alive, next to the average player in the same games (overall, as good, as evil). ${steadyNote} Only games recorded from the start count. Hover for the counts.`,
     `<div class="table-wrap"><table class="tt"><thead><tr><th></th><th>Overall</th><th>As good</th><th>As evil</th></tr></thead><tbody>${rows}</tbody></table></div>`, 'wide');
 }
 function pairsCards(base, key) {
@@ -1159,7 +1159,7 @@ function playersTile(G) {
   const keys = new Set(G.flatMap((g) => g.players.map(playerKey)).filter(Boolean));
   const counts = G.map((g) => g.playerCount || g.players.filter((p) => !p.isTraveller).length).filter(Boolean);
   const avg = counts.length ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : null;
-  return tile('Players', keys.size, avg ? `about ${avg} at the table per game` : '');
+  return tile('Players', keys.size, avg ? `about ${avg} around the grimoire per game` : '');
 }
 
 function lengthTile(G, o) {

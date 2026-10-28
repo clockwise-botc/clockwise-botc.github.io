@@ -1,4 +1,4 @@
-// Drawing the "At the table" stats: one value next to the table average (for the player page and the Playstyles
+// Drawing the "Around the grimoire" stats: one value next to the table average (for the player page and the Playstyles
 // table), and a chart of every player on one measure (main page). The numbers come from tabletalk.js.
 
 import { MEASURES } from './tabletalk.js';
@@ -27,7 +27,7 @@ export function talkCell(T, pl, id, side) {
   return `<div class="tt-cell" data-tip="${esc(tipFor(id, pl, T, side))}"><b>${m.fmt(r.value)}</b><span class="small">${esc(gapLine(id, r.gap, T.table[id]))}</span>${pl.listed ? '' : '<span class="small muted">few games</span>'}</div>`;
 }
 
-// The At the table chart: players on one measure, as a bar from the average (the line) to their value, highest first.
+// The Around the grimoire chart: players on one measure, as a bar from the average (the line) to their value, highest first.
 // With more than 2 × TOP_N players it shows the top and bottom TOP_N (plus you), with "Show all" to expand.
 // view: { measure, side, expanded }   h: { playerLink, me }
 export const TOP_N = 10;
@@ -97,7 +97,7 @@ export const talkChartSub = (talk, view) => `Players with ${talk[view.side].minG
 export function talkChartCard(talk, view, h) {
   const select = (attr, options, cur, label) => `<select ${attr} aria-label="${label}">${options.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
   const controls = `<div class="tt-controls">${select('data-talk-measure', Object.entries(MEASURES).map(([k, x]) => [k, x.label]), view.measure, 'Measure')}</div>`;
-  return card('At the table', talkChartSub(talk, view), `${controls}<p class="tt-note small muted" id="tt-note">${esc(talkChartNote(talk, view, h))}</p><div class="tt-chart" id="tt-chart">${talkChartBody(talk, view, h)}</div>`, 'wide tt-chart-card');
+  return card('Around the grimoire', talkChartSub(talk, view), `${controls}<p class="tt-note small muted" id="tt-note">${esc(talkChartNote(talk, view, h))}</p><div class="tt-chart" id="tt-chart">${talkChartBody(talk, view, h)}</div>`, 'wide tt-chart-card');
 }
 
 // ---------- nominations / votes scatter ----------
