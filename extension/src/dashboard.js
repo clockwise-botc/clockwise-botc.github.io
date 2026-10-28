@@ -9,7 +9,7 @@ import { makeImages } from './images.js';
 import { characterToken, installTokenStyle } from './tokens.js';
 import { multiSelect } from './multiselect.js';
 import { ALL_CHARACTERS } from './characters.js';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -1503,7 +1503,7 @@ async function load() {
   const c = creds(state.settings);
   const cache = c.url ? await loadShared() : null;
   state.shared = { ...state.shared, on: !!c.url, hasPassword: canReadWith(c), account: c.token ? { username: c.username } : null, canEdit: !c.url || !!c.editorKey, cacheAt: cache && cache.at };
-  const map = c.url ? mergeGames(local, cache) : local;
+  const map = dropLocalTwins(c.url ? mergeGames(local, cache) : { ...local });
   state.games = Object.values(map).map((g) => ({ ...g, community: gameCommunity(state.settings, g) }));
   state.lastSync = WEB ? null : await api.get('lastSync', null);
   // botc.app's art: the extension reads it itself; the website gets it from the shared store.

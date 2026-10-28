@@ -110,6 +110,15 @@ export function mergeGames(local, cache) {
   return out;
 }
 
+// A game recorded before botc.app said which room it was in is saved as "local:<start time>". When someone else's
+// recording of the same game (same start time, a real room) is there too, the "local" one is left out.
+export function dropLocalTwins(map) {
+  const startOf = (id) => id.slice(id.indexOf(':') + 1);
+  const real = new Set(Object.keys(map).filter((id) => !id.startsWith('local:')).map(startOf));
+  for (const id of Object.keys(map)) if (id.startsWith('local:') && real.has(startOf(id))) delete map[id];
+  return map;
+}
+
 // Is this key the community password (canRead) / an editor key (canEdit)?
 export async function checkKey(settings, key) {
   const c = creds(settings);
