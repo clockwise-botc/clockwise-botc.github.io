@@ -84,7 +84,7 @@ Your own player page, without having to find yourself first. It needs your playe
 
 ### Playstyles
 
-Everyone at once. The community, script, storyteller and period filters apply. Under the awards, one toggle (All games / As good / As evil) sets the games for everything below it, and the bars and dots turn blue as good and rust as evil. Next to it, **Min. games** (2 to 10, 3 to start with) sets how many games a player needs to be on the chart, the scatter and the win rates.
+Everyone at once. The community, script, storyteller and period filters apply. Under the awards, one toggle (All games / As good / As evil) sets the games for everything below it, and the bars and dots turn blue as good and rust as evil. A player needs 3+ games to be on the chart, the scatter and the win rates.
 
 - **Awards:** the **best detective** (as good, the most evil players executed from their nominations per game; 3+ games as good), the **best framer** (as evil, the most good players executed from their nominations per game; 3+ games as evil) and the **best survivor** (alive at the end of the largest share of their games; 3+ games). Once a player has enough games, only their own rate counts, not how many games they've played; ties are shared. Only games recorded from the start count for the nomination awards.
 - **Around the grimoire:** players with 3+ games on one measure (picked from a dropdown), as a bar from the average (the line; hover "average" for its value) to their value, numbered by rank, with the value on the right. With more than 20 players it shows the top 10 and bottom 10 plus you (once you've claimed your player under Data & settings); **Show all** (or the "⋯ more players" marker) lists everyone. Hover a bar for the counts and the gap from the average.
