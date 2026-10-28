@@ -788,7 +788,7 @@ function enemyCard(base, key) {
     top.theyVote && [pct(top.theyVote.rate), `of ${me}'s nominations ${them} voted on (usually ${pct(top.theyVote.base)})`],
     top.iVote && [pct(top.iVote.rate), `of ${them}'s nominations ${me} voted on (usually ${pct(top.iVote.base)})`],
   ].filter(Boolean).map(([b, t]) => `<div><b>${b}</b><span>${t}</span></div>`).join('');
-  const how = 'Nominations and votes between the two, each next to what\'s typical. Being nominated or voted on counts more than doing it, and nominations count more than votes.';
+  const how = 'Nominations and votes between the two, each next to what\'s typical. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes.';
   const next = rest.slice(0, 2).map((r) => playerLink(r.key, r.name));
   return card(`Biggest enemy <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, `Out of everyone with at least ${ENEMY_MIN_GAMES} games together.`,
     `<p class="enemy-name">${playerLink(top.key, top.name)} <span class="muted">· ${plural(top.games, 'game')} together</span></p><div class="mini-tiles">${tiles}</div>${next.length ? `<p class="sub">Next: ${next.join(', ')}</p>` : ''}`);
