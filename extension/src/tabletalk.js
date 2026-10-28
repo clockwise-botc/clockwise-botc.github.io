@@ -222,7 +222,7 @@ export function votePairs(games, key, { minChances = 3 } = {}) {
   return { against: finish(against, () => key), by: finish(by, (r) => r.key), usual: baseOf(key) };
 }
 
-// Biggest enemy: the player `key` has the most friction with, from four things between the two of them:
+// Worst enemy: the player `key` has the most friction with, from four things between the two of them:
 //   they nominate `key`   (weight ENEMY_WEIGHTS.theyNominate)
 //   `key` nominates them  (iNominate)
 //   they vote on `key`'s nominations  (theyVote)
@@ -240,14 +240,14 @@ export function enemies(games, key, { minGames = ENEMY_MIN_GAMES } = {}) {
   const rows = new Map();
   const row = (p) => {
     const k = playerKey(p);
-    if (!rows.has(k)) rows.set(k, { key: k, name: displayName(k, p.username), games: 0, iNom: { n: 0, exp: 0 }, theyNom: { n: 0, exp: 0 } });
+    if (!rows.has(k)) rows.set(k, { key: k, name: displayName(k, p.username), games: 0, last: 0, iNom: { n: 0, exp: 0 }, theyNom: { n: 0, exp: 0 } });
     return rows.get(k);
   };
   for (const g of games) {
     const me = g.players.find((p) => playerKey(p) === key);
     if (!me) continue;
     const others = g.players.filter((p) => playerKey(p) && playerKey(p) !== key);
-    for (const p of others) row(p).games++;
+    for (const p of others) { const r = row(p); r.games++; r.last = Math.max(r.last, g.endedAt || 0); }
     const seated = g.players.filter((p) => !p.isTraveller);
     const bySeat = new Map(g.players.map((p) => [p.seat, p]));
     for (const n of g.nominations || []) {
@@ -284,5 +284,9 @@ export function enemies(games, key, { minGames = ENEMY_MIN_GAMES } = {}) {
     for (const r of list) r.z[id] = sd > 0 ? (r.parts[id] - mean) / sd : 0;
   }
   for (const r of list) r.score = Object.entries(ENEMY_WEIGHTS).reduce((s, [id, w]) => s + w * r.z[id], 0) / wsum;
-  return list.sort((a, b) => b.score - a.score || b.games - a.games || a.name.localeCompare(b.name));
+  // Ties go to more games together, then the most recent game together, then the name.
+  return list.sort((a, b) => b.score - a.score || tieBreak(a, b));
 }
+const tieBreak = (a, b) => b.games - a.games || b.last - a.last || a.name.localeCompare(b.name);
+// Best ally: the lowest scores first, with the same tie-breaks as enemies().
+export const allies = (list) => [...list].sort((a, b) => a.score - b.score || tieBreak(a, b));

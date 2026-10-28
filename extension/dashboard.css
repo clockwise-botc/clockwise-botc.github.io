@@ -333,6 +333,7 @@ details.game .body > * { min-width: 0; }
 
 /* single-player top row */
 .span-all { grid-column: 1 / -1; }
+.grid.pair-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); }
 .grid.four { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .ring-track { fill: var(--wash); }
 .rings path { stroke: var(--surface); stroke-width: 2; }
