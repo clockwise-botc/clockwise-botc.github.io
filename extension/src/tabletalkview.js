@@ -173,12 +173,15 @@ export function scatterSvg(talk, view, h) {
   const sy = (v) => H - B - ((v - y0) / (y1 - y0)) * (H - TOP - B);
   const f1 = (n) => n.toFixed(1);
   let g = '';
-  for (const t of ticks(x0, x1)) g += `<line class="sc-grid" x1="${f1(sx(t))}" x2="${f1(sx(t))}" y1="${TOP}" y2="${H - B}"/><text class="sc-tick" x="${f1(sx(t))}" y="${H - B + 16}" text-anchor="middle">${mx.fmt(t)}</text>`;
-  for (const t of ticks(y0, y1)) g += `<line class="sc-grid" x1="${L}" x2="${W - R}" y1="${f1(sy(t))}" y2="${f1(sy(t))}"/><text class="sc-tick" x="${L - 8}" y="${f1(sy(t) + 4)}" text-anchor="end">${my.fmt(t)}</text>`;
+  for (const t of ticks(x0, x1)) g += `<text class="sc-tick" x="${f1(sx(t))}" y="${H - B + 16}" text-anchor="middle">${mx.fmt(t)}</text>`;
+  for (const t of ticks(y0, y1)) g += `<text class="sc-tick" x="${L - 8}" y="${f1(sy(t) + 4)}" text-anchor="end">${my.fmt(t)}</text>`;
   g += `<text class="sc-title" x="${(L + W - R) / 2}" y="${H - 8}" text-anchor="middle">${esc(S.xTitle)} →</text>`;
   g += `<text class="sc-title" transform="translate(14 ${(TOP + H - B) / 2}) rotate(-90)" text-anchor="middle">${esc(S.yTitle)} →</text>`;
-  // The averages.
+  // The averages, each with a wide invisible line on top to hover for its value.
+  const avgX = `Average for everyone${view.side === 'all' ? '' : ` ${sideWords(view.side)}`}: ${mx.fmt(ax)} (${mx.label.toLowerCase()})`;
+  const avgY = `Average for everyone${view.side === 'all' ? '' : ` ${sideWords(view.side)}`}: ${my.fmt(ay)} (${my.label.toLowerCase()})`;
   g += `<line class="sc-avg" x1="${f1(sx(ax))}" x2="${f1(sx(ax))}" y1="${TOP}" y2="${H - B}"/><line class="sc-avg" x1="${L}" x2="${W - R}" y1="${f1(sy(ay))}" y2="${f1(sy(ay))}"/>`;
+  g += `<line class="sc-avg-hit" x1="${f1(sx(ax))}" x2="${f1(sx(ax))}" y1="${TOP}" y2="${H - B}" data-tip="${esc(avgX)}"/><line class="sc-avg-hit" x1="${L}" x2="${W - R}" y1="${f1(sy(ay))}" y2="${f1(sy(ay))}" data-tip="${esc(avgY)}"/>`;
   // Dots, then names where there's room (you always); hover any dot for the numbers.
   const P = pts.map((p) => ({ p, x: sx(p.rates[S.x].value), y: sy(p.rates[S.y].value), me: p.key === h.me })).sort((a, b) => a.me - b.me);
   const boxes = P.map((q) => ({ x0: q.x - 6, x1: q.x + 6, y0: q.y - 6, y1: q.y + 6 }));
@@ -207,7 +210,7 @@ export function scatterCard(talk, view, h) {
   const T = talk[view.side];
   const select = (attr, options, cur, label) => `<select ${attr} aria-label="${label}">${options.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
   const what = view.kind === 'noms' ? 'nominations per day alive' : 'share of nominations they voted on while alive';
-  const sub = `Across: ${what}. Up: share on the other team. Dashed lines: the average. Players with ${T.minGames}+ games${view.side === 'all' ? '' : ` ${sideWords(view.side)}`}; hover a dot for the counts.`;
+  const sub = `Across: ${what}. Up: share on the other team. Dashed lines: the average (hover for its value). Players with ${T.minGames}+ games${view.side === 'all' ? '' : ` ${sideWords(view.side)}`}; hover a dot for the counts.`;
   // "Players shown": everyone who can be on the chart, ticked if they are.
   const more = scatterPick(talk, view, h).cands.length > 1 ? '<div data-ms-scatter></div>' : '';
   return card(view.kind === 'noms' ? 'Who they nominate' : 'Who they vote for', sub, `<div class="tt-controls">${select('data-scatter-kind', SCATTER_KINDS, view.kind, 'Chart')}${more}</div><p class="tt-note small muted" id="sc-note">${scatterNote(talk, view, h)}</p><div class="sc-wrap" id="sc-body">${scatterSvg(talk, view, h)}</div>`, 'wide sc-card');
