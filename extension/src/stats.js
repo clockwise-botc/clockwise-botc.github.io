@@ -44,7 +44,7 @@ export const storytellerKeys = (g) => (g.storytellers || []).map(playerKey).filt
 export function filterGames(all, f = {}) {
   const since = f.days ? Date.now() - f.days * 864e5 : 0;
   return all
-    .filter((g) => (f.includeExcluded || !g.excluded)
+    .filter((g) => (f.includeExcluded || (!g.excluded && !g.outside))
       && (!(f.communities && f.communities.length) || f.communities.includes(g.community))
       && (!f.script || g.script.name === f.script)
       && (!f.storyteller || storytellerKeys(g).includes(f.storyteller))
