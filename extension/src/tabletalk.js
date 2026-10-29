@@ -230,18 +230,69 @@ export function votePairs(games, key, { minChances = 3 } = {}) {
 // Nominations weigh a little more than votes, and being targeted a little more than targeting.
 // Each part is what happened next to what you'd expect, so playing lots of games together doesn't by itself make an
 // enemy:
-//   nominations: games where one nominated the other at least once, next to the games you'd expect if nominators
-//     picked anyone at the table (per game, so one heated game counts once);
-//   votes: votes on the other's nominations, next to the voter's usual rate times their chances (votePairs).
+//   nominations: games where one nominated the other at least once, next to the games you'd expect from both
+//     players' habits: the nominator picks around the table in proportion to how often each player usually gets
+//     nominated (per game, so one heated game counts once);
+//   votes: votes to execute the other when they're nominated, next to the voter's usual rate times how many votes
+//     that player usually draws when nominated.
+// So a pair only stands out for what's unusual between the two of them, not because one of them is generally
+// nominated less (or draws fewer votes). The player's own nominations and votes are left out of the other
+// player's habits, so they don't water down their own lean.
 // Each part's lean, log((observed + 0.5) / (expected + 0.5)), is weighted by games together: n / (n + ENEMY_PRIOR_GAMES).
 // So a pair's own numbers count for half at ENEMY_PRIOR_GAMES games together, less before and more after, and a
 // steady lean over many games outweighs a burst over a few. (The 0.5 only keeps zero counts finite.)
 // The four are then put on the same scale (standardised across everyone they've played at least `minGames` games
 // with) and averaged with the weights. The top score is the biggest rival; the bottom one is the closest ally.
+// Everyone's general habits, from all the games, so a pair is compared with what's usual for both of them:
+//   nom:  how often each player is nominated, next to random picks of the table (got vs exp, per nomination)
+//   vote: how many votes each player draws when nominated, next to the voters' usual rates (got vs exp)
+// With `byKey`, only that player's own nominations and votes are counted (to leave them out of the others' habits).
+function habits(games, usualOf, byKey = null) {
+  const nom = new Map(), vote = new Map();
+  const add = (m, k, got, exp) => { const r = m.get(k) || { got: 0, exp: 0 }; r.got += got; r.exp += exp; m.set(k, r); };
+  for (const g of games) {
+    const seated = g.players.filter((p) => !p.isTraveller);
+    const bySeat = new Map(g.players.map((p) => [p.seat, p]));
+    const last = g.joinedAtPhase || !g.days ? null : lastDays(g);
+    for (const n of g.nominations || []) {
+      if (n.type === 'exile') continue;
+      const from = bySeat.get(n.nominatorSeat), to = bySeat.get(n.nomineeSeat);
+      if (!from || !to) continue;
+      if (!byKey || playerKey(from) === byKey) {
+        const pool = seated.filter((p) => p.seat !== from.seat);
+        for (const q of pool) { const k = playerKey(q); if (k) add(nom, k, q.seat === to.seat ? 1 : 0, 1 / pool.length); }
+      }
+      const tk = playerKey(to), d = dayOf(n);
+      if (!last || !tk || to.isTraveller || n.completed === false || !d) continue;
+      const voters = new Set((n.voters || []).map((v) => v.seat));
+      for (const p of g.players) {
+        const k = playerKey(p);
+        if (!k || p.seat === to.seat || p.isTraveller || (byKey && k !== byKey)) continue;
+        const u = usualOf(k), l = last.get(p.seat);
+        if (u === null || l === null || l === undefined || d > l) continue;
+        add(vote, tk, voters.has(p.seat) ? 1 : 0, u);
+      }
+    }
+  }
+  return { nom, vote };
+}
+// A habit as a multiplier (1 = typical), pulled toward 1 by 2 pretend events so a few games can't make it extreme.
+const habit = (all, mine) => {
+  const got = (all ? all.got : 0) - (mine ? mine.got : 0), exp = (all ? all.exp : 0) - (mine ? mine.exp : 0);
+  return (got + 2) / (exp + 2);
+};
+
 export const ENEMY_WEIGHTS = { theyNominate: 1.5, iNominate: 1.25, theyVote: 1.25, iVote: 1 };
 export const ENEMY_MIN_GAMES = 3;
 export const ENEMY_PRIOR_GAMES = 10;
 export function enemies(games, key, { minGames = ENEMY_MIN_GAMES, priorGames = ENEMY_PRIOR_GAMES } = {}) {
+  const usual = new Map();
+  for (const r of seatRecords(games)) { const u = usual.get(r.key) || { votes: 0, chances: 0 }; u.votes += r.votes; u.chances += r.chances; usual.set(r.key, u); }
+  const usualOf = (k) => { const u = usual.get(k); return u && u.chances ? u.votes / u.chances : null; };
+  const all = habits(games, usualOf), mine = habits(games, usualOf, key);
+  // How often each player usually gets nominated (leaving out this player's own nominations of them); this
+  // player's own figure uses everyone's nominations.
+  const nomW = (k) => (k === key ? habit(all.nom.get(k)) : habit(all.nom.get(k), mine.nom.get(k)));
   const rows = new Map();
   const row = (p) => {
     const k = playerKey(p);
@@ -264,16 +315,19 @@ export function enemies(games, key, { minGames = ENEMY_MIN_GAMES, priorGames = E
       if (!from || !to) continue;
       const pool = seated.filter((p) => p.seat !== from.seat);
       if (!pool.length) continue;
+      // The chance each player in the pool is the one picked: in proportion to how often they usually get nominated.
+      const w = (q) => (playerKey(q) ? nomW(playerKey(q)) : 1);
+      const total = pool.reduce((t, q) => t + w(q), 0);
       if (from.seat === me.seat) {
         for (const q of pool) {
           const k = playerKey(q);
           if (!k || k === key) continue;
-          iMiss.set(k, (iMiss.has(k) ? iMiss.get(k) : 1) * (1 - 1 / pool.length));
+          iMiss.set(k, (iMiss.has(k) ? iMiss.get(k) : 1) * (1 - w(q) / total));
           if (q.seat === to.seat) iHit.add(k);
         }
       } else if (playerKey(from) && pool.some((q) => q.seat === me.seat)) {
         const k = playerKey(from);
-        theyMiss.set(k, (theyMiss.has(k) ? theyMiss.get(k) : 1) * (1 - 1 / pool.length));
+        theyMiss.set(k, (theyMiss.has(k) ? theyMiss.get(k) : 1) * (1 - w(me) / total));
         if (to.seat === me.seat) theyHit.add(k);
       }
     }
@@ -287,7 +341,11 @@ export function enemies(games, key, { minGames = ENEMY_MIN_GAMES, priorGames = E
     const iVote = iVoteOf.get(r.key) || null, theyVote = theyVoteOf.get(r.key) || null;
     const w = r.games / (r.games + priorGames);
     const lean = (obs, exp) => w * Math.log((obs + 0.5) / (exp + 0.5));
-    const votes = (v) => (v ? lean(v.votes, v.base * v.chances) : 0);
+    // How many votes each of them usually draws when nominated (this player's own votes left out of the other's).
+    const theirDraw = habit(all.vote.get(r.key), mine.vote.get(r.key)), myDraw = habit(all.vote.get(key));
+    if (iVote) iVote.expRate = Math.min(1, iVote.base * theirDraw);
+    if (theyVote) theyVote.expRate = Math.min(1, theyVote.base * myDraw);
+    const votes = (v) => (v ? lean(v.votes, v.expRate * v.chances) : 0);
     return { ...r, iVote, theyVote, weight: w, parts: {
       theyNominate: lean(r.theyNom.n, r.theyNom.exp),
       iNominate: lean(r.iNom.n, r.iNom.exp),

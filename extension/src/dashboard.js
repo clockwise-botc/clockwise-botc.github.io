@@ -788,10 +788,10 @@ function relationCard(base, key, kind) {
   const tiles = [
     [top.theyNom.n, `${games(top.theyNom.n)} where ${them} nominated ${me} (${top.theyNom.exp.toFixed(1)} expected)`],
     [top.iNom.n, `${games(top.iNom.n)} where ${me} nominated ${them} (${top.iNom.exp.toFixed(1)} expected)`],
-    top.theyVote && [pct(top.theyVote.rate), `of ${me}'s nominations ${them} voted on (usually ${pct(top.theyVote.base)})`],
-    top.iVote && [pct(top.iVote.rate), `of ${them}'s nominations ${me} voted on (usually ${pct(top.iVote.base)})`],
+    top.theyVote && [pct(top.theyVote.rate), `of ${me}'s nominations ${them} voted on (${pct(top.theyVote.expRate)} expected)`],
+    top.iVote && [pct(top.iVote.rate), `of ${them}'s nominations ${me} voted on (${pct(top.iVote.expRate)} expected)`],
   ].filter(Boolean).map(([b, t]) => `<div><b>${b}</b><span>${t}</span></div>`).join('');
-  const how = `Nominations and votes between the two, each next to what's typical${kind === 'ally' ? ': the player they clash with least in-game' : ': the player they clash with most in-game'}. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes. The more games together, the more their numbers count.`;
+  const how = `Nominations and votes between the two, each next to what's typical for both of them${kind === 'ally' ? ': the player they clash with least in-game' : ': the player they clash with most in-game'}. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes. The more games together, the more their numbers count.`;
   const next = rest.slice(0, 2).map((r) => playerLink(r.key, r.name));
   return card(`${kind === 'ally' ? 'Closest ally' : 'Biggest rival'} <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, `Out of everyone with at least ${ENEMY_MIN_GAMES} games together.`,
     `<p class="enemy-name">${playerLink(top.key, top.name)} <span class="muted">· ${plural(top.games, 'game')} together</span></p><div class="mini-tiles">${tiles}</div>${next.length ? `<p class="sub">Next: ${next.join(', ')}</p>` : ''}`);
