@@ -26,6 +26,34 @@ export function talkCell(T, pl, id, side) {
   return `<div class="tt-cell" data-tip="${esc(tipFor(id, pl, T, side))}"><b>${m.fmt(r.value)}</b><span class="small">${esc(gapLine(id, r.gap, T.table[id]))}</span>${pl.listed ? '' : '<span class="small muted">few games</span>'}</div>`;
 }
 
+// A player's six measures as bars ("Your playstyle"): their value as a bar with a dot, and a mark at the average player
+// in the same games. Shares run 0–100%; the two per-day measures share one scale, wide enough for anyone in any of the
+// three views, so switching Overall / As good / As evil doesn't move the axis. Values are written out, not only drawn.
+const PER_DAY = ['loud', 'nominated'];
+export function playstyleBars(talk, key, side, { you, labels }) {
+  const T = talk[side], pl = T.players.find((p) => p.key === key);
+  if (!pl || !pl.t.games) return `<p class="muted">No games ${side === 'good' ? 'as good' : 'as evil'} yet where ${esc(you === 'You' ? 'you' : you)} kept one alignment the whole game.</p>`;
+  const vals = [];
+  for (const s of ['all', 'good', 'evil']) for (const id of PER_DAY) { vals.push(talk[s].table[id]); for (const p of talk[s].players) if (p.listed || p.key === key) vals.push(p.rates[id].value); }
+  const top = Math.max(0.1, ...vals.filter((v) => v !== null && v !== undefined));
+  const perDayMax = Math.ceil((top * 1.1) / 0.1) * 0.1;
+  const rows = Object.keys(MEASURES).map((id) => {
+    const m = MEASURES[id], r = pl.rates[id], avg = T.table[id];
+    const max = PER_DAY.includes(id) ? perDayMax : 1;
+    const at = (v) => Math.max(0, Math.min(100, (v / max) * 100));
+    const val = r.value === null ? null : r.value;
+    const tip = tipFor(id, pl, T, side);
+    const bar = val === null || avg === null ? '<div class="ps-track"></div>'
+      : `<div class="ps-track" data-tip="${esc(tip)}"><i class="ps-fill" style="width:${at(val).toFixed(1)}%"></i><b class="ps-dot" style="left:${at(val).toFixed(1)}%"></b><s class="ps-avg" style="left:${at(avg).toFixed(1)}%"></s></div>`;
+    return `<div class="ps-row">
+      <div class="ps-head"><span class="ps-label">${esc(labels[id] || m.label)}</span><span class="ps-vals"><b>${val === null ? '–' : m.fmt(val)}</b><span class="ps-avg-val">avg ${avg === null ? '–' : m.fmt(avg)}</span></span></div>
+      ${bar}<div class="ps-scale" aria-hidden="true"><span>${m.fmt(0)}</span><span>${m.fmt(max)}</span></div>
+    </div>`;
+  }).join('');
+  const few = pl.listed ? '' : `<p class="small muted ps-few">Only ${plural(pl.games, 'game')}${side === 'all' ? '' : ` ${sideWords(side)}`}, so these may change a lot.</p>`;
+  return `<div class="ps-bars side-${side}">${rows}</div>${few}`;
+}
+
 // The Around the grimoire chart: players on one measure, as a bar from the average (the line) to their value, highest first.
 // With more than 2 × TOP_N players it shows the top and bottom TOP_N, plus you and anyone picked to always show.
 // view: { measure, side, extra }   h: { playerLink, me }

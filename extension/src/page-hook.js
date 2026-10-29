@@ -230,10 +230,26 @@
         const near = (d) => (list.length > 1 && list[(i + d + list.length) % list.length].id) || null;
         current.travellers[p.id] = { userId: p.id, roleId: id, alignment: alignmentOf(p.alignment, 'traveller'), dead: isDead(p), before: near(-1), after: near(1), seat: i + 1 };
       });
+      current.avatars = current.avatars || {};
       [...current.seatIds, ...current.stIds].forEach((id) => {
         const u = id && S.session.users && S.session.users.get && S.session.users.get(id);
         if (u && u.username) current.names[id] = u.username;
+        const a = u && avatarOf(u);
+        if (a !== null) current.avatars[id] = a;
       });
+    }
+
+    // The avatar botc.app shows for a user, as botc.app works it out: a number for one of its own pictures
+    // (avatar3.webp), a negative number for the user's own upload (img.botc.app, for accounts with a level), or the
+    // name of a special one they own (avatarworldcup25.webp). 0 is the default picture.
+    function avatarOf(u) {
+      const c = u.cosmetics || {};
+      const r = c.avatar;
+      if (r === undefined || r === null) return null;
+      if (!r) return 0;
+      if (Number(r) < 0) return u.level ? Number(r) : 0;
+      if (isNaN(r)) return (c.avatars || []).includes(r) ? String(r) : 0;
+      return Number(r);
     }
 
     function onHistory() {
@@ -320,6 +336,7 @@
           seat: i + 1,
           userId: seatId(i),
           username: username(seatId(i)),
+          avatar: seatId(i) && current.avatars && seatId(i) in current.avatars ? current.avatars[seatId(i)] : null,
           roleId: role.id,
           icon: iconUrl(role.id, alignment),
           roleName: role.name,
@@ -532,7 +549,7 @@
       for (const m of code.matchAll(/(?:^|[,;{ ])([A-Za-z_$][\w$]*)=`(\/assets\/[^`]+?\.webp)`/g)) files[m[1]] = m[2];
       const map = {};
       for (const m of code.matchAll(/"\/src\/assets\/([^"]+?\.webp)":([A-Za-z_$][\w$]*)/g)) {
-        if (files[m[2]] && /^(icons|editions|background|shroud|death)/.test(m[1])) map[m[1]] = new URL(files[m[2]], location.origin).href;
+        if (files[m[2]] && /^(icons|editions|background|shroud|death|cosmetics\/avatar)/.test(m[1])) map[m[1]] = new URL(files[m[2]], location.origin).href;
       }
       if (Object.keys(map).length > 50) emit('assets', { source: script.src, map });
     } catch (e) {

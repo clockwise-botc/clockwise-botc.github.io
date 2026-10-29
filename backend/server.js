@@ -173,7 +173,7 @@ function mergeGame_(stored, incoming) {
   (out.players || []).forEach(function (p) {
     var o = bySeat[p.seat];
     if (!o) return;
-    ['username', 'userId', 'roleId', 'roleName', 'team', 'alignment', 'startingRoleId', 'startingRoleName'].forEach(function (f) {
+    ['username', 'userId', 'roleId', 'roleName', 'team', 'alignment', 'startingRoleId', 'startingRoleName', 'avatar'].forEach(function (f) {
       if ((p[f] === null || p[f] === undefined || p[f] === '') && o[f]) p[f] = o[f];
     });
     if (!(p.reminders || []).length && (o.reminders || []).length) p.reminders = o.reminders;

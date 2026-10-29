@@ -348,7 +348,8 @@ details.game .body > * { min-width: 0; }
 .pie-caption.compare { font-size: 13px; line-height: 1.6; text-align: left; }
 .token-card { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .token-card h3 { align-self: stretch; text-align: left; }
-.token-card .info { cursor: help; color: var(--muted); font-family: var(--sans); font-size: 14px; font-weight: 400; }
+/* The ⓘ after a card's heading: small, muted, the same on every card. */
+.token-card .info, .card > h3 .info { cursor: help; color: var(--muted); font-family: var(--sans); font-size: 14px; font-weight: 400; vertical-align: 2px; }
 .token-card p { margin: 14px 0 0; color: var(--ink-2); }
 .tok-body { flex: 1; align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-bottom: 8px; }
 .toggle.small { padding: 3px 10px; font-size: 12px; }
@@ -613,6 +614,37 @@ tr.unplayed td { opacity: .5; }
 
 /* Around the grimoire: a value, and under it how far it is from the average player. */
 .tt-cell { display: grid; gap: 2px; min-width: 120px; }
+/* "Your playstyle": six bars, the player's value (bar and dot) and the average player (a mark), on the same scale. */
+.playstyle-card > .sub { margin-bottom: 10px; }
+.ps-legend { display: flex; gap: 18px; margin: 0 0 16px; color: var(--ink-2); font-size: 13px; }
+/* On a wide card the key sits in the top right corner, beside the heading and description (like the Playstyles
+   charts' player controls). */
+/* Pinned to the corner, so it never changes the space between the heading and the description. */
+@media (min-width: 900px) {
+  .playstyle-card { position: relative; }
+  .playstyle-card > h3, .playstyle-card > .sub { padding-right: 230px; }
+  .playstyle-card > .ps-legend { position: absolute; top: 30px; right: 26px; margin: 0; white-space: nowrap; }
+  .playstyle-card > .sub { margin-bottom: 18px; }
+}
+.ps-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.ps-key-you { width: 11px; height: 11px; border-radius: 50%; background: var(--neutral); }
+.ps-key-you.side-good { background: var(--good); }
+.ps-key-you.side-evil { background: var(--evil); }
+.ps-key-avg { width: 2.5px; height: 14px; border-radius: 1px; background: var(--ink); }
+.ps-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 18px 36px; }
+.ps-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 7px; }
+.ps-label { color: var(--ink-2); font-size: 14px; }
+.ps-vals { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.ps-vals b { font-family: var(--serif); font-size: 22px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ps-avg-val { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ps-track { position: relative; height: 10px; border-radius: 5px; background: var(--wash); }
+.ps-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--neutral); opacity: .45; }
+.ps-dot { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--neutral); border: 2px solid var(--surface); }
+.ps-avg { position: absolute; top: -5px; bottom: -5px; width: 2.5px; margin-left: -1.25px; border-radius: 1px; background: var(--ink); }
+.ps-bars.side-good .ps-fill, .ps-bars.side-good .ps-dot { background: var(--good); }
+.ps-bars.side-evil .ps-fill, .ps-bars.side-evil .ps-dot { background: var(--evil); }
+.ps-scale { display: flex; justify-content: space-between; margin-top: 5px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.ps-few { margin: 14px 0 0; }
 .tt-cell b { font-variant-numeric: tabular-nums; }
 .tt-cell .small { color: var(--ink-2); font-size: 11.5px; line-height: 1.3; }
 .tt-cell .small.muted { color: var(--muted); }
@@ -731,8 +763,27 @@ body:not(.tab-stats) .stats-view, body:not(.tab-stats) .filter-divider { display
 }
 /* My stats is one player's page (yours), so the player, character and type pickers don't apply there either. */
 body.tab-me [data-ms="players"], body.tab-me [data-ms="characters"], body.tab-me [data-ms="types"] { display: none !important; }
-.enemy-name { font-size: 22px; font-weight: 700; margin: 4px 0 14px; }
+/* Best ally / Worst enemy: the player's botc.app avatar (or their initial) beside their name. */
+.enemy-who { display: flex; align-items: center; gap: 14px; margin: 6px 0 16px; }
+.enemy-name { display: grid; gap: 2px; font-size: 22px; font-weight: 700; margin: 0; }
 .enemy-name .muted { font-size: 14px; font-weight: 400; }
+.enemy-next { display: inline-flex; align-items: center; gap: 7px; }
+.relation-card > h3 { margin-bottom: 14px; }
+.relation-card .enemy-who { margin: 0 0 22px; }
+.rel-legend { margin: 0 0 0 auto; align-self: flex-start; }
+.pair-avatars { display: inline-flex; flex: none; }
+.pair-avatars .avatar { background: var(--surface-2); }
+.pair-avatars .avatar + .avatar { margin-left: -16px; box-shadow: 0 0 0 3px var(--surface); }
+.enemy-name .amp { font-weight: 400; color: var(--ink-2); }
+.rel-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 20px 32px; }
+.rel-group { display: grid; gap: 16px; align-content: start; }
+.rel-group h4 { margin: 0; color: var(--muted); font: 600 12px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.rel-bars .ps-vals b { font-size: 20px; }
+.enemy-more { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--border); font-size: 14px; }
+.avatar { position: relative; flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: var(--wash); border: 1.5px solid var(--border); color: var(--ink-2); font: 600 15px var(--sans); }
+.avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.avatar.big { width: 64px; height: 64px; font-size: 24px; }
+.avatar.small { width: 22px; height: 22px; font-size: 11px; border-width: 1px; }
 .grid.stack > .card { grid-column: 1 / -1; }
 
 /* Around the grimoire bars and scatter dots: plum for all games, Townsfolk blue as good, Minion rust as evil. You stay in ink. */
@@ -744,3 +795,19 @@ body.tab-me [data-ms="players"], body.tab-me [data-ms="characters"], body.tab-me
 .sc.side-good .sc-pt.me circle:last-child, .sc.side-evil .sc-pt.me circle:last-child { fill: var(--ink); }
 /* Playstyles: the one games toggle under the awards. */
 .sc-warn { color: var(--ink); font-weight: 600; }
+/* The Overview's Playstyles card: opens Playstyles. */
+.styles-teaser { cursor: pointer; transition: border-color .2s, background-color .2s; }
+.styles-teaser:hover { border-color: color-mix(in srgb, var(--ink-2) 22%, var(--border)); background: color-mix(in srgb, var(--surface-2) 45%, var(--surface)); }
+.styles-teaser:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.styles-teaser > .sub { margin-bottom: 22px; }
+.styles-teaser .ps-bars { gap: 22px 36px; }
+.teaser-kicker { margin: 0 0 6px; color: var(--muted); font: 600 12px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.teaser-who { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; min-width: 0; }
+.teaser-more { margin: 20px 0 0; font-weight: 600; }
+.teaser-more i { display: inline-block; font-style: normal; transition: transform .2s; }
+.styles-teaser:hover .teaser-more i { transform: translateX(3px); }
+/* The 30-day win rate spotlights: a dot by the label for the side. */
+.tile.spot .label { display: flex; align-items: center; gap: 8px; }
+.tile.spot-good .label::before, .tile.spot-evil .label::before { content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--good); }
+.tile.spot-evil .label::before { background: var(--evil); }
+.tile.spot .info { cursor: help; color: var(--muted); font-weight: 400; }

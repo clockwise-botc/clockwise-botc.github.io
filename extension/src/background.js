@@ -150,7 +150,7 @@ async function uploadMeta() {
   if (!url || !writeKey) return;
   const { assetMap, roleMeta = {}, metaSent } = await chrome.storage.local.get(['assetMap', 'roleMeta', 'metaSent']);
   if (!assetMap || !assetMap.tokenStyle) return;
-  const sig = `${assetMap.source}|${assetMap.tokenStyle.v}|${Object.keys(roleMeta).length}`;
+  const sig = `${assetMap.source}|${assetMap.tokenStyle.v}|${Object.keys(roleMeta).length}|${Object.keys(assetMap.map || {}).length}`;
   if (sig === metaSent) return;
   const res = await call(url, { action: 'meta', key: writeKey, meta: { assetMap: { source: assetMap.source, map: assetMap.map }, tokenStyle: assetMap.tokenStyle, roleMeta } });
   if (res.ok) await chrome.storage.local.set({ metaSent: sig });
@@ -238,8 +238,8 @@ chrome.runtime.onStartup.addListener(() => { syncPending().catch(recordSyncError
 let refreshing = null;
 async function refreshAssetMap(force = false) {
   const { assetMap } = await chrome.storage.local.get('assetMap');
-  // v2 added the reveal font (Sorts Mill Goudy); older saved art is fetched again.
-  const complete = assetMap && assetMap.tokenStyle && assetMap.tokenStyle.v >= 2;
+  // v2 added the reveal font (Sorts Mill Goudy); older saved art is fetched again, as is a list without the avatars.
+  const complete = assetMap && assetMap.tokenStyle && assetMap.tokenStyle.v >= 2 && !!(assetMap.map && assetMap.map['cosmetics/avatar0.webp']);
   if (!force && complete && Date.now() - (assetMap.at || 0) < 24 * 3600e3) return { ok: true, fresh: true };
   if (refreshing) return refreshing;
   refreshing = (async () => {
@@ -253,14 +253,14 @@ async function refreshAssetMap(force = false) {
         return { ok: true, unchanged: true };
       }
       // Reuse the saved image list for the same release, unless it's from a version that didn't keep the shroud.
-      let map = assetMap && assetMap.source === source && assetMap.map && assetMap.map['shroud.webp'] ? assetMap.map : null;
+      let map = assetMap && assetMap.source === source && assetMap.map && assetMap.map['shroud.webp'] && assetMap.map['cosmetics/avatar0.webp'] ? assetMap.map : null;
       if (!map) {
         const code = await (await fetch(source)).text();
         const files = {};
         for (const f of code.matchAll(/(?:^|[,;{ ])([A-Za-z_$][\w$]*)=`(\/assets\/[^`]+?\.webp)`/g)) files[f[1]] = f[2];
         map = {};
         for (const f of code.matchAll(/"\/src\/assets\/([^"]+?\.webp)":([A-Za-z_$][\w$]*)/g)) {
-          if (files[f[2]] && /^(icons|editions|background|shroud|death)/.test(f[1])) map[f[1]] = new URL(files[f[2]], 'https://botc.app').href;
+          if (files[f[2]] && /^(icons|editions|background|shroud|death|cosmetics\/avatar)/.test(f[1])) map[f[1]] = new URL(files[f[2]], 'https://botc.app').href;
         }
         if (Object.keys(map).length < 50) throw new Error('image list looked wrong');
       }
