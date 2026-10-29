@@ -155,6 +155,9 @@
           && !S.players.storytellers.some((st) => Array.isArray(st.status) && st.status.includes('revealed'))),
         phase: g.phase,
         players: S.players.players.length,
+        // Who's at the table (seated, not travellers) and storytelling: the popup works out the community from them.
+        seated: S.players.players.filter((p) => p.id && !(current && current.travellers && current.travellers[p.id])).map((p) => p.id),
+        storytellers: S.players.storytellers.map((st) => st.id).filter(Boolean),
         nominations: current ? current.nominations.length : 0,
         at: Date.now(),
       });

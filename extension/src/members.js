@@ -69,3 +69,53 @@ export function communityMembers(games, settings, { minGames = MIN_MEMBER_GAMES 
   }
   return { members, status };
 }
+
+// ---------- which community a game looks like it's from ----------
+// The recorder uses this to pick a game's community when nobody has picked one (a game that fits none defaults to
+// "Don't record"), and the Games tab uses it to flag games for an editor to check. A game fits a community when
+//   - its storyteller is a member (MIN_MEMBER_GAMES+ of the community's games, played or storytold), or
+//   - at least half of its seated players (not counting travellers) have sat in another of the community's games.
+// (A community's own rooms, like "escape", and choices made by hand come first; see communities.js.)
+
+// history: the games to learn from (leave out excluded and unrecorded ones), from communityHistory().
+// Per community: seated (key → games sat in) and everyone (key → games played or storytold).
+export function communityHistory(games) {
+  const out = new Map();
+  for (const g of games) {
+    if (!g.community) continue;
+    if (!out.has(g.community)) out.set(g.community, { seated: new Map(), everyone: new Map(), ids: new Set() });
+    const h = out.get(g.community);
+    h.ids.add(g.id);
+    for (const k of new Set(seatedKeys(g))) h.seated.set(k, (h.seated.get(k) || 0) + 1);
+    for (const k of everyoneKeys(g)) h.everyone.set(k, (h.everyone.get(k) || 0) + 1);
+  }
+  return out;
+}
+
+// Is score a ahead of score b, comparing the first values that differ?
+const higher = (a, b) => { const i = a.findIndex((v, j) => v !== b[j]); return i >= 0 && a[i] > b[i]; };
+
+// The community `who` ({ seated: [keys], storytellers: [keys] }) best fits, or null. `self`: the id of the game
+// being judged, when it's in the history itself, so it doesn't count towards its own fit.
+export function suggestCommunity(cfg, who, history, { self = null, minGames = MIN_MEMBER_GAMES } = {}) {
+  const seated = [...new Set(who.seated || [])], sts = [...new Set(who.storytellers || [])];
+  let best = null;
+  for (const c of cfg.communities) {
+    const h = history.get(c.id);
+    if (!h) continue;
+    const mine = self && h.ids.has(self) ? 1 : 0;
+    const sat = (k) => (h.seated.get(k) || 0) - (mine && seated.includes(k) ? 1 : 0);
+    const all = (k) => (h.everyone.get(k) || 0) - (mine && (seated.includes(k) || sts.includes(k)) ? 1 : 0);
+    const byStoryteller = sts.some((k) => all(k) >= minGames);
+    const known = seated.filter((k) => sat(k) > 0 || all(k) >= minGames).length;
+    const byPlayers = seated.length > 0 && known * 2 >= seated.length;
+    if (!byStoryteller && !byPlayers) continue;
+    // Several fit: the one most of the table knows, then one whose storyteller is a member, then the busier one.
+    const score = [seated.length ? known / seated.length : 0, byStoryteller ? 1 : 0, h.ids.size];
+    if (!best || higher(score, best.score)) best = { id: c.id, score, why: byStoryteller ? 'storyteller' : 'players', known, seated: seated.length };
+  }
+  return best;
+}
+
+// Who sat and who storytold in a recorded game, in the form suggestCommunity takes.
+export const whoOf = (g) => ({ seated: seatedKeys(g), storytellers: storytellerKeys(g) });

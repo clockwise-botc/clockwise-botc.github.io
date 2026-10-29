@@ -23,15 +23,21 @@ Each game can be tagged with a community (Escape or Rhap), so you can see each g
 - A game in **any other room** is tagged **Rhap** by default, since Rhap uses a new room each time.
 - To change it, click the extension icon while you're in the room. The community that's on is highlighted: click the other one to switch, or click the highlighted one to switch it off. With neither on, games are still recorded, just without a community. The choice is remembered for that room and applies to the game being played, the game that just ended there (so you can fix it during the reveal), and later games. Earlier games keep their community. **Use automatic** goes back to the default.
 - To fix a single past game, open it in the **Games** tab and click its community (click it again to switch it off).
-- To add more communities, list extra rooms for one, or change the default for other rooms, use **Communities** in **Data & settings**.
+- To add more communities or list extra rooms for one, use **Communities** in **Settings**.
 
-### Members and other lobbies
+### Which community a game is recorded to
 
-When someone from the group plays in another group's lobby, that game is still recorded, with all of that lobby's players. Nobody has to sign up for the dashboard to tell those games apart: each community's **members** are worked out from its games.
+Nobody has to sign up for this: each community's regulars are worked out from its games. A **member** is anyone who has played or storytold at least 3 of the community's games.
 
-- A **member** is anyone who has played or storytold at least 3 of the community's games.
-- A game counts for its community if it was played in one of the community's own rooms (such as `escape`), if someone picked the community for it (in the popup or the game's settings), if the storyteller is a member, or if at least half of the seated players (not counting travellers) are members.
-- Other games are kept, marked **Other lobby** on the Games tab, and left out of the stats. To count one anyway, tick **Count for …** in its settings (needs the editor key for shared games).
+When a game is recorded, its community is, in order:
+
+1. the one picked for it, in the popup or in the game's settings on the dashboard;
+2. the community whose own rooms include its room (Escape always plays in `escape`);
+3. the community the table fits: its storyteller is a member, or at least half of the seated players (not counting travellers) have played in another of that community's games before. If several fit, the one most of the table knows.
+
+A game that fits none defaults to **Don't record**: it's kept in this browser but not uploaded. Pick a community in the popup (during the game, or up to 20 minutes after it ends) to record it after all.
+
+- Games already in the shared store keep their community. Anyone with an editor key sees a **Review** flag on the Games tab for games that don't fit their community by the rules above. Open the game to confirm it (**Yes, it's a … game**), exclude it, or delete it.
 - Rankings and player lists (the win rate spotlights, most evil tokens drawn, the Playstyles card, most frequent players, teammates and rivals, the Players picker) only show members of the communities being looked at. Everyone at the table still counts towards the members' own stats.
 - Each community has its own members, so someone can be a member of several, and communities made on the website work the same way.
 
@@ -173,7 +179,7 @@ extension/
   src/shared.js        talking to the shared store
   src/data.js          where the dashboard's games come from (this browser, the shared store, or both)
   src/communities.js   which community a room/game belongs to
-  src/members.js       each community's members, and which games are from another lobby
+  src/members.js       each community's members, and which community a game's table fits
   src/stats.js         filters and overall win-rate calculations
   src/insights.js      stats for any selection of players / characters / types, and the prediction model
   src/playstyles.js    how each player's games end, and whose nominations get the other team executed (the awards)

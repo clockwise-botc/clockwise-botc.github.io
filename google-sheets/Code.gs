@@ -18,7 +18,9 @@
 // A game's community is decided by, in order:
 //   1. a manual choice for that room (popup), stored in settings.roomCommunity
 //   2. a community whose room list includes the room
-//   3. the default community for every other room
+//   3. who's at the table (members.js suggestCommunity): the recorder picks the community they fit, and a game that
+//      fits none defaults to "Don't record"
+// (Games saved before communities existed, without one, still get the old default for every other room.)
 // A game can also have no community at all (null): the user switched the selection off. There is
 // no "No community" option anywhere in the UI; internally NONE marks "switched off" for a room.
 
@@ -47,13 +49,11 @@ function communityConfig(settings = {}) {
   };
 }
 
-// The community a room gets without a manual choice.
+// The community whose own rooms include this one (like "escape"), or null.
 function automaticCommunity(settings, room) {
-  const cfg = communityConfig(settings);
   const r = norm(room);
-  const match = cfg.communities.find((c) => (c.rooms || []).some((x) => norm(x) === r));
-  if (match) return match.id;
-  return cfg.fallback && cfg.fallback !== NONE && cfg.communities.some((c) => c.id === cfg.fallback) ? cfg.fallback : null;
+  const match = communityConfig(settings).communities.find((c) => (c.rooms || []).some((x) => norm(x) === r));
+  return match ? match.id : null;
 }
 
 // The community for a room, honouring a manual choice. Returns a community id, or null for "no community".
@@ -82,9 +82,11 @@ function communityName(settings, id) {
   return c ? c.name : id;
 }
 
-// Games saved before communities existed get one from their room.
+// Games saved before communities existed get one from their room, or the old default for every other room.
 function gameCommunity(settings, game) {
-  return game.community !== undefined ? game.community : communityForRoom(settings, game.room);
+  if (game.community !== undefined) return game.community;
+  const cfg = communityConfig(settings);
+  return communityForRoom(settings, game.room) || (cfg.fallback && cfg.fallback !== NONE && cfg.communities.some((c) => c.id === cfg.fallback) ? cfg.fallback : null);
 }
 
 function slug(name, taken) {

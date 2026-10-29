@@ -5,41 +5,55 @@ import { BACKEND_URL, SITE_URL } from './config.js';
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// One dropdown: the communities (the room's own is picked to start with), then "Don't record". "Don't record" is about
-// the game being played, the one that just ended here (its upload is taken back), or the next one; picking a
-// community again records it after all. Picking the room's automatic community clears a choice made by hand.
+// One dropdown: the communities, then "Don't record". It starts on the community the game looks like it's from (its
+// room, or who's at the table: see members.js), or on "Don't record" when it fits none. "Don't record" is about the
+// game being played, the one that just ended here (its upload is taken back), or the next one; picking a community
+// records it after all, and is remembered for the room. Picking the room's own community clears a choice made by hand.
 const SKIPPED = {
   current: 'This game won\'t be recorded.',
   last: 'The game that just ended won\'t be recorded.',
   next: 'The next game here won\'t be recorded.',
 };
+// Not recorded because it fits no community (nobody picked "Don't record").
+const UNMATCHED = {
+  current: 'This game won\'t be recorded: most of the table hasn\'t played in one of your communities, and neither has the storyteller. Pick a community to record it.',
+  last: 'The game that just ended wasn\'t recorded: it doesn\'t look like one of your communities\' games. Pick a community to record it.',
+  next: 'The next game here won\'t be recorded unless most of the table (or the storyteller) has played in one of your communities. Pick a community to record it anyway.',
+};
 async function showCommunity(room) {
   const { settings = {} } = await chrome.storage.local.get('settings');
   const cfg = communityConfig(settings);
-  const current = communityForRoom(settings, room);
-  const auto = automaticCommunity(settings, room);
+  const own = automaticCommunity(settings, room);
   const ask = { room, gameId: liveTab && liveTab.gameId, inGame: !!(liveTab && liveTab.inGame) };
   const st = await chrome.runtime.sendMessage({ type: 'skip:get', ...ask }).catch(() => null);
   const skipped = !!(st && st.ok && st.skipped);
+  const kind = (st && st.kind) || (ask.inGame ? 'current' : 'next');
+  // The game that just ended: what it was saved with. Otherwise: who's at the table now.
+  const def = st && st.kind === 'last' ? { community: st.community || null, why: st.autoSkipped ? null : 'saved' }
+    : await chrome.runtime.sendMessage({ type: 'community:get', room, seated: (liveTab && liveTab.seated) || [], storytellers: (liveTab && liveTab.storytellers) || [] }).catch(() => ({ community: communityForRoom(settings, room), why: 'room' }));
+  const current = def.community || null;
+  // A room switched off in an older version: recorded, without a community.
+  const legacyNone = !current && def.why === 'chosen';
   const sel = $('community-select');
   sel.innerHTML = cfg.communities.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')
-    + (current ? '' : '<option value="">No community</option>') // only for a room switched off in an older version
+    + (legacyNone ? '<option value="">No community</option>' : '')
     + '<hr><option value="skip">Don\'t record</option>';
-  sel.value = skipped ? 'skip' : current || '';
+  sel.value = skipped ? 'skip' : current || (legacyNone ? '' : 'skip');
   sel.onchange = async () => {
     const wanted = sel.value;
     sel.disabled = true;
     if (wanted === 'skip') await chrome.runtime.sendMessage({ type: 'skip:set', ...ask, on: true });
     else {
       if (skipped) await chrome.runtime.sendMessage({ type: 'skip:set', ...ask, on: false });
-      if (wanted && wanted !== current) await chrome.runtime.sendMessage({ type: 'community:set', room, choice: wanted === auto ? null : wanted });
+      if (wanted && (wanted !== current || def.why !== 'chosen')) await chrome.runtime.sendMessage({ type: 'community:set', room, choice: wanted === own ? null : wanted });
     }
     sel.disabled = false;
     await showCommunity(room);
     showStats();
   };
   $('community-box').hidden = false;
-  if (skipped) show('', SKIPPED[st.kind]);
+  if (skipped) show('', SKIPPED[kind]);
+  else if (!current && !legacyNone) show('', UNMATCHED[kind]);
   else showStatus(communityName(settings, current));
 }
 

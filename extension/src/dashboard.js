@@ -2,7 +2,7 @@ import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNam
 import { predictOutcome, tuneOutcomeModel } from './insights.js';
 import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js';
 import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js';
-import { communityMembers, MIN_MEMBER_GAMES } from './members.js';
+import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js';
 import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js';
 import { renderData, handleDataClick, handleImport } from './dataview.js';
 import { playstyles } from './playstyles.js';
@@ -1263,10 +1263,10 @@ function gamesList(G) {
   return `<div class="card games-card"><p class="sub">Click a game to see its grimoire: who sat where, their characters, who died and the storyteller's reminder tokens. You can also fix its details there.</p>
     ${shown.map((g) => {
       const demons = g.players.filter((p) => p.team === 'demon').map((p) => p.roleName).join(', ');
-      return `<details class="game ${g.excluded || g.outside ? 'excluded' : ''}" data-game="${esc(g.id)}" ${state.openGame === g.id ? 'open' : ''}>
+      return `<details class="game ${g.excluded ? 'excluded' : ''}" data-game="${esc(g.id)}" ${state.openGame === g.id ? 'open' : ''}>
         <summary><span>${fmtDate(g.endedAt)}<br><span class="muted">${fmtTime(g.endedAt)}</span></span>
           <span><b>${esc(g.script.name || 'Unknown script')}</b> · ${g.playerCount} players${g.travellerCount ? ` + ${plural(g.travellerCount, 'traveller')}` : ''} · ${plural(g.days, 'day')}<br><span class="muted">Demon: ${esc(demons || 'unknown')}${g.notes ? ` · ${esc(g.notes)}` : ''}</span></span>
-          <span class="pills">${g.outside ? '<span class="pill">Other lobby</span>' : g.community ? `<span class="pill">${esc(communityName(state.settings, g.community))}</span>` : ''}<span class="pill ${g.winner}">${cap(g.winner)} won</span></span></summary>
+          <span class="pills">${reviewing(g) ? `<span class="pill review" data-tip="${esc(reviewWhy(g))}">Review</span>` : ''}${g.community ? `<span class="pill">${esc(communityName(state.settings, g.community))}</span>` : ''}<span class="pill ${g.winner}">${cap(g.winner)} won</span></span></summary>
         ${state.openGame === g.id ? gameDetail(g) : ''}
       </details>`;
     }).join('')}
@@ -1274,12 +1274,18 @@ function gamesList(G) {
   </div>`;
 }
 
-// For a game that looks like it's from another group's lobby (or one counted anyway): count it for its community.
-function countAnywayBox(g) {
+// Games an editor should check (members.js): filed under a community nobody picked by hand, outside its own rooms,
+// where neither the storyteller nor half the table has played in that community before. Only editors see the flag;
+// they can confirm the community (it's then picked by hand) or exclude or delete the game.
+const reviewing = (g) => !!g.review && state.shared.on && state.shared.canEdit;
+const aOrAn = (word) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
+function reviewWhy(g) {
+  const name = communityName(state.settings, g.community);
+  return `This may not be ${aOrAn(name)} ${name} game: its storyteller hasn't played ${MIN_MEMBER_GAMES}+ ${name} games, and fewer than half the players have played another ${name} game.`;
+}
+function reviewBox(g) {
   const name = esc(communityName(state.settings, g.community));
-  return `<label class="gm-check"><input type="checkbox" data-count-anyway="${esc(g.id)}" ${g.outside ? '' : 'checked'}><span><b>Count for ${name}</b><span>${g.outside
-    ? `Looks like another group's lobby: fewer than half the players have played ${MIN_MEMBER_GAMES}+ ${name} games, and neither has the storyteller. It isn't in the stats.`
-    : `Counted for ${name} by hand.`}</span></span></label>`;
+  return `<div class="gm-review"><p><b>Check this game</b> ${esc(reviewWhy(g))} If it isn't, exclude it from stats or delete it.</p><button class="btn small" data-confirm-community="${esc(g.id)}">Yes, it's ${aOrAn(name)} ${name} game</button></div>`;
 }
 
 function gameDetail(g) {
@@ -1308,7 +1314,7 @@ function gameDetail(g) {
         <label class="gm-field"><span class="field-label">Storyteller</span><input type="text" value="${esc(g.storytellers.map((s) => s.username).filter(Boolean).join(', '))}" placeholder="Not recorded — type a name" data-st="${esc(g.id)}"></label>
         <label class="gm-field gm-wide"><span class="field-label">Notes</span><textarea rows="2" placeholder="Anything to remember about this game" data-notes="${esc(g.id)}">${esc(g.notes || '')}</textarea></label>
       </div>
-      ${g.outside || (g.counts === 'chosen' && g.communityManual) ? countAnywayBox(g) : ''}
+      ${reviewing(g) ? reviewBox(g) : ''}
       <label class="gm-check"><input type="checkbox" data-exclude="${esc(g.id)}" ${g.excluded ? 'checked' : ''}><span><b>Exclude from stats</b><span>The game stays in this list but doesn't count towards any stats.</span></span></label>
       </fieldset>
       <div class="gm-foot">
@@ -1616,7 +1622,7 @@ function statsView() {
 
 // ---------- filters & dropdowns ----------
 function populateFilters() {
-  const all = state.games.filter((g) => !g.outside);
+  const all = state.games;
   const opts = (name, values, allLabel, label = (v) => v) => {
     const sel = $(`[data-filter="${name}"]`);
     const cur = state.filters[name];
@@ -1939,10 +1945,14 @@ async function load() {
   state.shared = { ...state.shared, on: !!c.url, hasPassword: canReadWith(c), account: c.token ? { username: c.username } : null, canEdit: !c.url || !!c.editorKey, cacheAt: cache && cache.at };
   const map = dropLocalTwins(c.url ? mergeGames(local, cache) : { ...local });
   state.games = Object.values(map).map((g) => ({ ...g, community: gameCommunity(state.settings, g) }));
-  // Games from another group's lobby are kept but left out of the stats (members.js).
-  const cm = communityMembers(state.games.filter((g) => !g.excluded), state.settings);
-  members = cm.members;
-  for (const g of state.games) { g.counts = cm.status.get(g.id) || null; g.outside = g.counts === 'outside'; }
+  // Each community's members (members.js), for the player lists and rankings, and games for an editor to check.
+  const counted = state.games.filter((g) => !g.excluded);
+  members = communityMembers(counted, state.settings).members;
+  const cfg = communityConfig(state.settings), hist = communityHistory(counted);
+  for (const g of state.games) {
+    const c = cfg.communities.find((x) => x.id === g.community);
+    g.review = !!c && !setByChoice(cfg, g) && !suggestCommunity({ communities: [c] }, whoOf(g), hist, { self: g.id });
+  }
   state.lastSync = WEB ? null : await api.get('lastSync', null);
   // botc.app's art: the extension reads it itself; the website gets it from the shared store.
   const meta = (cache && cache.meta) || {};
@@ -1958,7 +1968,7 @@ async function load() {
   quietPlayers = new Set((cache && cache.privatePlayers) || []);
   playerNames = displayNames(state.games);
   useDisplayNames(playerNames);
-  playerKeys = new Set(playerTable(state.games.filter((g) => !g.outside)).map((p) => p.key));
+  playerKeys = new Set(playerTable(state.games).map((p) => p.key));
   freeKeys = new Set(playerTable(state.games.filter((g) => !g.community && !g.excluded)).map((p) => p.key));
   charInfo = new Map(characterTable(state.games, null).map((c) => [c.roleId, c]));
   populateFilters();
@@ -2002,7 +2012,7 @@ document.addEventListener('keydown', (e) => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-go-styles]')) { e.preventDefault(); e.target.click(); }
 });
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-filter-community],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-crumb-back],[data-crumb-styles],[data-go-styles],#clear-sel');
+  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-filter-community],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-crumb-back],[data-crumb-styles],[data-go-styles],[data-confirm-community],#clear-sel');
   if (!t) return;
   // Under an open game: switch between seat-by-seat and nominations, or show the settings. No full redraw,
   // so the grimoire stays put.
@@ -2052,6 +2062,8 @@ document.addEventListener('click', async (e) => {
   if (t.id === 'clear-sel' && (state.tab === 'styles' || state.tab === 'me')) { clearScope(); return; }
   if (t.id === 'clear-sel') { setSelection((s) => Object.assign(s, emptySelection())); return; }
   if (t.dataset.crumbStyles !== undefined) { clearScope(); return; }
+  // An editor confirms a flagged game's community: it's then picked by hand, so it isn't flagged again.
+  if (t.dataset.confirmCommunity) { const g = state.games.find((x) => x.id === t.dataset.confirmCommunity); if (g) { await updateGame(g.id, { community: g.community, communityManual: true }); await load(); } return; }
   // The Overview's Playstyles card.
   if (t.dataset.goStyles !== undefined) { state.tab = state.statsView = 'styles'; writeHash(); render(); window.scrollTo(0, 0); return; }
   // "← Community": the overview, with every filter cleared.
@@ -2110,7 +2122,6 @@ document.addEventListener('change', async (e) => {
     state.expanded.clear();
     render();
   } else if (t.dataset.exclude) { await updateGame(t.dataset.exclude, { excluded: t.checked }); await load(); }
-  else if (t.dataset.countAnyway) { await updateGame(t.dataset.countAnyway, { communityManual: t.checked }); await load(); }
   else if (t.dataset.notes) { await updateGame(t.dataset.notes, { notes: t.value }); }
   else if (t.dataset.st) {
     const names = t.value.split(',').map((n) => n.trim()).filter(Boolean);

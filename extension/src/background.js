@@ -1,4 +1,6 @@
-import { communityForRoom, withRoomChoice, isManual } from './communities.js';
+import { communityConfig, communityForRoom, automaticCommunity, withRoomChoice, isManual } from './communities.js';
+import { communityHistory, suggestCommunity, whoOf } from './members.js';
+import { loadShared, refreshShared, mergeGames, dropLocalTwins } from './data.js';
 import { BACKEND_URL, WRITE_KEY } from './config.js';
 import { call } from './shared.js';
 
@@ -38,10 +40,13 @@ async function skipTarget(room, gameId, inGame) {
   return { kind: 'next' };
 }
 
+// skipped: "Don't record" was picked. autoSkipped: the game that just ended fitted no community, so it wasn't recorded
+// (with `community`, the one it was saved with).
 async function skipState(room, gameId, inGame) {
   const t = await skipTarget(room, gameId, inGame);
   const skips = await getSkips();
-  return { ...t, skipped: t.kind === 'next' ? !!skips.rooms[roomKey(room)] : !!skips.ids[t.id] };
+  const g = t.kind === 'last' ? (await getGames())[t.id] : null;
+  return { ...t, skipped: t.kind === 'next' ? !!skips.rooms[roomKey(room)] : !!skips.ids[t.id], autoSkipped: !!(g && g.autoSkipped), community: g ? g.community || null : undefined };
 }
 
 async function setSkip(room, gameId, inGame, on) {
@@ -71,8 +76,36 @@ async function setSkip(room, gameId, inGame, on) {
   return skipState(room, gameId, inGame);
 }
 
+// ---------- the community a game defaults to ----------
+// Everyone's games (the shared store, topped up when it's more than a few minutes old) plus this browser's, to see
+// who has played in each community before. Without the shared store, this browser's games only.
+const HISTORY_MAX_AGE = 10 * 60e3;
+async function history(settings, { wait = false } = {}) {
+  const cache = await loadShared();
+  if (!cache || Date.now() - (cache.at || 0) > HISTORY_MAX_AGE) {
+    const fresh = refreshShared(settings).catch(() => null);
+    // Saving a game waits a little for it; the popup uses what's there.
+    if (wait) await Promise.race([fresh, new Promise((r) => setTimeout(r, 5000))]);
+  }
+  const games = await getGames();
+  const all = Object.values(dropLocalTwins(mergeGames(games, await loadShared())));
+  return communityHistory(all.filter((g) => !g.excluded && !g.skipped && !g.id.startsWith('sample-')));
+}
+
+// For a room and who's at the table: { community, why } where why is 'chosen' (picked by hand for the room), 'room'
+// (the community's own room), 'storyteller' or 'players' (who's there, members.js), or null with no community:
+// the game isn't recorded unless someone picks one.
+async function defaultCommunity(settings, room, who, { self = null, wait = false } = {}) {
+  if (isManual(settings, room)) return { community: communityForRoom(settings, room), why: 'chosen' };
+  const own = automaticCommunity(settings, room);
+  if (own) return { community: own, why: 'room' };
+  const fit = suggestCommunity(communityConfig(settings), who, await history(settings, { wait }), { self });
+  return fit ? { community: fit.id, why: fit.why } : { community: null, why: null };
+}
+
 async function upsertGame(game) {
   const settings = await getSettings();
+  const auto = await defaultCommunity(settings, game.room, whoOf(game), { self: game.id, wait: true });
   await locked(async () => {
     const games = await getGames();
     const prev = games[game.id];
@@ -83,14 +116,16 @@ async function upsertGame(game) {
       delete skips.rooms[roomKey(game.room)];
       await chrome.storage.local.set({ skips });
     }
-    const skipped = !!skips.ids[game.id];
-    // A community picked for this game in the dashboard wins; otherwise use the room's community.
-    const community = prev && prev.communityManual ? prev.community : communityForRoom(settings, game.room);
+    // A community picked for this game in the dashboard wins; otherwise the room's, or the one who's there fits.
+    const community = prev && prev.communityManual ? prev.community : auto.community;
+    // A game that fits no community isn't recorded (kept here, not uploaded) unless someone picks one for it.
+    const autoSkipped = !(prev && prev.communityManual) && !auto.community && auto.why !== 'chosen';
+    const skipped = !!skips.ids[game.id] || autoSkipped;
     // Picked by hand (for this game, or for its room in the popup): the shared store then won't refile it under one
     // of your own communities by room.
     const communityChosen = !!(prev && (prev.communityManual || prev.communityChosen)) || isManual(settings, game.room);
     // Keep the user's own edits (exclusion, notes) when the same game is re-captured.
-    games[game.id] = { ...game, community, communityChosen, communityManual: !!(prev && prev.communityManual), excluded: prev ? !!prev.excluded : false, notes: prev ? prev.notes || '' : '', syncedAt: null, skipped };
+    games[game.id] = { ...game, community, communityChosen, communityManual: !!(prev && prev.communityManual), excluded: prev ? !!prev.excluded : false, notes: prev ? prev.notes || '' : '', syncedAt: null, skipped, autoSkipped };
     await chrome.storage.local.set({ games });
   });
   syncPending().catch(recordSyncError);
@@ -188,6 +223,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       case 'assets:refresh':
         return refreshAssetMap(!!msg.force);
+      case 'community:get': {
+        // What the popup's dropdown starts on: the game being played (or the next one), from who's at the table.
+        const settings = await getSettings();
+        return { ok: true, ...(await defaultCommunity(settings, msg.room, { seated: msg.seated || [], storytellers: msg.storytellers || [] })) };
+      }
       case 'skip:get':
         return { ok: true, ...(await skipState(msg.room, msg.gameId, msg.inGame)) };
       case 'skip:set':
@@ -211,6 +251,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             last.community = communityForRoom(next, room);
             last.communityChosen = true;
             last.syncedAt = null;
+            // It wasn't being recorded because it fitted no community: now it is.
+            if (last.autoSkipped && last.community) { last.skipped = false; last.autoSkipped = false; }
           }
           await chrome.storage.local.set({ settings: next, games });
         });

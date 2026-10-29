@@ -811,3 +811,8 @@ body.tab-me [data-ms="players"], body.tab-me [data-ms="characters"], body.tab-me
 .tile.spot-good .label::before, .tile.spot-evil .label::before { content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--good); }
 .tile.spot-evil .label::before { background: var(--evil); }
 .tile.spot .info { cursor: help; color: var(--muted); font-weight: 400; }
+/* Games an editor should check (only editors see these). */
+.pill.review { background: transparent; border-color: var(--evil); color: var(--evil); cursor: help; }
+.gm-review { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 14px; border: 1.5px solid var(--evil); border-radius: 14px; }
+.gm-review p { flex: 1 1 320px; margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.gm-review b { color: var(--ink); margin-right: 4px; }
