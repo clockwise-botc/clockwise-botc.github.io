@@ -195,6 +195,24 @@
       persist();
     }
 
+    // botc.app sometimes hasn't said which room this is when a game first shows up (seen with a VPN). The game is then
+    // recorded under "local", and its ID wouldn't match anyone else's recording of it. As soon as the room is known, move
+    // the game to its real ID; if it was already saved under "local", take that copy back and save it again.
+    function adoptRoom() {
+      const room = S.session.sessionId;
+      if (!current || current.room !== 'local' || !room) return;
+      const oldId = current.id;
+      current.room = room;
+      current.id = `${room}:${current.key}`;
+      log('room now known', oldId, '->', current.id);
+      if (current.saved) {
+        emit('game:void', { id: oldId });
+        current.saved = false;
+        scheduleFinalize(0);
+      }
+      persist();
+    }
+
     function snapshotStartingRoles() {
       if (!current) return;
       const me = S.user.user && S.user.user.id;
@@ -258,6 +276,7 @@
       if (!start) return; // cleared or not started; keep any saved game as-is
 
       if (!current || current.key !== startKeyOf(start)) newGame(start);
+      adoptRoom();
       const hasEnd = history.some((h) => h.type === 'end');
       if (current.alreadyOver) {
         if (hasEnd) { persist(); status(); return; }
@@ -297,6 +316,7 @@
       if (!current || current.alreadyOver) return;
       const end = [...S.game.history].reverse().find((h) => h.type === 'end');
       if (!end) return;
+      adoptRoom();
       flushNomination();
       captureGrimoire();
       const record = buildRecord(end);
@@ -494,7 +514,7 @@
             // Late reveals (e.g. roles filled in after the end overlay) refresh the saved record.
             if (current && current.saved) scheduleFinalize(1500);
           }, 50);
-        } else if (type === 'session/setSessionId' || type === 'session/toggleConnected') status();
+        } else if (type === 'session/setSessionId' || type === 'session/toggleConnected') { adoptRoom(); status(); }
         else if (type === 'setRolesAvailable' || type === 'setNPCs') { clearTimeout(rolesTimer); rolesTimer = setTimeout(shareRoles, 500); }
       } catch (e) {
         console.warn('[Clockwise] error handling', type, e);
