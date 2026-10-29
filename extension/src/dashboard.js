@@ -776,8 +776,8 @@ function talkCard(base, key) {
   return card('Around the grimoire', `Per day alive, next to the average player in the same games (overall, as good, as evil). ${steadyNote} Only games recorded from the start count. Hover for the counts.`,
     `<div class="table-wrap"><table class="tt"><thead><tr><th></th><th>Overall</th><th>As good</th><th>As evil</th></tr></thead><tbody>${rows}</tbody></table></div>`, 'wide');
 }
-// Worst enemy and best ally (tabletalk.js `enemies`): the highest friction score and the lowest, with the four
-// things behind it, and the next two. An enemy needs a score above the middle, an ally one below it.
+// Biggest rival and closest ally (tabletalk.js `enemies`): the highest friction score and the lowest, with the four
+// things behind it, and the next two. A rival needs a score above the middle, an ally one below it.
 function relationCard(base, key, kind) {
   const all = enemies(base, key);
   const list = (kind === 'ally' ? allies(all) : all).filter((r) => (kind === 'ally' ? r.score < 0 : r.score > 0));
@@ -791,9 +791,9 @@ function relationCard(base, key, kind) {
     top.theyVote && [pct(top.theyVote.rate), `of ${me}'s nominations ${them} voted on (usually ${pct(top.theyVote.base)})`],
     top.iVote && [pct(top.iVote.rate), `of ${them}'s nominations ${me} voted on (usually ${pct(top.iVote.base)})`],
   ].filter(Boolean).map(([b, t]) => `<div><b>${b}</b><span>${t}</span></div>`).join('');
-  const how = `Nominations and votes between the two, each next to what's typical${kind === 'ally' ? ': the player they clash with least' : ''}. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes. The more games together, the more their numbers count.`;
+  const how = `Nominations and votes between the two, each next to what's typical${kind === 'ally' ? ': the player they clash with least in-game' : ': the player they clash with most in-game'}. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes. The more games together, the more their numbers count.`;
   const next = rest.slice(0, 2).map((r) => playerLink(r.key, r.name));
-  return card(`${kind === 'ally' ? 'Best ally' : 'Worst enemy'} <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, `Out of everyone with at least ${ENEMY_MIN_GAMES} games together.`,
+  return card(`${kind === 'ally' ? 'Closest ally' : 'Biggest rival'} <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, `Out of everyone with at least ${ENEMY_MIN_GAMES} games together.`,
     `<p class="enemy-name">${playerLink(top.key, top.name)} <span class="muted">· ${plural(top.games, 'game')} together</span></p><div class="mini-tiles">${tiles}</div>${next.length ? `<p class="sub">Next: ${next.join(', ')}</p>` : ''}`);
 }
 
@@ -868,7 +868,7 @@ function playerSections(G, sel, seats, base) {
       <div><b>${noms.votes}</b><span>votes cast</span></div>
       <div><b>${pct(noms.voteAccuracy)}</b><span>of their votes were on evil players</span></div></div>`));
     out.push(talkCard(base, key));
-    // Who with: ally and enemy side by side, then teammates and opponents, then nominations and votes pair by pair.
+    // Who with: ally and rival side by side, then teammates and opponents, then nominations and votes pair by pair.
     const peopleCards = [];
     if (quiet) {
       const byCount = (rows, n) => rows.map((r) => ({ key: r.key, name: r.name, games: n(r) })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
@@ -885,10 +885,10 @@ function playerSections(G, sel, seats, base) {
       peopleCards.push(card('Wins most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
         sortable('p-beats', beatCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
     }
-    // Who with, in full-width rows that stay together at any width: ally and enemy, teammates and opponents (above),
+    // Who with, in full-width rows that stay together at any width: ally and rival, teammates and opponents (above),
     // then nominations pair by pair and votes pair by pair.
     const together = (...cards) => { const c = cards.filter(Boolean); return c.length ? `<div class="span-all"><div class="grid pair-row">${c.join('')}</div></div>` : ''; };
-    out.push(together(relationCard(base, key, 'ally'), relationCard(base, key, 'enemy')));
+    out.push(together(relationCard(base, key, 'ally'), relationCard(base, key, 'rival')));
     out.push(together(...peopleCards));
     out.push(together(pairsCards(base, key)));
     out.push(together(votePairCards(base, key)));

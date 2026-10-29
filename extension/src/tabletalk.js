@@ -222,7 +222,7 @@ export function votePairs(games, key, { minChances = 3 } = {}) {
   return { against: finish(against, () => key), by: finish(by, (r) => r.key), usual: baseOf(key) };
 }
 
-// Worst enemy: the player `key` has the most friction with, from four things between the two of them:
+// Biggest rival: the player `key` has the most friction with, from four things between the two of them:
 //   they nominate `key`   (weight ENEMY_WEIGHTS.theyNominate)
 //   `key` nominates them  (iNominate)
 //   they vote on `key`'s nominations  (theyVote)
@@ -237,7 +237,7 @@ export function votePairs(games, key, { minChances = 3 } = {}) {
 // So a pair's own numbers count for half at ENEMY_PRIOR_GAMES games together, less before and more after, and a
 // steady lean over many games outweighs a burst over a few. (The 0.5 only keeps zero counts finite.)
 // The four are then put on the same scale (standardised across everyone they've played at least `minGames` games
-// with) and averaged with the weights. The top score is the worst enemy; the bottom one is the best ally.
+// with) and averaged with the weights. The top score is the biggest rival; the bottom one is the closest ally.
 export const ENEMY_WEIGHTS = { theyNominate: 1.5, iNominate: 1.25, theyVote: 1.25, iVote: 1 };
 export const ENEMY_MIN_GAMES = 3;
 export const ENEMY_PRIOR_GAMES = 10;
@@ -308,5 +308,5 @@ export function enemies(games, key, { minGames = ENEMY_MIN_GAMES, priorGames = E
   return list.sort((a, b) => b.score - a.score || tieBreak(a, b));
 }
 const tieBreak = (a, b) => b.games - a.games || b.last - a.last || a.name.localeCompare(b.name);
-// Best ally: the lowest scores first, with the same tie-breaks as enemies().
+// Closest ally: the lowest scores first, with the same tie-breaks as enemies().
 export const allies = (list) => [...list].sort((a, b) => a.score - b.score || tieBreak(a, b));
