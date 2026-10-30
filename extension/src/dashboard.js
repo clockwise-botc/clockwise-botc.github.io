@@ -1,4 +1,4 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js';
 import { predictOutcome, tuneOutcomeModel } from './insights.js';
 import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js';
 import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js';
@@ -1975,7 +1975,8 @@ async function load() {
   const cache = c.url ? await loadShared() : null;
   state.shared = { ...state.shared, on: !!c.url, hasPassword: canReadWith(c), account: c.token ? { username: c.username } : null, canEdit: !c.url || !!c.editorKey, cacheAt: cache && cache.at };
   const map = dropLocalTwins(c.url ? mergeGames(local, cache) : { ...local });
-  state.games = Object.values(map).map((g) => ({ ...g, community: gameCommunity(state.settings, g) }));
+  // Seats in nominations, votes and deaths matched to the players by account (stats.js withCurrentSeats).
+  state.games = Object.values(map).map((g) => ({ ...withCurrentSeats(g), community: gameCommunity(state.settings, g) }));
   // Each community's members (members.js), for the player lists and rankings, and games for an editor to check.
   const counted = state.games.filter((g) => !g.excluded);
   members = communityMembers(counted, state.settings).members;
