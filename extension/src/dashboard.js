@@ -1370,17 +1370,6 @@ function lengthTile(G, o) {
   return tile('Average game length', `${o.avgDays.toFixed(1)} days`, lo === hi ? 'every game the same length' : `shortest ${plural(lo, 'day')} · longest ${plural(hi, 'day')}`);
 }
 
-function summaryLine(G, base, sel) {
-  const parts = [];
-  const who = listWords(sel.players.map((k) => `<b>${esc(nameOf(k))}</b>`));
-  if (sel.players.length && (sel.characters.length || sel.types.length)) parts.push(`with ${who} as <b>${esc(heldRole(sel).as)}</b>`);
-  else if (sel.players.length) parts.push(`with ${who} in the game`);
-  else if (sel.characters.length) parts.push(`with ${listWords(sel.characters.map((c) => `<b>${esc(charName(c))}</b>`))} in play`);
-  if (sel.types.length && !sel.players.length) parts.push(`looking at ${listWords(sel.types.map((t) => `<b>${esc(teamLabel(t))}</b>`))}`);
-  const scope = [state.filters.communities.map((c) => communityName(state.settings, c)).join(' & '), state.filters.script, state.filters.storyteller && `storyteller ${nameOf(state.filters.storyteller)}`, state.filters.days && `the last ${state.filters.days} days`].filter(Boolean);
-  return `<p class="summary">${hasSelection(sel) ? `<b>${G.length}</b> of ${plural(base.length, 'game')}` : `<b>${plural(base.length, 'game')}</b>`}${scope.length ? ` in ${esc(scope.join(' · '))}` : ''}${parts.length ? `, ${parts.join(', ')}` : ''}.</p>`;
-}
-
 // Clears the community, script and storyteller filters (Clear on Playstyles and My stats, and "← Playstyles").
 function clearScope() {
   Object.assign(state.filters, { communities: [], script: '', storyteller: '' });
@@ -1389,7 +1378,16 @@ function clearScope() {
   setSelection(() => {});
 }
 
-// Clears every filter (Clear on the Overview and Games, and "← Community").
+// The Games breadcrumb's phrase, led by how many games: "Games in Escape" → "48 games in Escape", "Bad Moon Rising games"
+// → "9 Bad Moon Rising games", "wren as Townsfolk" → "12 games with wren as Townsfolk".
+function counted(n, phrase) {
+  const word = n === 1 ? 'game' : 'games', script = state.filters.script;
+  if (phrase.startsWith('Games')) return `${n} ${word}${phrase.slice(5)}`;
+  if (script && phrase.startsWith(`${script} games`)) return `${n} ${script} ${word}${phrase.slice(script.length + 6)}`;
+  return `${n} ${word} with ${phrase}`;
+}
+
+// Clears every filter (Clear on the Overview and Games, "← Community" and "← All games").
 function clearAll() {
   Object.assign(state.filters, { communities: [], script: '', storyteller: '', days: '' });
   savePrefs();
@@ -1411,8 +1409,10 @@ const gamesPhrase = () => [state.filters.script ? `${state.filters.script} games
 // Where you are on the Community tab, once anything is picked: "← Community › wren as the Amnesiac in Escape". One phrase
 // for everything picked, not a path, since the filters don't nest. "← Community" goes back to the overview with every
 // filter cleared. Playstyles starts from itself: "← Playstyles › Games in Rhap" ("← Playstyles" clears its filters).
+// Games always has one, starting with how many games are listed: "65 games", or "← All games › 3 games storytold by kaz".
 function crumbs(G, base, sel) {
-  const styles = state.tab === 'styles';
+  const styles = state.tab === 'styles', games = state.tab === 'games';
+  if (games && !anyFilter(sel)) return `<nav class="crumbs" aria-label="Where you are"><span class="crumb-here">${plural(G.length, 'game')}</span></nav>`;
   // My stats is its own tab (always your page), so it has no breadcrumb.
   if (state.tab === 'me' || !(styles ? scopeOn() : anyFilter(sel))) return '';
   const who = listWords(sel.players.map(nameOf));
@@ -1427,10 +1427,12 @@ function crumbs(G, base, sel) {
   // (A character on its own already starts with the games: "Bad Moon Rising games with the Imp in play, in Escape".)
   const gamesFirst = sel.characters.length && !sel.players.length;
   const which = state.filters.script && !gamesFirst ? `in ${state.filters.script} games${scopeWords() ? ` ${scopeWords()}` : ''}` : scopeWords();
-  const phrase = !what ? gamesPhrase() : [what, which].filter(Boolean).join(what.endsWith('in play') || what.includes(', looking at') ? ', ' : ' ');
+  let phrase = !what ? gamesPhrase() : [what, which].filter(Boolean).join(what.endsWith('in play') || what.includes(', looking at') ? ', ' : ' ');
+  if (games) phrase = counted(G.length, phrase);
   const sep = '<span class="crumb-sep" aria-hidden="true">›</span>';
   if (styles) return `<nav class="crumbs" aria-label="Where you are"><button type="button" class="crumb-back" data-crumb-styles title="Playstyles, with no filters"><span aria-hidden="true">←</span> Playstyles</button>${sep}<span class="crumb-here">${esc(gamesPhrase())}</span></nav>`;
-  const back = '<button type="button" class="crumb-back" data-crumb-back title="Back to the community overview, with no filters"><span aria-hidden="true">←</span> Community</button>';
+  const back = games ? '<button type="button" class="crumb-back" data-crumb-games title="Every game, with no filters"><span aria-hidden="true">←</span> All games</button>'
+    : '<button type="button" class="crumb-back" data-crumb-back title="Back to the community overview, with no filters"><span aria-hidden="true">←</span> Community</button>';
   return `<nav class="crumbs" aria-label="Where you are">${back}${sep}<span class="crumb-here">${esc(phrase)}</span></nav>`;
 }
 
@@ -1442,7 +1444,7 @@ function gamesView() {
   if (!state.games.length) return noGames();
   const base = baseGames();
   const G = selectGames(base, state.sel);
-  return `${summaryLine(G, base, state.sel)}${G.length ? gamesList(G) : '<div class="card empty"><h2>No games match</h2><p>Try removing a filter.</p></div>'}`;
+  return `${crumbs(G, base, state.sel)}${G.length ? gamesList(G) : '<div class="card empty"><h2>No games match</h2><p>Try removing a filter.</p></div>'}`;
 }
 
 // Awards: whose nominations get the most evil players executed (as good), the most good players executed (as evil),
@@ -2006,7 +2008,7 @@ async function updateLocal(id, patch, resend) {
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-crumb-back],[data-crumb-styles],[data-go-styles],[data-stats-view],[data-confirm-community],#clear-sel');
+  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-crumb-back],[data-crumb-styles],[data-crumb-games],[data-go-styles],[data-stats-view],[data-confirm-community],#clear-sel');
   if (!t) return;
   // Under an open game: switch between seat-by-seat and nominations, or show the settings. No full redraw,
   // so the grimoire stays put.
@@ -2045,6 +2047,7 @@ document.addEventListener('click', async (e) => {
   if (t.id === 'clear-sel' && (state.tab === 'styles' || state.tab === 'me')) { clearScope(); return; }
   if (t.id === 'clear-sel') { clearAll(); return; }
   if (t.dataset.crumbStyles !== undefined) { clearScope(); return; }
+  if (t.dataset.crumbGames !== undefined) { clearAll(); window.scrollTo(0, 0); return; }
   // An editor confirms a flagged game's community: it's then picked by hand, so it isn't flagged again.
   if (t.dataset.confirmCommunity) { const g = state.games.find((x) => x.id === t.dataset.confirmCommunity); if (g) { await updateGame(g.id, { community: g.community, communityManual: true }); await load(); } return; }
   // The Community view tabs (Overview, Playstyles).

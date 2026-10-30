@@ -216,8 +216,6 @@ details.game .body { padding: 8px 4px 22px; display: grid; gap: 16px; }
 .linkish:hover { color: var(--down); }
 
 /* adaptive dashboard */
-.summary { margin: 0 0 14px; color: var(--ink-2); font-size: 15px; }
-.summary b { color: var(--ink); font-weight: 700; }
 .lnk { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--axis); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
 .lnk:hover { text-decoration-color: var(--accent); color: var(--accent); }
 .grid.inner { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
