@@ -1,8 +1,8 @@
 // The "Data & settings" view: export (and import), your account and communities, the editor key; in the extension
 // also this browser's uploads and stored games, and its Escape & Rhap rooms.
-import { toTables, toCSV, COLUMNS } from './tables.js?v=fb3a7db6ef';
-import { communityConfig, communityName, slug, NONE } from './communities.js?v=fb3a7db6ef';
-import { esc, fmtDate, fmtTime, plural } from './ui.js?v=fb3a7db6ef';
+import { toTables, toCSV, COLUMNS } from './tables.js?v=57a62a3c74';
+import { communityConfig, communityName, slug, NONE } from './communities.js?v=57a62a3c74';
+import { esc, fmtDate, fmtTime, plural } from './ui.js?v=57a62a3c74';
 
 export function renderData(ctx, filteredGames) {
   const { state } = ctx;
@@ -145,15 +145,13 @@ function roomsCard({ state }) {
   const overrides = Object.entries(cfg.overrides);
   return `<div class="card">
     <h3>Escape &amp; Rhap rooms</h3>
-    <p class="sub">Which rooms are Escape and which are Rhap, for games recorded in this browser. Any other room gets the default below. You can also change a room from the popup while you play. Your own communities are under Your communities.</p>
+    <p class="sub">Which rooms are Escape and which are Rhap, for games recorded in this browser. A game in any other room goes to the community most of its players (or its storyteller) have played in before, or isn't recorded if it fits none. You can always change it from the popup while you play. Your own communities are under Your communities.</p>
     <div class="form" id="communities">
       ${local.map((c) => `<div class="community-row room-row" data-id="${esc(c.id)}">
         <input type="hidden" class="c-name" value="${esc(c.name)}"><span class="room-name">${esc(c.name)}</span>
         <input type="text" class="c-rooms" value="${esc((c.rooms || []).join(', '))}" placeholder="Rooms, separated by commas" aria-label="${esc(c.name)} rooms">
         ${builtIn(c) ? '' : '<button class="btn small danger" data-action="remove-community">Remove</button>'}
       </div>`).join('')}
-      <div class="field"><span class="field-label">Every other room is (click again to switch off)</span>
-        <div class="toggles" id="fallback-community">${local.map((c) => `<button class="toggle" data-fallback="${esc(c.id)}" aria-pressed="${cfg.fallback === c.id}">${esc(c.name)}</button>`).join('')}</div></div>
       ${overrides.length ? `<div><span class="muted">Rooms you've set by hand:</span> ${overrides.map(([room, id]) => `<span class="pill">${esc(room)} → ${id === NONE ? 'switched off' : esc(communityName(state.settings, id))} <button class="linkish" data-clear-room="${esc(room)}" aria-label="Clear">×</button></span>`).join(' ')}</div>` : ''}
       <div class="toolbar"><button class="btn primary" data-action="save-communities">Save rooms</button><span class="msg" id="communities-msg"></span></div>
     </div>
@@ -229,13 +227,6 @@ export async function handleDataClick(t, ctx, filteredGames) {
   const { state, api, load } = ctx;
   const $ = (sel) => document.querySelector(sel);
   const a = t.dataset.action;
-  if (t.dataset.fallback) {
-    // Only one default at a time; clicking the one that's on switches it off.
-    const on = t.getAttribute('aria-pressed') === 'true';
-    document.querySelectorAll('[data-fallback]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
-    t.setAttribute('aria-pressed', String(!on));
-    return true;
-  }
   if (a === 'reload-art') {
     t.disabled = true; t.textContent = 'Loading…';
     const r = await chrome.runtime.sendMessage({ type: 'assets:refresh', force: true }).catch((e) => ({ ok: false, error: String(e.message || e) }));
@@ -254,9 +245,7 @@ export async function handleDataClick(t, ctx, filteredGames) {
     t.closest('.community-row').remove();
   } else if (a === 'save-communities') {
     const communities = readCommunities();
-    const fb = (document.querySelector('[data-fallback][aria-pressed="true"]') || {}).dataset;
-    const fallbackCommunity = fb && communities.some((c) => c.id === fb.fallback) ? fb.fallback : NONE;
-    await api.set('settings', { ...state.settings, communities, fallbackCommunity });
+    await api.set('settings', { ...state.settings, communities });
     await load();
     const msg = $('#communities-msg');
     if (msg) { msg.className = 'msg ok'; msg.textContent = 'Saved. Games keep the community they were recorded with.'; }

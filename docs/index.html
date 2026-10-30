@@ -6,7 +6,7 @@
   <title>Clockwise</title>
   <meta name="robots" content="noindex">
   <link rel="icon" href="icons/icon-32.png">
-  <link rel="stylesheet" href="dashboard.css?v=fb3a7db6ef">
+  <link rel="stylesheet" href="dashboard.css?v=57a62a3c74">
 </head>
 <body>
   <!-- The curve token names run along (same as botc.app's), shared by every token on the page. -->
@@ -17,23 +17,24 @@
       <h1 aria-label="Clockwise"><span aria-hidden="true">Clockw<span class="i-dot">ı</span>se</span></h1>
     </a>
     <nav class="tabs" role="tablist">
-      <button role="tab" data-tab="stats">Stats</button>
+      <button role="tab" data-tab="stats">Community</button>
+      <button role="tab" data-tab="me">My stats</button>
       <button role="tab" data-tab="games">Games</button>
-      <button role="tab" data-tab="data">Data &amp; settings</button>
+      <button role="tab" data-tab="data">Settings</button>
     </nav>
   </header>
 
   <section class="filters" id="filters" aria-label="Filters">
     <div class="filter-row">
+      <!-- Which stats view: the overview, or playstyles (which has fewer filters, so a line sets it apart). -->
+      <select id="stats-view" class="stats-view" aria-label="Stats view">
+        <option value="stats">Overview</option>
+        <option value="styles">Playstyles</option>
+      </select>
+      <span class="filter-divider" aria-hidden="true"></span>
       <div class="toggles" id="community-filter" role="group" aria-label="Community"></div>
       <select data-filter="script" aria-label="Script"></select>
       <select data-filter="storyteller" aria-label="Storyteller"></select>
-      <select data-filter="days" aria-label="Period">
-        <option value="">All time</option>
-        <option value="30">Last 30 days</option>
-        <option value="90">Last 90 days</option>
-        <option value="365">Last year</option>
-      </select>
       <div data-ms="players"></div>
       <div data-ms="characters"></div>
       <div data-ms="types"></div>
@@ -44,7 +45,7 @@
   <p class="update-banner" id="update-banner" hidden></p>
   <main id="view"></main>
   <div id="tooltip" role="tooltip" hidden></div>
-  <script src="web-config.js?v=fb3a7db6ef"></script>
-  <script type="module" src="src/dashboard.js?v=fb3a7db6ef"></script>
+  <script src="web-config.js?v=57a62a3c74"></script>
+  <script type="module" src="src/dashboard.js?v=57a62a3c74"></script>
 </body>
 </html>

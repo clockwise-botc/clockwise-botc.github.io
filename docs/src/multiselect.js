@@ -7,9 +7,17 @@
 //     ☑ delphine            click / Enter to toggle; the list stays open for more
 //     ☐ wren
 //
-// cfg: { label, options: () => [{ value, label, sub }], selected: () => [values], onChange: (values) => void, nameOf: (value) => text,
-//        single }  single: pick one; no checkboxes or Selected/All rows, and the list closes on a pick.
-import { esc } from './ui.js?v=fb3a7db6ef';
+// cfg: { label, options: () => [{ value, label, sub, locked }], selected: () => [values], onChange: (values) => void, nameOf: (value) => text,
+//        single, fixedLabel }  single: pick one; no checkboxes or Selected/All rows, and the list closes on a pick.
+//        fixedLabel: always show the label when closed (the page says what's picked), e.g. "+ Add players to the chart".
+//        summary: () => text shown when closed, in place of the label or the selection (implies fixedLabel styling).
+//        noAll: leave out the "All" row (for lists where nothing picked doesn't mean "everything").
+//        An option with `locked` stays as it is (ticked or not) when clicked, e.g. "You", always on a chart.
+//        presets: [{ value, label }], preset: () => value or null, onPreset: (value) => void, onChoose: () => void,
+//          chooseLabel: the list opens on these options plus "Choose…" (chooseLabel); picking that turns the same
+//          list into the searchable checkboxes (with Back to the options). While the choice is the checkboxes
+//          (preset() is null) it opens straight on them.
+import { esc } from './ui.js?v=57a62a3c74';
 
 const CHEVRON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const SEARCH = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
@@ -26,8 +34,14 @@ export function multiSelect(root, cfg) {
   const panel = root.querySelector('.ms-panel');
   const list = root.querySelector('ul');
   let open = false, query = '', onlySelected = false, active = 0, items = [];
+  // With presets, the list shows either the options ('menu') or the checkboxes ('list').
+  let view = 'list';
+  const inMenu = () => cfg.presets && view === 'menu';
+  const firstOption = () => (inMenu() || cfg.single ? 0 : (cfg.noAll ? 1 : 2) + (cfg.presets ? 1 : 0)); // the first real option, after the Selected / All rows
 
   const summary = () => {
+    if (cfg.summary) return cfg.summary();
+    if (cfg.fixedLabel) return cfg.label;
     const s = cfg.selected();
     if (!s.length) return cfg.label;
     const first = cfg.nameOf(s[0]);
@@ -36,28 +50,37 @@ export function multiSelect(root, cfg) {
 
   function draw() {
     const s = cfg.selected();
-    root.classList.toggle('has-value', s.length > 0);
+    root.classList.toggle('has-value', s.length > 0 && !cfg.fixedLabel && !cfg.summary);
     root.classList.toggle('open', open);
     input.setAttribute('aria-expanded', String(open));
-    input.placeholder = open ? 'Search…' : summary();
-    icon.innerHTML = open ? SEARCH : CHEVRON;
+    input.placeholder = open && !inMenu() ? 'Search…' : summary();
+    input.readOnly = open && inMenu();
+    icon.innerHTML = open && !inMenu() ? SEARCH : CHEVRON;
     root.title = s.length > 1 ? s.map(cfg.nameOf).join(', ') : '';
     if (!open) { input.value = ''; query = ''; }
     panel.hidden = !open;
     if (!open) return;
     // Open toward the left when there isn't room for the list on the right.
     root.classList.toggle('align-right', root.getBoundingClientRect().left + Math.max(root.offsetWidth, 270) + 16 > document.documentElement.clientWidth);
+    if (inMenu()) {
+      const cur = cfg.preset();
+      items = [...cfg.presets.map((o) => ({ act: 'preset', value: o.value, label: o.label, on: o.value === cur })), { act: 'choose', label: cfg.chooseLabel || 'Choose…', on: cur === null }];
+      active = Math.max(0, Math.min(active, items.length - 1));
+      list.innerHTML = items.map((it, i) => `<li role="option" aria-selected="${it.on}" data-i="${i}" class="ms-opt${i === active ? ' active' : ''}"><span class="ms-tick" aria-hidden="true">${it.on ? '✓' : ''}</span><span class="ms-label">${esc(it.label)}</span></li>`).join('');
+      return;
+    }
     let opts = cfg.options();
     if (onlySelected) opts = opts.filter((o) => s.includes(o.value));
     if (query) opts = opts.filter((o) => o.label.toLowerCase().includes(query));
     const meta = cfg.single ? [] : [
+      ...(cfg.presets ? [{ act: 'menu', label: '‹ Back' }] : []),
       { act: 'only', label: `Selected (${s.length})`, on: onlySelected },
-      { act: 'all', label: 'All', on: s.length === 0 },
+      ...(cfg.noAll ? [] : [{ act: 'all', label: 'All', on: s.length === 0 }]),
     ];
-    items = [...meta, ...opts.slice(0, 300).map((o) => ({ value: o.value, label: o.label, sub: o.sub, on: s.includes(o.value) }))];
+    items = [...meta, ...opts.slice(0, 300).map((o) => ({ value: o.value, label: o.label, sub: o.sub, locked: o.locked, on: s.includes(o.value) }))];
     active = Math.max(0, Math.min(active, items.length - 1));
-    list.innerHTML = items.map((it, i) => `<li role="option" aria-selected="${it.on}" data-i="${i}" class="${i === active ? 'active' : ''}${it.act ? ' ms-meta' : ''}${it.act === 'all' ? ' ms-sep' : ''}">
-        ${cfg.single ? '' : '<span class="cb" aria-hidden="true"></span>'}<span class="ms-label">${esc(it.label)}</span>${it.sub ? `<span class="ms-sub">${esc(it.sub)}</span>` : ''}</li>`).join('')
+    list.innerHTML = items.map((it, i) => `<li role="option" aria-selected="${it.on}" data-i="${i}" class="${i === active ? 'active' : ''}${it.locked ? ' locked' : ''}${it.act ? ' ms-meta' : ''}${it.act === 'all' || (cfg.noAll && it.act === 'only') ? ' ms-sep' : ''}">
+        ${cfg.single || it.act === 'menu' ? '' : '<span class="cb" aria-hidden="true"></span>'}<span class="ms-label">${esc(it.label)}</span>${it.sub ? `<span class="ms-sub">${esc(it.sub)}</span>` : ''}</li>`).join('')
       + (items.length === meta.length ? '<li class="ms-empty">No matches</li>' : '');
   }
 
@@ -65,8 +88,12 @@ export function multiSelect(root, cfg) {
     const it = items[i];
     if (!it) return;
     active = i;
+    if (it.act === 'preset') { cfg.onPreset(it.value); setOpen(false); input.blur(); return; }
+    if (it.act === 'choose') { if (cfg.preset() !== null) cfg.onChoose(); view = 'list'; active = firstOption(); draw(); input.focus(); return; }
+    if (it.act === 'menu') { view = 'menu'; query = ''; input.value = ''; active = 0; draw(); return; }
     if (it.act === 'only') { onlySelected = !onlySelected; draw(); return; }
     if (it.act === 'all') { cfg.onChange([]); return; }
+    if (it.locked) return;
     if (cfg.single) { cfg.onChange([it.value]); setOpen(false); input.blur(); return; }
     const s = cfg.selected();
     cfg.onChange(s.includes(it.value) ? s.filter((v) => v !== it.value) : [...s, it.value]);
@@ -75,13 +102,13 @@ export function multiSelect(root, cfg) {
   function setOpen(v) {
     if (open === v) return;
     open = v;
-    if (open) { active = cfg.single ? 0 : 2; onlySelected = false; }
+    if (open) { view = cfg.presets && cfg.preset() !== null ? 'menu' : 'list'; active = firstOption(); onlySelected = false; }
     draw();
   }
 
   input.addEventListener('focus', () => setOpen(true));
   input.addEventListener('click', () => setOpen(true));
-  input.addEventListener('input', () => { query = input.value.trim().toLowerCase(); active = cfg.single ? 0 : 2; draw(); });
+  input.addEventListener('input', () => { if (inMenu()) return; query = input.value.trim().toLowerCase(); active = firstOption(); draw(); });
   icon.addEventListener('click', () => { if (open) setOpen(false); else input.focus(); });
   // Keep focus in the search box while clicking options, so the list stays open.
   list.addEventListener('mousedown', (e) => e.preventDefault());

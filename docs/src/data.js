@@ -3,8 +3,8 @@
 //   Extension, sharing: everyone's games from the shared store, plus this browser's games not uploaded yet.
 //   Website (community dashboard): everyone's games, after the community password.
 // Downloads are cached (chrome.storage in the extension, IndexedDB on the website) and topped up incrementally.
-import { BACKEND_URL, SITE_URL } from './config.js?v=fb3a7db6ef';
-import { call, pull, ping, editPatch } from './shared.js?v=fb3a7db6ef';
+import { BACKEND_URL, SITE_URL } from './config.js?v=57a62a3c74';
+import { call, pull, ping, editPatch } from './shared.js?v=57a62a3c74';
 
 // Set by web-config.js on the community website.
 export const WEB = (typeof window !== 'undefined' && window.CLOCKWISE_WEB) || null;
@@ -108,6 +108,15 @@ export function mergeGames(local, cache) {
     if (!out[g.id] && !deleted.has(g.id)) out[g.id] = { ...g, local: true, pending: !g.syncedAt && !g.id.startsWith('sample-') };
   }
   return out;
+}
+
+// A game recorded before botc.app said which room it was in is saved as "local:<start time>". When someone else's
+// recording of the same game (same start time, a real room) is there too, the "local" one is left out.
+export function dropLocalTwins(map) {
+  const startOf = (id) => id.slice(id.indexOf(':') + 1);
+  const real = new Set(Object.keys(map).filter((id) => !id.startsWith('local:')).map(startOf));
+  for (const id of Object.keys(map)) if (id.startsWith('local:') && real.has(startOf(id))) delete map[id];
+  return map;
 }
 
 // Is this key the community password (canRead) / an editor key (canEdit)?

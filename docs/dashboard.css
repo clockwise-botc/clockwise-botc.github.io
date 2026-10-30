@@ -118,8 +118,15 @@ h4 { font-family: var(--serif); font-size: 16px; margin: 0 0 8px; font-weight: 6
 .tile.feature .lnk { text-decoration-color: rgba(243, 234, 219, .55); }
 /* Green/red would be hard to read on the mauve, so the arrow and sign carry the direction here. */
 .tile.feature .delta.up, .tile.feature .delta.down { color: #f3eadb; font-weight: 700; }
-.summary.lead { font-family: var(--serif); font-size: 22px; line-height: 1.3; color: var(--ink-2); margin: 4px 0 18px; }
-.summary.lead b { font-weight: 800; }
+/* The Stats tab's breadcrumb: "← Stats › liatfiat as the Amnesiac", then the games it covers. */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 2px 0 18px; }
+.crumb-back { display: inline-flex; align-items: center; gap: 8px; padding: 0 0 1px; border: 0; border-bottom: 1.5px solid transparent; border-radius: 0; background: none; color: var(--ink-2); font-family: var(--serif); font-size: 24px; line-height: 1.15; font-weight: 600; cursor: pointer; }
+.crumb-back span { font-family: var(--sans); font-size: 20px; font-weight: 500; }
+/* One line under the arrow and "Stats" together. */
+.crumb-back:hover { color: var(--ink); border-bottom-color: currentColor; }
+.crumb-sep { color: var(--muted); font-size: 18px; }
+.crumb-here { font-family: var(--serif); font-size: 24px; line-height: 1.25; color: var(--ink); font-weight: 600; }
+
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin-bottom: 18px; }
 .tile .label { color: var(--ink-2); font-size: 13px; font-weight: 600; letter-spacing: .02em; }
@@ -334,13 +341,15 @@ details.game .body > * { min-width: 0; }
 
 /* single-player top row */
 .span-all { grid-column: 1 / -1; }
+.grid.pair-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); }
 .grid.four { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .ring-track { fill: var(--wash); }
 .rings path { stroke: var(--surface); stroke-width: 2; }
 .pie-caption.compare { font-size: 13px; line-height: 1.6; text-align: left; }
 .token-card { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .token-card h3 { align-self: stretch; text-align: left; }
-.token-card .info { cursor: help; color: var(--muted); font-family: var(--sans); font-size: 14px; font-weight: 400; }
+/* The ⓘ after a card's heading: small, muted, the same on every card. */
+.token-card .info, .card > h3 .info { cursor: help; color: var(--muted); font-family: var(--sans); font-size: 14px; font-weight: 400; vertical-align: 2px; }
 .token-card p { margin: 14px 0 0; color: var(--ink-2); }
 .tok-body { flex: 1; align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-bottom: 8px; }
 .toggle.small { padding: 3px 10px; font-size: 12px; }
@@ -355,8 +364,8 @@ th.sortable.sorted .arrow { opacity: 1; }
 
 /* ---------- filter bar: one row (wraps only on narrow windows) ---------- */
 .filter-row { flex-wrap: wrap; gap: 10px; align-items: center; }
-.filter-row > select { flex: 0 1 180px; min-width: 130px; }
-.filter-row > .ms { flex: 1 1 170px; min-width: 168px; max-width: 260px; }
+.filter-row > select { flex: 0 1 160px; min-width: 124px; }
+.filter-row > .ms { flex: 1 1 150px; min-width: 150px; max-width: 260px; }
 .filter-row > .toggles, .filter-row > .btn { flex: none; }
 .btn.clear { height: 44px; padding: 0 18px; }
 .filter-row > select, .filter-row .toggles { height: 44px; }
@@ -595,8 +604,215 @@ form.change-pw .toolbar, form.change-pw .msg { margin: 0; }
 #pw-msg:empty, form.change-pw .msg:empty { display: none; }
 .form label.key-field { font-size: 14px; }
 .key-field .hint, .field-head .hint { font-weight: 400; color: var(--muted); margin-bottom: 6px; }
+/* "Character type" is the longest picker label; give it the room to show in full. */
+.filter-row > .ms[data-ms="types"] { flex-basis: 178px; min-width: 178px; }
 #community-filter .ms-communities { min-width: 190px; }
 /* Rows a list keeps folded away until "Show all" (see fitLists in dashboard.js). */
 [data-fit] [data-fold] { display: none; }
 /* Characters a player hasn't played yet ("Show all" on Characters played). */
 tr.unplayed td { opacity: .5; }
+
+/* Around the grimoire: a value, and under it how far it is from the average player. */
+.tt-cell { display: grid; gap: 2px; min-width: 120px; }
+/* "Your playstyle": six bars, the player's value (bar and dot) and the average player (a mark), on the same scale. */
+.playstyle-card > .sub { margin-bottom: 10px; }
+.ps-legend { display: flex; gap: 18px; margin: 0 0 16px; color: var(--ink-2); font-size: 13px; }
+/* On a wide card the key sits in the top right corner, beside the heading and description (like the Playstyles
+   charts' player controls). */
+/* Pinned to the corner, so it never changes the space between the heading and the description. */
+@media (min-width: 900px) {
+  .playstyle-card { position: relative; }
+  .playstyle-card > h3, .playstyle-card > .sub { padding-right: 230px; }
+  .playstyle-card > .ps-legend { position: absolute; top: 30px; right: 26px; margin: 0; white-space: nowrap; }
+  .playstyle-card > .sub { margin-bottom: 18px; }
+}
+.ps-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.ps-key-you { width: 11px; height: 11px; border-radius: 50%; background: var(--neutral); }
+.ps-key-you.side-good { background: var(--good); }
+.ps-key-you.side-evil { background: var(--evil); }
+.ps-key-avg { width: 2.5px; height: 14px; border-radius: 1px; background: var(--ink); }
+.ps-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 18px 36px; }
+.ps-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 7px; }
+.ps-label { color: var(--ink-2); font-size: 14px; }
+.ps-vals { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.ps-vals b { font-family: var(--serif); font-size: 22px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ps-avg-val { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ps-track { position: relative; height: 10px; border-radius: 5px; background: var(--wash); }
+.ps-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--neutral); opacity: .45; }
+.ps-dot { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--neutral); border: 2px solid var(--surface); }
+.ps-avg { position: absolute; top: -5px; bottom: -5px; width: 2.5px; margin-left: -1.25px; border-radius: 1px; background: var(--ink); }
+.ps-bars.side-good .ps-fill, .ps-bars.side-good .ps-dot { background: var(--good); }
+.ps-bars.side-evil .ps-fill, .ps-bars.side-evil .ps-dot { background: var(--evil); }
+.ps-scale { display: flex; justify-content: space-between; margin-top: 5px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.ps-few { margin: 14px 0 0; }
+.tt-cell b { font-variant-numeric: tabular-nums; }
+.tt-cell .small { color: var(--ink-2); font-size: 11.5px; line-height: 1.3; }
+.tt-cell .small.muted { color: var(--muted); }
+table.tt td { vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
+table.tt td:first-child { color: var(--ink-2); max-width: 160px; }
+
+/* The all-player chart: a bar from the average (centre line) to each player's value. One hue throughout:
+   above or below average is shown by direction, not by colour, since neither is better. */
+.tt-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+/* Same height as the filter pills; vertical padding off so the text isn't clipped. */
+.tt-controls select { height: 44px; padding-top: 0; padding-bottom: 0; line-height: 1.2; min-width: 150px; max-width: 100%; }
+.tt-controls .ms { flex: 0 1 260px; min-width: 250px; }
+.tt-note { margin: 0 0 10px; }
+/* A chart's player control ("Always show", "Show players"): a small label and a compact dropdown, with a line of
+   what's shown under it. */
+.ctl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 2px 0 6px; }
+.ctl-label { font-size: 13.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.ctl-row .ctl-ms .ms-field { height: 38px; font-size: 14px; padding-right: 3.5px; }
+/* The search / open button sits as far from the right edge as from the top and bottom (its hover circle is even). */
+.ctl-row .ctl-ms .ms-icon { width: 28px; height: 28px; }
+.ctl-row .ctl-ms { flex: none; width: 190px; }
+.ctl-row .ctl-ms.wide { width: 290px; }
+.ctl-row + .tt-note { margin: 0 0 14px; }
+/* On the charts, the player control sits in the card's top right corner, beside the heading and description. */
+@media (min-width: 900px) {
+  .tt-chart-card, .sc-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 28px; }
+  .tt-chart-card > *, .sc-card > * { grid-column: 1 / -1; }
+  .tt-chart-card > h3, .tt-chart-card > .sub, .sc-card > h3, .sc-card > .sub { grid-column: 1; }
+  .tt-chart-card > .ctl-row, .sc-card > .ctl-row { grid-column: 2; grid-row: 1 / span 2; align-self: start; justify-content: flex-end; flex-wrap: nowrap; margin: 0; }
+  .tt-chart-card > .ctl-row + .tt-note, .sc-card > .ctl-row + .tt-note { margin-top: 10px; }
+}
+.ms-panel li.locked { cursor: default; }
+/* A dropdown's preset options, a tick on the current one. */
+.ms-panel li.ms-opt { gap: 8px; white-space: nowrap; }
+.ms-panel .ms-tick { flex: none; width: 16px; font-weight: 700; color: var(--ink); text-align: center; }
+.ms-panel li.ms-opt[aria-selected="true"] { font-weight: 600; }
+
+.ms-panel li.locked .cb { opacity: .55; }
+/* A chart's heading as a question, with dropdowns in it ("Which players have the most [nominations per day] [as good]?"). */
+.madlib { display: inline-block; white-space: nowrap; }
+.madlib select { font: inherit; color: var(--ink); field-sizing: content; height: auto; min-width: 0; margin: 0 1px; padding: 0 1.25em 1px .32em; line-height: 1.25;
+  background-color: var(--chip, rgba(243, 234, 219, .09)); border: 1.5px solid var(--border); border-radius: 10px; background-position: right .36em center; background-size: .58em; cursor: pointer; transition: background-color .12s, border-color .12s; }
+.madlib select:hover { background-color: var(--chip-hover, rgba(243, 234, 219, .16)); border-color: var(--ink-2); }
+.madlib select:focus { outline: none; border-color: var(--ink-2); }
+.madlib select:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+:root[data-theme="light"] .madlib select { --chip: rgba(91, 58, 145, .07); --chip-hover: rgba(91, 58, 145, .13); }
+.madlib option { font-family: var(--sans); font-size: 15px; }
+.tt-row .rk { display: inline-block; min-width: 2.2em; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tt-tag { font-size: 11px; font-weight: 700; color: var(--ink-2); background: var(--wash); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
+.tt-tag.muted { font-weight: 500; color: var(--muted); }
+.tt-skip .tt-track { height: 18px; }
+.tt-skip .tt-track span { position: absolute; left: 50%; top: 0; transform: translateX(-50%); padding: 0 8px; background: var(--surface); color: var(--muted); font-size: 12px; white-space: nowrap; }
+/* "average" over the line: hover (or focus) for the value. The right column's heading says what the numbers are. */
+.tt-axis span.avg { cursor: help; text-decoration: underline dotted var(--axis); text-underline-offset: 3px; }
+.tt-axis .v.head { font-size: 11px; font-weight: 600; color: var(--ink-2); white-space: normal; line-height: 1.2; }
+.tt-chart { display: grid; }
+.tt-row { display: grid; grid-template-columns: minmax(90px, 170px) 1fr 96px; gap: 12px; align-items: center; padding: 3px 6px; border-radius: 8px; }
+.tt-row:not(.tt-axis):hover { background: var(--wash); }
+.tt-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-row .v { text-align: right; white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
+.tt-row.sel .name { font-weight: 700; }
+.tt-track { position: relative; height: 20px; }
+.tt-track::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1.5px; margin-left: -0.75px; background: var(--axis); }
+.tt-bar { position: absolute; top: 6px; height: 8px; background: var(--neutral); opacity: .45; }
+.tt-bar.up { border-radius: 0 4px 4px 0; }
+.tt-bar.down { border-radius: 4px 0 0 4px; }
+.tt-dot { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--neutral); box-shadow: 0 0 0 2px var(--surface); }
+.tt-row.sel .tt-dot { background: var(--ink); width: 12px; height: 12px; margin: -6px 0 0 -6px; }
+.tt-axis { padding-bottom: 6px; }
+.tt-axis .tt-track { height: 16px; }
+.tt-axis .tt-track::before { top: 14px; bottom: -6px; }
+.tt-axis span { position: absolute; top: 0; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.tt-axis span.avg { transform: translateX(-50%); color: var(--ink-2); font-weight: 600; }
+@media (max-width: 560px) { .tt-row { grid-template-columns: 84px 1fr 70px; gap: 8px; } .tt-axis span:not(.avg) { display: none; } }
+.delta.ps-dir { color: var(--ink-2); font-weight: 600; font-size: 12.5px; }
+/* Awards row on the main page: three plain tiles under the totals. */
+.tiles.awards .info { cursor: help; color: var(--muted); font-weight: 400; }
+/* On a highlighted (purple-pink) tile, the ⓘ is white, a little see-through. */
+.tiles .tile.feature .info { color: rgba(255, 255, 255, .7); }
+
+
+/* Nominations / votes scatter. One hue for every player; you in ink. Grid and averages stay recessive. */
+.sc-wrap { overflow-x: auto; margin-top: 6px; }
+.sc { display: block; max-width: 100%; height: auto; font-family: var(--sans); }
+.sc .sc-axis { stroke: var(--axis); stroke-width: 1.5; stroke-linecap: round; }
+.sc .sc-tick { fill: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.sc .sc-title { fill: var(--ink-2); font-size: 14px; font-weight: 600; }
+.sc .sc-avg { stroke: var(--ink-2); stroke-opacity: .45; stroke-width: 1.5; stroke-dasharray: 4 5; }
+.sc .sc-avg-label { fill: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.sc .sc-avg-hit { stroke: transparent; stroke-width: 12; cursor: help; }
+.sc .sc-avg-hit:hover { stroke: var(--wash); }
+.sc .sc-pt { cursor: pointer; }
+.sc .sc-pt circle:last-child { fill: var(--neutral); stroke: var(--surface); stroke-width: 2; transition: r .12s; }
+.sc .sc-pt.me circle:last-child { fill: var(--ink); stroke: var(--neutral); stroke-width: 3; }
+.sc .sc-pt:hover circle:last-child { r: 8.5; stroke: var(--ink); }
+.sc .sc-name { fill: var(--ink-2); font-size: 14px; pointer-events: none; }
+.sc .sc-name.me { fill: var(--ink); font-weight: 700; font-size: 15px; }
+.sc.big .sc-name { font-size: 16px; }
+.sc.big .sc-name.me { font-size: 17px; }
+.sc.big .sc-tick { font-size: 14px; }
+.sc.big .sc-title { font-size: 15px; }
+.sc.big .sc-avg-label { font-size: 13.5px; }
+.sc.big .sc-pt:hover circle:last-child { r: 9.5; }
+/* Playstyles tab: cards stacked full width; the player, character and type pickers don't apply there. */
+.grid.stack { grid-template-columns: 1fr; }
+/* Playstyles is about everyone, so the filters for picking players, characters and types don't apply. */
+body.tab-styles [data-ms="players"], body.tab-styles [data-ms="characters"], body.tab-styles [data-ms="types"] { display: none !important; }
+/* The stats view dropdown (Overview / Playstyles) comes first, set apart by a line; only on the Stats tab. */
+.filter-row > .stats-view { flex: none; min-width: 140px; }
+.filter-divider { align-self: stretch; width: 1px; background: var(--border); margin: 4px 2px; }
+body:not(.tab-stats) .stats-view, body:not(.tab-stats) .filter-divider { display: none; }
+@media (max-width: 640px) {
+  /* On a phone the view dropdown gets its own row, with the line under it. */
+  .filter-row > .stats-view { flex: 1 1 100%; }
+  .filter-divider { flex: 1 1 100%; height: 1px; width: auto; margin: 0; }
+}
+/* My stats is one player's page (yours), so the player, character and type pickers don't apply there either. */
+body.tab-me [data-ms="players"], body.tab-me [data-ms="characters"], body.tab-me [data-ms="types"] { display: none !important; }
+/* Best ally / Worst enemy: the player's botc.app avatar (or their initial) beside their name. */
+.enemy-who { display: flex; align-items: center; gap: 14px; margin: 6px 0 16px; }
+.enemy-name { display: grid; gap: 2px; font-size: 22px; font-weight: 700; margin: 0; }
+.enemy-name .muted { font-size: 14px; font-weight: 400; }
+.enemy-next { display: inline-flex; align-items: center; gap: 7px; }
+.relation-card > h3 { margin-bottom: 14px; }
+.relation-card .enemy-who { margin: 0 0 22px; }
+.rel-legend { margin: 0 0 0 auto; align-self: flex-start; }
+.pair-avatars { display: inline-flex; flex: none; }
+.pair-avatars .avatar { background: var(--surface-2); }
+.pair-avatars .avatar + .avatar { margin-left: -16px; box-shadow: 0 0 0 3px var(--surface); }
+.enemy-name .amp { font-weight: 400; color: var(--ink-2); }
+.rel-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 20px 32px; }
+.rel-group { display: grid; gap: 16px; align-content: start; }
+.rel-group h4 { margin: 0; color: var(--muted); font: 600 12px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.rel-bars .ps-vals b { font-size: 20px; }
+.enemy-more { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--border); font-size: 14px; }
+.avatar { position: relative; flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: var(--wash); border: 1.5px solid var(--border); color: var(--ink-2); font: 600 15px var(--sans); }
+.avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.avatar.big { width: 64px; height: 64px; font-size: 24px; }
+.avatar.small { width: 22px; height: 22px; font-size: 11px; border-width: 1px; }
+.grid.stack > .card { grid-column: 1 / -1; }
+
+/* Around the grimoire bars and scatter dots: plum for all games, Townsfolk blue as good, Minion rust as evil. You stay in ink. */
+.side-good .tt-bar, .side-good .tt-dot { background: var(--good); }
+.side-evil .tt-bar, .side-evil .tt-dot { background: var(--evil); }
+.side-good .tt-row.sel .tt-dot, .side-evil .tt-row.sel .tt-dot { background: var(--ink); }
+.sc.side-good .sc-pt circle:last-child { fill: var(--good); }
+.sc.side-evil .sc-pt circle:last-child { fill: var(--evil); }
+.sc.side-good .sc-pt.me circle:last-child, .sc.side-evil .sc-pt.me circle:last-child { fill: var(--ink); }
+/* Playstyles: the one games toggle under the awards. */
+.sc-warn { color: var(--ink); font-weight: 600; }
+/* The Overview's Playstyles card: opens Playstyles. */
+.styles-teaser { cursor: pointer; transition: border-color .2s, background-color .2s; }
+.styles-teaser:hover { border-color: color-mix(in srgb, var(--ink-2) 22%, var(--border)); background: color-mix(in srgb, var(--surface-2) 45%, var(--surface)); }
+.styles-teaser:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.styles-teaser > .sub { margin-bottom: 22px; }
+.styles-teaser .ps-bars { gap: 22px 36px; }
+.teaser-kicker { margin: 0 0 6px; color: var(--muted); font: 600 12px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.teaser-who { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; min-width: 0; }
+.teaser-more { margin: 20px 0 0; font-weight: 600; }
+.teaser-more i { display: inline-block; font-style: normal; transition: transform .2s; }
+.styles-teaser:hover .teaser-more i { transform: translateX(3px); }
+/* The 30-day win rate spotlights: a dot by the label for the side. */
+.tile.spot .label { display: flex; align-items: center; gap: 8px; }
+.tile.spot-good .label::before, .tile.spot-evil .label::before { content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--good); }
+.tile.spot-evil .label::before { background: var(--evil); }
+.tile.spot .info { cursor: help; color: var(--muted); font-weight: 400; }
+/* Games an editor should check (only editors see these). */
+.pill.review { background: transparent; border-color: var(--evil); color: var(--evil); cursor: help; }
+.gm-review { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 14px; border: 1.5px solid var(--evil); border-radius: 14px; }
+.gm-review p { flex: 1 1 320px; margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.gm-review b { color: var(--ink); margin-right: 4px; }
