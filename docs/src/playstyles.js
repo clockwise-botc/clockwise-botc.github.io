@@ -5,7 +5,7 @@
 // player's rates on one side (as good, as evil, or both) are also pulled toward the table-wide rate by SHRINK pretend
 // games, so the awards on the main page can't go to someone with a lucky handful of games.
 
-import { playerKey, displayName } from './stats.js?v=57a62a3c74';
+import { playerKey, displayName } from './stats.js?v=605a0b1f3e';
 
 export const SIDES = ['good', 'evil', 'all'];
 const SHRINK = 5; // pretend games at the table-wide rate added to every player's own

@@ -15,8 +15,8 @@
 // don't look extreme by luck. Each rate is shown next to the table-wide average for the same games and side, as a gap
 // (percentiles exaggerate tiny differences when most players sit close together).
 
-import { playerKey, displayName } from './stats.js?v=57a62a3c74';
-import { ALL_CHARACTERS } from './characters.js?v=57a62a3c74';
+import { playerKey, displayName } from './stats.js?v=605a0b1f3e';
+import { ALL_CHARACTERS } from './characters.js?v=605a0b1f3e';
 
 // Games a player needs to be listed: 3 everywhere for now, while there aren't many games yet.
 export const MIN_GAMES = { all: 3, good: 3, evil: 3 };
