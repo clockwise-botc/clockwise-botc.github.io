@@ -25,19 +25,21 @@
 
   <section class="filters" id="filters" aria-label="Filters">
     <div class="filter-row">
-      <!-- Which stats view: the overview, or playstyles (which has fewer filters, so a line sets it apart). -->
-      <select id="stats-view" class="stats-view" aria-label="Stats view">
-        <option value="stats">Overview</option>
-        <option value="styles">Playstyles</option>
-      </select>
-      <span class="filter-divider" aria-hidden="true"></span>
-      <div class="toggles" id="community-filter" role="group" aria-label="Community"></div>
-      <select data-filter="script" aria-label="Script"></select>
-      <select data-filter="storyteller" aria-label="Storyteller"></select>
-      <div data-ms="players"></div>
-      <div data-ms="characters"></div>
-      <div data-ms="types"></div>
-      <button class="btn clear" id="clear-sel" hidden>Clear</button>
+      <!-- Which Community view: the overview, or playstyles (which has fewer filters). Tabs on the left, filters on the right. -->
+      <div class="view-tabs" id="stats-view" role="tablist" aria-label="Community view">
+        <button type="button" role="tab" data-stats-view="stats">Overview</button>
+        <button type="button" role="tab" data-stats-view="styles">Playstyles</button>
+      </div>
+      <div class="filter-set">
+        <!-- Clear comes first, so showing it doesn't move the filters (they're aligned right). -->
+        <button class="btn clear" id="clear-sel" hidden>Clear</button>
+        <div id="community-filter"></div>
+        <select data-filter="script" aria-label="Script"></select>
+        <select data-filter="storyteller" aria-label="Storyteller"></select>
+        <div data-ms="players"></div>
+        <div data-ms="characters"></div>
+        <div data-ms="types"></div>
+      </div>
     </div>
   </section>
 

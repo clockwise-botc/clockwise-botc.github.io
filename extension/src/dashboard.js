@@ -1381,12 +1381,20 @@ function summaryLine(G, base, sel) {
   return `<p class="summary">${hasSelection(sel) ? `<b>${G.length}</b> of ${plural(base.length, 'game')}` : `<b>${plural(base.length, 'game')}</b>`}${scope.length ? ` in ${esc(scope.join(' · '))}` : ''}${parts.length ? `, ${parts.join(', ')}` : ''}.</p>`;
 }
 
-// Clears the community, script and storyteller filters (Playstyles' Clear, and its breadcrumb level).
+// Clears the community, script and storyteller filters (Clear on Playstyles and My stats, and "← Playstyles").
 function clearScope() {
   Object.assign(state.filters, { communities: [], script: '', storyteller: '' });
   savePrefs();
   populateFilters();
   setSelection(() => {});
+}
+
+// Clears every filter (Clear on the Overview and Games, and "← Community").
+function clearAll() {
+  Object.assign(state.filters, { communities: [], script: '', storyteller: '', days: '' });
+  savePrefs();
+  populateFilters();
+  setSelection((s) => Object.assign(s, emptySelection()));
 }
 
 // The community, script and storyteller filters, as words for a phrase. The script names the games ("Bad Moon Rising
@@ -1402,11 +1410,11 @@ const gamesPhrase = () => [state.filters.script ? `${state.filters.script} games
 
 // Where you are on the Community tab, once anything is picked: "← Community › wren as the Amnesiac in Escape". One phrase
 // for everything picked, not a path, since the filters don't nest. "← Community" goes back to the overview with every
-// filter cleared. Playstyles has its own level: "← Community › Playstyles › Games in Rhap".
+// filter cleared. Playstyles starts from itself: "← Playstyles › Games in Rhap" ("← Playstyles" clears its filters).
 function crumbs(G, base, sel) {
   const styles = state.tab === 'styles';
   // My stats is its own tab (always your page), so it has no breadcrumb.
-  if (state.tab === 'me' || (!styles && !anyFilter(sel))) return '';
+  if (state.tab === 'me' || !(styles ? scopeOn() : anyFilter(sel))) return '';
   const who = listWords(sel.players.map(nameOf));
   const what = sel.players.length && (sel.characters.length || sel.types.length) ? `${who} as ${heldRole(sel).as}`
     : sel.players.length ? who
@@ -1421,13 +1429,8 @@ function crumbs(G, base, sel) {
   const which = state.filters.script && !gamesFirst ? `in ${state.filters.script} games${scopeWords() ? ` ${scopeWords()}` : ''}` : scopeWords();
   const phrase = !what ? gamesPhrase() : [what, which].filter(Boolean).join(what.endsWith('in play') || what.includes(', looking at') ? ', ' : ' ');
   const sep = '<span class="crumb-sep" aria-hidden="true">›</span>';
+  if (styles) return `<nav class="crumbs" aria-label="Where you are"><button type="button" class="crumb-back" data-crumb-styles title="Playstyles, with no filters"><span aria-hidden="true">←</span> Playstyles</button>${sep}<span class="crumb-here">${esc(gamesPhrase())}</span></nav>`;
   const back = '<button type="button" class="crumb-back" data-crumb-back title="Back to the community overview, with no filters"><span aria-hidden="true">←</span> Community</button>';
-  if (styles) {
-    // Playstyles, then what its filters narrow it to; "Playstyles" clears those filters.
-    return `<nav class="crumbs" aria-label="Where you are">${back}${sep}${scopeOn()
-      ? `<button type="button" class="crumb-back crumb-mid" data-crumb-styles title="Playstyles, with no filters">Playstyles</button>${sep}<span class="crumb-here">${esc(gamesPhrase())}</span>`
-      : '<span class="crumb-here">Playstyles</span>'}</nav>`;
-  }
   return `<nav class="crumbs" aria-label="Where you are">${back}${sep}<span class="crumb-here">${esc(phrase)}</span></nav>`;
 }
 
@@ -1489,7 +1492,7 @@ function awardTiles(base) {
 }
 
 // The Overview's way into Playstyles: whoever leads four of its measures, each as a bar next to the average player
-// (the same bars as "How you play"). The whole card opens Playstyles, so the names aren't links.
+// (the same bars as "How you play"). "See all playstyles" at the bottom opens Playstyles.
 const TEASER = [['loud', 'Most nominations per day'], ['nominated', 'Most nominated per day'], ['voter', 'Votes on the most nominations'], ['nomOther', 'Most nominations on the opposing team']];
 function stylesTeaser(base) {
   const T = talk(base, state.minGames).all;
@@ -1505,9 +1508,9 @@ function stylesTeaser(base) {
       <h4 class="teaser-kicker">${r.kicker}</h4>
       <div class="ps-head"><span class="teaser-who">${esc(r.p.name)}</span><span class="ps-vals"><b>${m.fmt(r.value)}</b><span class="ps-avg-val">avg ${m.fmt(r.avg)}</span></span></div>
       <div class="ps-track"><i class="ps-fill" style="width:${at(r, r.value)}"></i><b class="ps-dot" style="left:${at(r, r.value)}"></b><s class="ps-avg" style="left:${at(r, r.avg)}"></s></div></div>`; }).join('');
-  return `<div class="card wide styles-teaser" data-go-styles role="link" tabindex="0" aria-label="Open Playstyles"><h3>Playstyles</h3>
+  return `<div class="card wide styles-teaser"><h3>Playstyles</h3>
     <p class="sub">Who leads each measure, next to the average player.</p>
-    <div class="ps-bars side-all">${rows}</div><p class="teaser-more">See all playstyles <i aria-hidden="true">→</i></p></div>`;
+    <div class="ps-bars side-all">${rows}</div><p class="teaser-more"><button type="button" data-go-styles>See all playstyles <span aria-hidden="true">→</span></button></p></div>`;
 }
 
 // "My stats": your own player page, without having to find yourself first.
@@ -1635,17 +1638,11 @@ function populateFilters() {
 }
 
 const dropdowns = {};
-// Communities: Escape | Rhap as toggles; once you have communities of your own too, a dropdown like the other
-// filters (still several at once; none picked means all).
+// Communities: a dropdown like the other filters (several at once; none picked means all).
 let communityDropdown = null;
 function renderCommunityFilter() {
-  const box = $('#community-filter');
-  const many = communityOptions().length > 2;
-  box.classList.toggle('toggles', !many);
-  if (!many) { communityDropdown = null; box.innerHTML = communityButtons('data-filter-community', state.filters.communities); return; }
   if (communityDropdown) { communityDropdown.refresh(); return; }
-  box.innerHTML = '<div class="ms-communities"></div>';
-  communityDropdown = multiSelect(box.firstElementChild, {
+  communityDropdown = multiSelect($('#community-filter'), {
     label: 'All communities', nameOf: (v) => communityName(state.settings, v),
     options: () => communityOptions().map((o) => ({ value: o.value, label: o.name })),
     selected: () => state.filters.communities,
@@ -1692,16 +1689,17 @@ function render() {
   document.body.classList.toggle('signed-out', gate || !!state.setup);
   if (state.setup) { $('#filters').hidden = true; $('#view').innerHTML = setupView(); mountClaimPicker(); return; }
   if (gate) { $('#filters').hidden = true; $('#view').innerHTML = signInView(); refillSignUp(); return; }
-  // Playstyles is a view of the Stats tab (picked in the dropdown at the start of the filters).
+  // Playstyles is a view of the Stats tab (picked in the tabs at the start of the filters).
   const tabShown = state.tab === 'styles' ? 'stats' : state.tab;
   document.querySelectorAll('[data-tab]').forEach((b) => { if (b.closest('.tabs')) b.setAttribute('aria-selected', String(b.dataset.tab === tabShown)); });
-  $('#stats-view').value = state.tab === 'styles' ? 'styles' : 'stats';
+  const viewShown = state.tab === 'styles' ? 'styles' : 'stats';
+  document.querySelectorAll('[data-stats-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.statsView === viewShown)));
   document.body.classList.toggle('tab-stats', tabShown === 'stats');
   $('#filters').hidden = state.tab === 'data';
   document.body.classList.toggle('tab-styles', state.tab === 'styles');
   // On Playstyles and My stats, Clear clears the filters they have (community, script, storyteller).
   const scopeOnly = state.tab === 'styles' || state.tab === 'me';
-  $('#clear-sel').hidden = scopeOnly ? !scopeOn() : !hasSelection(state.sel);
+  $('#clear-sel').hidden = scopeOnly ? !scopeOn() : !anyFilter(state.sel);
   document.body.classList.toggle('tab-me', state.tab === 'me');
   const views = { stats: statsView, me: myView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
   keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab](); });
@@ -2007,12 +2005,8 @@ async function updateLocal(id, patch, resend) {
 }
 
 // ---------- events ----------
-// The Overview's Playstyles card opens from the keyboard too.
-document.addEventListener('keydown', (e) => {
-  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-go-styles]')) { e.preventDefault(); e.target.click(); }
-});
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-filter-community],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-crumb-back],[data-crumb-styles],[data-go-styles],[data-confirm-community],#clear-sel');
+  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-crumb-back],[data-crumb-styles],[data-go-styles],[data-stats-view],[data-confirm-community],#clear-sel');
   if (!t) return;
   // Under an open game: switch between seat-by-seat and nominations, or show the settings. No full redraw,
   // so the grimoire stays put.
@@ -2033,17 +2027,6 @@ document.addEventListener('click', async (e) => {
     render();
     return;
   }
-  if (t.dataset.filterCommunity) {
-    // No community switched on = all games; switch on one or both to narrow down.
-    const c = t.dataset.filterCommunity;
-    const f = state.filters;
-    f.communities = f.communities.includes(c) ? f.communities.filter((x) => x !== c) : [...f.communities, c];
-    savePrefs();
-    state.expanded.clear();
-    populateFilters();
-    render();
-    return;
-  }
   if (t.dataset.gameCommunity) {
     // Clicking the game's current community switches it off, leaving the game without one.
     const i = t.dataset.gameCommunity.lastIndexOf('|');
@@ -2060,22 +2043,16 @@ document.addEventListener('click', async (e) => {
     state.openGame = null; writeHash(); render(); window.scrollTo(0, 0); return;
   }
   if (t.id === 'clear-sel' && (state.tab === 'styles' || state.tab === 'me')) { clearScope(); return; }
-  if (t.id === 'clear-sel') { setSelection((s) => Object.assign(s, emptySelection())); return; }
+  if (t.id === 'clear-sel') { clearAll(); return; }
   if (t.dataset.crumbStyles !== undefined) { clearScope(); return; }
   // An editor confirms a flagged game's community: it's then picked by hand, so it isn't flagged again.
   if (t.dataset.confirmCommunity) { const g = state.games.find((x) => x.id === t.dataset.confirmCommunity); if (g) { await updateGame(g.id, { community: g.community, communityManual: true }); await load(); } return; }
-  // The Overview's Playstyles card.
+  // The Community view tabs (Overview, Playstyles).
+  if (t.dataset.statsView) { state.tab = state.statsView = t.dataset.statsView; writeHash(); render(); return; }
+  // "See all playstyles" on the Overview's Playstyles card.
   if (t.dataset.goStyles !== undefined) { state.tab = state.statsView = 'styles'; writeHash(); render(); window.scrollTo(0, 0); return; }
   // "← Community": the overview, with every filter cleared.
-  if (t.dataset.crumbBack !== undefined) {
-    Object.assign(state.filters, { communities: [], script: '', storyteller: '', days: '' });
-    savePrefs();
-    state.tab = state.statsView = 'stats';
-    populateFilters();
-    setSelection((s) => Object.assign(s, emptySelection()));
-    window.scrollTo(0, 0);
-    return;
-  }
+  if (t.dataset.crumbBack !== undefined) { state.tab = state.statsView = 'stats'; clearAll(); window.scrollTo(0, 0); return; }
   if (t.dataset.addPlayer) { state.tab = 'stats'; addTo('players', t.dataset.addPlayer); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (t.dataset.addChar) { state.tab = 'stats'; addTo('characters', t.dataset.addChar); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (t.dataset.addType) { state.tab = 'stats'; addTo('types', t.dataset.addType); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -2103,7 +2080,6 @@ document.addEventListener('toggle', (e) => {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
-  if (t.id === 'stats-view') { state.tab = state.statsView = t.value; writeHash(); render(); return; }
   if (t.dataset.scatterKind !== undefined || t.dataset.scatterSide !== undefined) {
     if (t.dataset.scatterKind !== undefined) state.scatterView.kind = t.value; else state.scatterView.side = t.value;
     render();
