@@ -145,16 +145,25 @@ async function ping(tabId) {
   return chrome.tabs.sendMessage(tabId, { type: 'ping' });
 }
 
+// A tab Chrome has put to sleep in the background (frozen or discarded, to save energy or memory) never answers, so
+// don't wait on it for more than a few seconds (the bridge itself answers within 2.5).
+const ASLEEP = { asleep: true };
+const within = (ms, promise) => Promise.race([promise, new Promise((r) => setTimeout(() => r(ASLEEP), ms))]);
+
 // Ask a botc.app tab for its status; if the tab has no tracker yet, connect it first.
 async function statusOf(tab) {
+  if (tab.frozen || tab.discarded) return ASLEEP;
   try {
-    return await ping(tab.id);
+    return await within(3500, ping(tab.id));
   } catch {
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['src/bridge.js'] });
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['src/page-hook.js'], world: 'MAIN' });
+      const inject = async () => {
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['src/bridge.js'] });
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['src/page-hook.js'], world: 'MAIN' });
+      };
+      if (await within(3500, inject()) === ASLEEP) return ASLEEP;
       await new Promise((r) => setTimeout(r, 1200)); // page-hook looks for the game every 500ms
-      return await ping(tab.id);
+      return await within(3500, ping(tab.id));
     } catch (e) {
       return { bridge: false, error: String(e.message || e) };
     }
@@ -317,6 +326,9 @@ async function showMain() {
     if (!best.loggedIn) return show('', 'botc.app is open — log in to record games.');
     if (best.room) { currentRoom = best.room; return showCommunity(best.room); }
     return show('live', 'Connected. Join a room and games will be recorded.');
+  }
+  if (results.every((r) => r === ASLEEP)) {
+    return show('', 'botc.app is asleep in a background tab. Switch to it to wake it up, then open Clockwise again.');
   }
   if (results.some((r) => r && r.bridge)) {
     return show('err', 'Connected to botc.app, but the game data couldn’t be read. Reload the botc.app tab; if this keeps happening, botc.app may have changed.');

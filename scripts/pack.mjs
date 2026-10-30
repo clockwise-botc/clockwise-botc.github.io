@@ -21,7 +21,25 @@ fs.mkdirSync(dist, { recursive: true });
 const zip = path.join(dist, `clockwise-${version}.zip`);
 fs.rmSync(zip, { force: true });
 // The dashboard is the community website (built from these same files by build-web.mjs), so the extension itself
-// doesn't ship it: only the popup, the background and the content scripts (and what they import) go in.
-const dashboardOnly = ['dashboard.html', 'dashboard.css', ...['characters', 'dashboard', 'data', 'dataview', 'grimoire', 'images', 'insights', 'multiselect', 'stats', 'tables', 'tokens', 'ui'].map((m) => `src/${m}.js`)];
-execFileSync('zip', ['-r', '-X', '-q', zip, '.', '-x', '*.DS_Store', ...dashboardOnly], { cwd: ext, stdio: 'inherit' });
+// doesn't ship it: only what the manifest loads (the popup, the background, the content scripts) and everything
+// they import, followed file by file so a new import can't be left out.
+const manifest = JSON.parse(fs.readFileSync(path.join(ext, 'manifest.json'), 'utf8'));
+const pages = [manifest.action.default_popup];
+const scripts = [manifest.background.service_worker, ...manifest.content_scripts.flatMap((c) => c.js)];
+for (const page of pages) {
+  const html = fs.readFileSync(path.join(ext, page), 'utf8');
+  for (const [, src] of html.matchAll(/<script[^>]*\ssrc="([^"]+)"/g)) scripts.push(path.join(path.dirname(page), src));
+}
+const needed = new Set();
+const follow = (file) => {
+  if (needed.has(file)) return;
+  if (!fs.existsSync(path.join(ext, file))) { console.error(`${file} is imported but doesn't exist.`); process.exit(1); }
+  needed.add(file);
+  const code = fs.readFileSync(path.join(ext, file), 'utf8');
+  for (const [, spec] of code.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)'(\.{1,2}\/[^']+)'/g)) follow(path.join(path.dirname(file), spec));
+};
+scripts.forEach(follow);
+// Besides scripts: the icons, and the popup's fonts and images.
+const assets = ['icons', 'fonts', 'images'].filter((d) => fs.existsSync(path.join(ext, d)));
+execFileSync('zip', ['-r', '-X', '-q', zip, 'manifest.json', ...pages, ...needed, ...assets, '-x', '*.DS_Store'], { cwd: ext, stdio: 'inherit' });
 console.log(`wrote ${path.relative(root, zip)} (${Math.round(fs.statSync(zip).size / 1024)} KB)`);
