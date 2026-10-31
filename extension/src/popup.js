@@ -14,12 +14,6 @@ const SKIPPED = {
   last: 'The game that just ended won\'t be recorded.',
   next: 'The next game here won\'t be recorded.',
 };
-// Not recorded because it fits no community (nobody picked "Don't record").
-const UNMATCHED = {
-  current: 'This game won\'t be recorded: most of the table hasn\'t played in one of your communities, and neither has the storyteller. Pick a community to record it.',
-  last: 'The game that just ended wasn\'t recorded: it doesn\'t look like one of your communities\' games. Pick a community to record it.',
-  next: 'The next game here won\'t be recorded unless most of the table (or the storyteller) has played in one of your communities. Pick a community to record it anyway.',
-};
 async function showCommunity(room) {
   const { settings = {} } = await chrome.storage.local.get('settings');
   const cfg = communityConfig(settings);
@@ -52,8 +46,8 @@ async function showCommunity(room) {
     showStats();
   };
   $('community-box').hidden = false;
-  if (skipped) show('', SKIPPED[kind]);
-  else if (!current && !legacyNone) show('', UNMATCHED[kind]);
+  // Picked "Don't record", or it fits none of your communities: either way, just that it won't be recorded.
+  if (skipped || (!current && !legacyNone)) show('', SKIPPED[kind]);
   else showStatus(communityName(settings, current));
 }
 
