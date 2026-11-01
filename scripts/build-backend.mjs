@@ -30,6 +30,9 @@ const header = `/**
  *        VIEW_PASSWORD  the password you'll share with your community
  *        WRITE_KEY      the upload key built into the extension
  *        EDITOR_KEY     a key for people allowed to change or delete games
+ *      and optionally:
+ *        HIDDEN_PLAYERS botc.app usernames, separated by commas, never named in the dashboard's stats (their games
+ *                       still count, and the Games tab still shows them)
  *   3. Deploy → New deployment → type "Web app". Execute as: Me. Who has access: Anyone. Authorize when asked.
  *   4. Copy the web app URL (ends in /exec).
  * To update later: paste the new file, then Deploy → Manage deployments → edit → Version: New version.

@@ -125,14 +125,34 @@ const iAmQuiet = () => !!(state.profile && state.profile.claim && state.profile.
 const ratesHidden = (key) => iAmQuiet() || quietPlayers.has(key);
 // A ranking of players by win rate, without those who hide theirs (and none at all for someone who hides them).
 const ranked = (rows, keyOf = (r) => r.key) => (iAmQuiet() ? [] : rows.filter((r) => !quietPlayers.has(keyOf(r)) && isMember(keyOf(r))));
+// Players who aren't named in stats (the store's HIDDEN_PLAYERS, matched to every name they've played under): their
+// games count toward everything, but no ranking, list, player page or filter names them. The Games tab still shows
+// them as they played, without a link to a player page.
+let hiddenKeys = new Set();
+const isHidden = (key) => hiddenKeys.has(key);
+const unhidden = (rows, keyOf = (r) => r.key) => rows.filter((r) => !hiddenKeys.has(keyOf(r)));
+// A hidden player or storyteller can't be picked (from an old link, say).
+function dropHidden() {
+  if (state.sel.players.some(isHidden)) { state.sel.players = state.sel.players.filter((k) => !isHidden(k)); writeHash(); }
+  if (isHidden(state.filters.storyteller)) state.filters.storyteller = '';
+}
+function findHidden(games, names) {
+  const wanted = new Set(names), keys = new Set();
+  if (wanted.size) for (const g of games) for (const p of [...g.players, ...g.storytellers]) {
+    if (p.username && wanted.has(p.username.trim().toLowerCase()) && playerKey(p)) keys.add(playerKey(p));
+  }
+  return keys;
+}
 // A member of any of the communities picked in the filter (all of them when none is picked). You always are.
+// Hidden players never are, so every list of members leaves them out.
 function isMember(key) {
+  if (isHidden(key)) return false;
   if (key === myPlayer() || freeKeys.has(key)) return true;
   const ids = state.filters.communities.length ? state.filters.communities : [...members.keys()];
   return ids.some((c) => members.has(c) && members.get(c).has(key));
 }
 const memberRows = (rows, keyOf = (r) => r.key) => rows.filter((r) => isMember(keyOf(r)));
-const playerLink = uiPlayerLink;
+const playerLink = (key, name) => (isHidden(key) ? esc(name) : uiPlayerLink(key, name));
 // Everyone who has played, for "Your player": [{ key, name }] by name, with a number added when two share a name.
 function playerChoices() {
   // While setting up a new account (not signed in yet), the players come from the games the community password shows.
@@ -197,7 +217,7 @@ function storytellerTable(games) {
   const m = new Map();
   for (const g of games) for (const s of g.storytellers) {
     const key = playerKey(s);
-    if (!key) continue;
+    if (!key || isHidden(key)) continue;
     const r = m.get(key) || { key, name: nameOf(key), games: 0 };
     r.games++;
     m.set(key, r);
@@ -364,7 +384,7 @@ const gamesCards = {
   },
   scripts: (G) => { const rows = overview(G).byScript; return rows.length > 1 ? card('Who wins, by script', '', legendGE() + bars('o-scripts', rows, (r) => esc(r.key))) : ''; },
   counts: (G) => { const rows = overview(G).byPlayerCount; return rows.length > 1 ? card('Who wins, by player count', '', legendGE() + bars('o-counts', rows, (r) => `${r.key} players`)) : ''; },
-  storytellerWins: (G) => { const rows = overview(G).byStoryteller; return rows.length > 1 ? card('Who wins, by storyteller', '', legendGE() + bars('o-sts', rows, (r) => esc(r.name))) : ''; },
+  storytellerWins: (G) => { const rows = overview(G).byStoryteller.filter((r) => !r.key.split('|').some(isHidden)); return rows.length > 1 ? card('Who wins, by storyteller', '', legendGE() + bars('o-sts', rows, (r) => esc(r.name))) : ''; },
   communities: (G) => {
     const rows = overview(G).byCommunity.filter((r) => r.key);
     return rows.length > 1 ? card('Who wins, by community', 'Good and evil win rates in each community.', legendGE() + bars('o-communities', rows, (r) => esc(communityName(state.settings, r.key)))) : '';
@@ -416,7 +436,7 @@ function seatCards(G, sel, seats) {
       : card(title, sub, rateRows(rows.sort(sortBy).map((r) => r.slice(0, 4)), id)));
   const out = {};
   out.storytellers = rateCard('s-sts', 'By storyteller', `${who}'s win rate with each storyteller.`,
-    byKey((x) => storytellerKeys(x.g), (k) => esc(nameOf(k))), undefined, `${who}'s games with each storyteller.`);
+    byKey((x) => storytellerKeys(x.g).filter((k) => !isHidden(k)), (k) => esc(nameOf(k))), undefined, `${who}'s games with each storyteller.`);
   out.counts = rateCard('s-counts', 'By player count', `${who}'s win rate by how many players sat down.`,
     byKey((x) => x.g.playerCount, (k) => `${k} players`), (a, b) => a[4] - b[4], `${who}'s games by how many players sat down.`);
   out.scripts = rateCard('s-scripts', 'By script', `${who}'s win rate on each script.`, byKey((x) => x.g.script.name || 'Unknown script', esc), undefined, `${who}'s games on each script.`);
@@ -430,7 +450,7 @@ function seatCards(G, sel, seats) {
   const ownPage = sel.players.length === 1 && !sel.characters.length && !sel.types.length && !ratesHidden(sel.players[0]);
   if (sel.players.length && !ownPage) {
     const picked = new Set(sel.players), m = new Map();
-    for (const g of new Set(seats.map((x) => x.g))) for (const p of g.players) { const k = playerKey(p); if (k && !picked.has(k)) { const r = m.get(k) || { key: k, name: nameOf(k), games: 0 }; r.games++; m.set(k, r); } }
+    for (const g of new Set(seats.map((x) => x.g))) for (const p of g.players) { const k = playerKey(p); if (k && !picked.has(k) && !isHidden(k)) { const r = m.get(k) || { key: k, name: nameOf(k), games: 0 }; r.games++; m.set(k, r); } }
     const rows = [...m.values()].sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
     out.with = rows.length > 1 ? frequencyCard('s-with', 'Played with most', `Who was in the most games with ${esc(listWords(sel.players.map(nameOf)))}.`, rows, (r) => playerLink(r.key, r.name)) : '';
   }
@@ -786,7 +806,12 @@ function heldSections(G, sel, seats, base) {
 // Worked out once per set of games: the main page's chart and the player page both use it.
 let talkCache = { games: null, min: null, out: null };
 function talk(base, min = null) {
-  if (talkCache.games !== base || talkCache.min !== min) talkCache = { games: base, min, out: tableTalk(base, { minGames: min }) };
+  if (talkCache.games !== base || talkCache.min !== min) {
+    // Hidden players count toward the averages (worked out from everyone) but aren't listed.
+    const out = tableTalk(base, { minGames: min });
+    for (const side of Object.keys(out)) { const players = unhidden(out[side].players); out[side] = { ...out[side], players, listed: players.filter((p) => p.listed).length }; }
+    talkCache = { games: base, min, out };
+  }
   return talkCache.out;
 }
 // The Around the grimoire chart and the scatter redraw in place (so the scatter's picker stays open while picking).
@@ -925,7 +950,7 @@ function pairRelationCards(base, players) {
 // things behind it as bars (each with a tick at what's typical), grouped by who did it to whom, and the next two. An enemy needs a score above the
 // middle, an ally one below it.
 function relationCard(base, key, kind) {
-  const all = enemies(base, key);
+  const all = unhidden(enemies(base, key));
   const list = (kind === 'ally' ? allies(all) : all).filter((r) => (kind === 'ally' ? r.score < 0 : r.score > 0));
   const [top, ...rest] = list;
   if (!top) return '';
@@ -943,7 +968,7 @@ function relationCard(base, key, kind) {
 }
 
 function pairsCards(base, key) {
-  const { nominates, nominatedBy } = nominationPairs(base, key);
+  const pairs = nominationPairs(base, key), nominates = unhidden(pairs.nominates), nominatedBy = unhidden(pairs.nominatedBy);
   const name = esc(nameOf(key));
   // Each count as a bar, out of the most in that table (like the vote tables' rate bars, without a usual tick).
   const countCol = (rows, tip) => {
@@ -959,7 +984,7 @@ function pairsCards(base, key) {
 
 // Who they vote against most, and who votes against them most: each pair's rate next to the voter's usual rate.
 function votePairCards(base, key) {
-  const { against, by, usual } = votePairs(base, key);
+  const vp = votePairs(base, key), against = unhidden(vp.against), by = unhidden(vp.by), usual = vp.usual;
   const name = nameOf(key);
   const pts = (d) => { const v = Math.round(d * 100); return v === 0 ? '<span class="muted">±0</span>' : `<span class="delta ps-dir">${v > 0 ? '▲' : '▼'} ${Math.abs(v)} pts</span>`; };
   // Rate bar with a tick at the voter's usual rate.
@@ -1167,7 +1192,7 @@ function characterSections(G, base, sel) {
     // Players who hide win rates are listed without theirs (and someone who hides them sees only the plays).
     out.push(card('Who plays it', 'Click a name to see that player with this character.', sortable('c-players', [colPlayer(), colNum('Plays', (p) => p.plays),
       ...(iAmQuiet() ? [] : [colRate('Won', (p) => (quietPlayers.has(p.key) ? null : p.winRate), (p) => p.plays, evil ? 'evil' : 'good')])],
-      st.byPlayer, { sort: 1 })));
+      unhidden(st.byPlayer), { sort: 1 })));
     out.push(...characterExtras(id, row, holders, evil));
   } else {
     const together = outcome(G);
@@ -1207,7 +1232,7 @@ function typeSections(G, sel, seats, base) {
       { ...colDelta('Good wins', (c) => (inPlay.get(c.roleId) || {}).delta), cell: (c) => { const r = inPlay.get(c.roleId) || {}; return `<td class="num" data-tip="${esc(`Good won ${pct(r.goodRate)} of the ${plural(r.games || 0, 'game')} with the ${c.name} in play`)}">${delta(r.delta)}</td>`; } }],
       st.byCharacter, { sort: null })));
   if (iAmQuiet()) {
-    const rows = st.byPlayer.map((p) => ({ key: p.key, name: p.name, games: p.plays })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
+    const rows = unhidden(st.byPlayer).map((p) => ({ key: p.key, name: p.name, games: p.plays })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
     out.push(frequencyCard('t-players', `Most often ${esc(label)}`, `Who has been ${esc(label)} the most.`, rows, (r) => playerLink(r.key, r.name)));
   } else {
     const best = ranked(st.byPlayer).filter((p) => p.plays >= 2);
@@ -1457,7 +1482,7 @@ function awardTiles(base) {
   const best = (side, id, counted) => {
     const R = playstyles(base, side);
     if (!R.featureIds.includes(id)) return [];
-    const rated = R.players.filter((p) => p.values[id].raw !== null && counted(p) >= R.minGames);
+    const rated = unhidden(R.players).filter((p) => p.values[id].raw !== null && counted(p) >= R.minGames);
     const top = Math.max(...rated.map((p) => p.values[id].raw));
     if (!(top > 0)) return [];
     // One winner. A tie goes to whoever has more games behind the rate, then whoever played most recently, then the name.
@@ -1636,7 +1661,7 @@ function populateFilters() {
   state.filters.communities = state.filters.communities.filter((c) => communityOptions().some((o) => o.value === c));
   renderCommunityFilter();
   opts('script', distinct(all, (g) => g.script.name), 'All scripts');
-  opts('storyteller', distinct(all, storytellerKeys).map((k) => ({ value: k, name: nameOf(k) })).sort((a, b) => a.name.localeCompare(b.name)), 'All storytellers', (v) => v.name);
+  opts('storyteller', distinct(all, storytellerKeys).filter((k) => !isHidden(k)).map((k) => ({ value: k, name: nameOf(k) })).sort((a, b) => a.name.localeCompare(b.name)), 'All storytellers', (v) => v.name);
 }
 
 const dropdowns = {};
@@ -1666,6 +1691,7 @@ function setupDropdowns() {
 }
 
 function renderPickers() {
+  dropHidden();
   Object.values(dropdowns).forEach((d) => d.refresh());
 }
 
@@ -1690,6 +1716,7 @@ function render() {
   // Creating an account: the setup questions after the form (shown like the sign-in, without the tabs and filters).
   document.body.classList.toggle('signed-out', gate || !!state.setup);
   if (state.setup) { $('#filters').hidden = true; $('#view').innerHTML = setupView(); mountClaimPicker(); return; }
+  dropHidden();
   if (gate) { $('#filters').hidden = true; $('#view').innerHTML = signInView(); refillSignUp(); return; }
   // Playstyles is a view of the Stats tab (picked in the tabs at the start of the filters).
   const tabShown = state.tab === 'styles' ? 'stats' : state.tab;
@@ -1968,7 +1995,8 @@ async function load() {
   quietPlayers = new Set((cache && cache.privatePlayers) || []);
   playerNames = displayNames(state.games);
   useDisplayNames(playerNames);
-  playerKeys = new Set(playerTable(state.games).map((p) => p.key));
+  hiddenKeys = findHidden(state.games, (cache && cache.hiddenPlayers) || []);
+  playerKeys = new Set(playerTable(state.games).map((p) => p.key).filter((k) => !isHidden(k)));
   freeKeys = new Set(playerTable(state.games.filter((g) => !g.community && !g.excluded)).map((p) => p.key));
   charInfo = new Map(characterTable(state.games, null).map((c) => [c.roleId, c]));
   populateFilters();
@@ -2190,7 +2218,8 @@ document.addEventListener('submit', async (e) => {
       const r = await peekGames(state.settings, val('community'));
       if (!r.ok) return fail(r.error === 'not-allowed' ? { error: 'not-allowed', message: 'That community password isn\'t right.' } : r);
       const names = displayNames(r.games || []);
-      const players = playerTable(r.games || []).map((p) => ({ key: p.key, name: names.get(p.key) || p.name })).filter((x) => x.name);
+      const hidden = findHidden(r.games || [], r.hiddenPlayers || []);
+      const players = playerTable(r.games || []).filter((p) => !hidden.has(p.key)).map((p) => ({ key: p.key, name: names.get(p.key) || p.name })).filter((x) => x.name);
       state.setup = { username: val('username'), password: f.password.value, community: val('community'), remember, players };
       state.setupRates = '';
       state.claimPick = null;

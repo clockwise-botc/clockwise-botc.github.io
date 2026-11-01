@@ -307,6 +307,13 @@ check('private stats: reads list the private players; only with a claim', () => 
   assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, keys).privatePlayers, []);
 });
 
+check('hidden players: reads list the HIDDEN_PLAYERS names, trimmed and lowercase', () => {
+  const { handle } = loadBackend();
+  assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, keys).hiddenPlayers, []);
+  assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, { ...keys, hidden: ' Debby, Tommy ,Dylan PH,, ' }).hiddenPlayers, ['debby', 'tommy', 'dylan ph']);
+  assert.equal(handle({ action: 'read', key: 'wrong' }, { ...keys, hidden: 'Debby' }).hiddenPlayers, undefined, 'not without the password');
+});
+
 check('your communities: games only you filed are just for their recorders; Escape/Rhap ones for everyone', () => {
   const { handle: raw } = loadBackend();
   let t = 2000;

@@ -8,6 +8,9 @@
  *        VIEW_PASSWORD  the password you'll share with your community
  *        WRITE_KEY      the upload key built into the extension
  *        EDITOR_KEY     a key for people allowed to change or delete games
+ *      and optionally:
+ *        HIDDEN_PLAYERS botc.app usernames, separated by commas, never named in the dashboard's stats (their games
+ *                       still count, and the Games tab still shows them)
  *   3. Deploy → New deployment → type "Web app". Execute as: Me. Who has access: Anyone. Authorize when asked.
  *   4. Copy the web app URL (ends in /exec).
  * To update later: paste the new file, then Deploy → Manage deployments → edit → Version: New version.
@@ -348,6 +351,7 @@ function handle_(body, store, keys, now) {
         deleted: store.deletedSince(since),
         meta: metaInfo && metaInfo.at > since ? store.getMeta() : null,
         privatePlayers: privatePlayers_(store),
+        hiddenPlayers: hiddenPlayers_(keys.hidden),
         canEdit: canEdit,
       };
     }
@@ -499,6 +503,12 @@ function publicAccount_(acct) {
 // Players whose accounts keep their stats private.
 function privatePlayers_(store) {
   return store.listAccounts().filter(function (a) { return a.claim && a.profile && a.profile.private; }).map(function (a) { return a.claim.player; });
+}
+
+// Players never named in the dashboard's stats (their games still count): the HIDDEN_PLAYERS Script property, as
+// lowercase botc.app usernames. The dashboard matches them to players, so every name they've used is covered.
+function hiddenPlayers_(list) {
+  return String(list || '').split(',').map(function (n) { return n.trim().toLowerCase(); }).filter(function (n) { return n; });
 }
 
 // The account (other than `exceptKey`) that has already claimed this player, if any.
@@ -981,11 +991,12 @@ function sheetStore_() {
 
 // ----- backend/main.js -----
 // Apps Script entry points. The keys are Script properties (Project Settings → Script properties), not code, so
-// they can be changed without editing this file: VIEW_PASSWORD, WRITE_KEY, EDITOR_KEY.
+// they can be changed without editing this file: VIEW_PASSWORD, WRITE_KEY, EDITOR_KEY, and optionally HIDDEN_PLAYERS
+// (botc.app usernames, separated by commas, never named in the dashboard's stats; see hiddenPlayers_).
 
 function keys_() {
   var p = PropertiesService.getScriptProperties();
-  return { view: p.getProperty('VIEW_PASSWORD') || '', write: p.getProperty('WRITE_KEY') || '', editor: p.getProperty('EDITOR_KEY') || '' };
+  return { view: p.getProperty('VIEW_PASSWORD') || '', write: p.getProperty('WRITE_KEY') || '', editor: p.getProperty('EDITOR_KEY') || '', hidden: p.getProperty('HIDDEN_PLAYERS') || '' };
 }
 
 // Opening the web app's address in a browser just confirms it's running; games are only ever sent in response

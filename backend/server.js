@@ -120,6 +120,7 @@ function handle_(body, store, keys, now) {
         deleted: store.deletedSince(since),
         meta: metaInfo && metaInfo.at > since ? store.getMeta() : null,
         privatePlayers: privatePlayers_(store),
+        hiddenPlayers: hiddenPlayers_(keys.hidden),
         canEdit: canEdit,
       };
     }
