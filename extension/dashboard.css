@@ -783,7 +783,7 @@ body:not(.tab-stats) .view-tabs { display: none; }
 }
 /* My stats is one player's page (yours), so the player, character and type pickers don't apply there either. */
 body.tab-me [data-ms="players"], body.tab-me [data-ms="characters"], body.tab-me [data-ms="types"] { display: none !important; }
-/* Best ally / Worst enemy: the player's botc.app avatar (or their initial) beside their name. */
+/* Closest ally / Biggest rival: the player's botc.app avatar (or their initial) beside their name. */
 .enemy-who { display: flex; align-items: center; gap: 14px; margin: 6px 0 16px; }
 .enemy-name { display: grid; gap: 2px; font-size: 22px; font-weight: 700; margin: 0; }
 .enemy-name .muted { font-size: 14px; font-weight: 400; }
