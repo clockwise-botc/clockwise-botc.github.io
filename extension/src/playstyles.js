@@ -110,6 +110,15 @@ function value(id, t, pooled) {
   return { raw: n ? x / n : null, n, shrunk: (x + SHRINK * pooled) / (n + SHRINK) };
 }
 
+// The awards' rate: a player's own rate pulled toward the table's by AWARD_PRIOR_GAMES pretend games at the table's
+// rate (a Bayesian average), (count + k × table rate) / (games + k). Their own games count for half at k games, so a
+// few lucky games can't win outright, while it's still a rate: playing more doesn't earn anything by itself.
+export const AWARD_PRIOR_GAMES = 10;
+export function awardRate(R, id, p, k = AWARD_PRIOR_GAMES) {
+  const f = FEATURES[id];
+  return (f.count(p.t) + k * R.poolRate[id]) / (p.t[f.of] + k);
+}
+
 // ---------- the whole analysis ----------
 // side: 'good' | 'evil' | 'all'. Returns everyone with enough games on that side (fates, counts and rates), the
 // table-wide totals, and how many players were left out for having fewer games.
