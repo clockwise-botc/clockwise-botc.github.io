@@ -89,13 +89,16 @@ export async function refreshShared(settings) {
   if (!res.ok) return res;
   // Remember deleted ids, so this browser's own copy of a deleted game isn't shown again. (Games that are only
   // hidden from you now, e.g. moved to someone's own community, aren't deleted.)
-  const removed = res.deletedIds;
+  // Games deleted here while this download was under way stay deleted.
+  const now = await cacheGet();
+  const removed = [...res.deletedIds, ...((now && now.deleted) || [])];
   res.cache.deleted = [...new Set([...((before && before.deleted) || []), ...removed])];
+  for (const id of res.cache.deleted) delete res.cache.games[id];
   // Who keeps their stats private, or isn't named at all, can change without any game changing.
   const listed = (c) => JSON.stringify([(c && c.privatePlayers) || [], (c && c.hiddenPlayers) || []]);
   const privacy = listed(before) !== listed(res.cache);
   if (res.changed || !before) await cacheSet(res.cache);
-  else await cacheSet({ ...before, since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, hiddenPlayers: res.cache.hiddenPlayers });
+  else await cacheSet({ ...(now || before), since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, hiddenPlayers: res.cache.hiddenPlayers });
   return { ok: true, changed: res.changed + (privacy ? 1 : 0), canEdit: res.canEdit };
 }
 
@@ -157,5 +160,8 @@ export async function sharedDelete(settings, id) {
   const c = creds(settings);
   const res = await call(c.url, { action: 'delete', key: c.editorKey, id });
   if (!res.ok) throw new Error(res.message || res.error || 'Delete failed');
+  // Gone from the saved copy now, rather than at the next download (which may already be under way, from before).
+  const cache = await cacheGet();
+  if (cache) { const games = { ...cache.games }; delete games[id]; await cacheSet({ ...cache, games, deleted: [...new Set([...(cache.deleted || []), id])] }); }
   return res;
 }

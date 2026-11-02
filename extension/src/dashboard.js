@@ -2098,9 +2098,14 @@ document.addEventListener('click', async (e) => {
     const game = state.games.find((g) => g.id === id);
     const everyone = state.shared.on && game && !game.local;
     if (!confirm(everyone ? 'Delete this game for everyone? It will also stop being recorded again.' : 'Delete this game permanently?')) return;
-    if (everyone) { try { await sharedDelete(state.settings, id); } catch (e) { alert(`Couldn't delete it: ${e.message}`); return; } }
+    if (everyone) {
+      // The store can take a few seconds to answer.
+      t.disabled = true; t.textContent = 'Deleting…';
+      try { await sharedDelete(state.settings, id); } catch (e) { t.disabled = false; t.textContent = 'Delete game'; alert(`Couldn't delete it: ${e.message}`); return; }
+    }
     if (!WEB) { const map = await api.get('games', {}); delete map[id]; await api.set('games', map); }
-    if (everyone) await syncShared(); else await load();
+    await load();
+    if (everyone) syncShared();
     return;
   }
   await handleDataClick(t, ctx, selectGames(baseGames(), state.sel));
