@@ -1317,7 +1317,9 @@ function gameDetail(g) {
   // Games everyone sees need the editor key to change; games that are only in this browser don't.
   const canEdit = state.shared.canEdit || !!g.local;
   const bySeat = new Map(g.players.map((p) => [p.seat, p]));
-  const who = (seat, name) => { const p = bySeat.get(seat); const k = p && playerKey(p); return k ? playerLink(k, name || p.username || k) : esc(name || `Seat ${seat}`); };
+  // Who nominated, was nominated or voted: by the player recorded with it (players can swap seats mid-game), or else
+  // whoever ended the game in that seat.
+  const who = (seat, name, id) => { const p = id ? { userId: id, username: name } : bySeat.get(seat); const k = p && playerKey(p); return k ? playerLink(k, name || p.username || k) : esc(name || `Seat ${seat}`); };
   const missing = g.players.filter((p) => !p.username);
   const hasReminders = g.players.some((p) => (p.reminders || []).length);
   return `<div class="body">
@@ -1369,9 +1371,9 @@ function gameDetail(g) {
       ${g.nominations.length ? `<div class="table-wrap"><table>
       <thead><tr><th>Day</th><th>Nominator</th><th>Nominee</th><th class="num">Votes</th><th class="num">Needed</th><th>Voters</th></tr></thead>
       <tbody>${g.nominations.map((n) => `<tr>
-        <td>${n.day}</td><td>${who(n.nominatorSeat, n.nominator)}</td><td>${who(n.nomineeSeat, n.nominee)}${n.type === 'exile' ? ' <span class="muted">(exile)</span>' : ''}</td>
+        <td>${n.day}</td><td>${who(n.nominatorSeat, n.nominator, n.nominatorId)}</td><td>${who(n.nomineeSeat, n.nominee, n.nomineeId)}${n.type === 'exile' ? ' <span class="muted">(exile)</span>' : ''}</td>
         <td class="num">${n.votes === null ? '<span class="muted">hidden</span>' : n.votes}${n.completed ? '' : ' <span class="muted">(cancelled)</span>'}</td>
-        <td class="num">${n.majority}</td><td>${(n.voters || []).map((v) => who(v.seat, v.username)).join(', ')}</td>
+        <td class="num">${n.majority}</td><td>${(n.voters || []).map((v) => who(v.seat, v.username, v.userId)).join(', ')}</td>
       </tr>`).join('')}</tbody></table></div>` : '<p class="muted">No nominations were recorded for this game. They\'re captured live, so games joined partway through may be missing some.</p>'}
     </div>
   </div>`;
