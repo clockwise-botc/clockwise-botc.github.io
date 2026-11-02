@@ -1,8 +1,8 @@
 // Drawing the "Around the grimoire" stats: one value next to the table average (for the player page and the Playstyles
 // table), and a chart of every player on one measure (main page). The numbers come from tabletalk.js.
 
-import { MEASURES } from './tabletalk.js?v=33a6c77f6f';
-import { esc, plural, card } from './ui.js?v=33a6c77f6f';
+import { MEASURES } from './tabletalk.js?v=4597ce1548';
+import { esc, plural, card } from './ui.js?v=4597ce1548';
 
 const sideWords = (side) => (side === 'all' ? '' : `as ${side}`);
 
