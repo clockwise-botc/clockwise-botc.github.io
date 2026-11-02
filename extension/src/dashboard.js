@@ -136,10 +136,12 @@ function dropHidden() {
   if (state.sel.players.some(isHidden)) { state.sel.players = state.sel.players.filter((k) => !isHidden(k)); writeHash(); }
   if (isHidden(state.filters.storyteller)) state.filters.storyteller = '';
 }
+// Anonymous players (the store's ANONYMOUS_PLAYERS) come with an "anon-" id and no name, and are hidden too.
 function findHidden(games, names) {
   const wanted = new Set(names), keys = new Set();
-  if (wanted.size) for (const g of games) for (const p of [...g.players, ...g.storytellers]) {
-    if (p.username && wanted.has(p.username.trim().toLowerCase()) && playerKey(p)) keys.add(playerKey(p));
+  for (const g of games) for (const p of [...g.players, ...g.storytellers]) {
+    const k = playerKey(p);
+    if (k && (k.startsWith('anon-') || (p.username && wanted.has(p.username.trim().toLowerCase())))) keys.add(k);
   }
   return keys;
 }

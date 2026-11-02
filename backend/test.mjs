@@ -314,6 +314,61 @@ check('hidden players: reads list the HIDDEN_PLAYERS names, trimmed and lowercas
   assert.equal(handle({ action: 'read', key: 'wrong' }, { ...keys, hidden: 'Debby' }).hiddenPlayers, undefined, 'not without the password');
 });
 
+// Everything the store keeps about some games, as text: the records, their edits, and (on the Sheet) every cell of
+// the tidy tabs.
+function kept(b, ids) {
+  const s = b.sheets ? b.ctx.sheetStore_() : b.store;
+  const cells = b.sheets ? [...b.sheets.keys()].filter((n) => !['records', 'edits', 'accounts', 'meta'].includes(n)).map((n) => { const sh = b.sheets.get(n); return sh.getLastRow() ? sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues() : []; }) : [b.store.tables];
+  return JSON.stringify([s.getRecords(ids), ids.map((id) => s.getEdit(id)), cells]);
+}
+
+check('anonymous players: kept by name in the store, never named in what the site is sent; their games still count', () => {
+  const b = loadBackend();
+  const anonKeys = { ...keys, anonymous: 'Riverbend' };
+  const g1 = clone(games[0]), g2 = clone(games[1]);
+  const seat = g1.players.find((p) => p.username === 'riverbend') || g1.players[0];
+  const name = seat.username, id = seat.userId;
+  assert.ok(name && id, 'the sample game has a named player with an id');
+  if (name !== 'riverbend') anonKeys.anonymous = name;
+  g1.capturedBy = { username: name, userId: id };
+  g1.storytellers = [{ username: name, userId: id }];
+  g1.nominations.push({ day: 1, nominator: name, nominatorId: id, nominatorSeat: seat.seat, nominee: name, nomineeId: id, nomineeSeat: seat.seat, voters: [{ seat: seat.seat, userId: id, username: name }] });
+  g1.deaths = [...(g1.deaths || []), { seat: seat.seat, userId: id, username: name }];
+  // Later, under a new name: still caught by the id learned from the first.
+  const other = g2.players.find((p) => p.userId !== id && p.username);
+  g2.players = g2.players.filter((p) => p.userId !== id);
+  g2.players.push({ ...other, seat: 99, userId: id, username: 'NewName', avatar: 3 });
+  assert.equal(b.handle({ action: 'record', key: 'write-key', games: [g1] }, anonKeys).ok, true);
+  assert.equal(b.handle({ action: 'read', key: 'view-pass' }, anonKeys).ok, true); // learns the id from the name
+  assert.equal(b.handle({ action: 'record', key: 'write-key', games: [g2] }, anonKeys).ok, true);
+  b.handle({ action: 'edit', key: 'editor-key', id: g1.id, patch: { names: { [seat.seat]: { username: name, userId: id } }, storytellers: [{ username: name, userId: id }] } }, anonKeys);
+  assert.ok(kept(b, [g1.id]).includes(name) && kept(b, [g2.id]).includes('NewName'), 'the store keeps them as recorded');
+  const r = b.handle({ action: 'read', key: 'view-pass' }, anonKeys);
+  const text = JSON.stringify(r);
+  for (const bad of [name, id, 'NewName']) assert.ok(!text.toLowerCase().includes(bad.toLowerCase()), `${bad} is sent`);
+  const a1 = r.games.find((g) => g.id === g1.id).players.find((p) => p.seat === seat.seat);
+  const a2 = r.games.find((g) => g.id === g2.id).players.find((p) => p.seat === 99);
+  assert.equal(a1.username, 'Anonymous');
+  assert.match(a1.userId, /^anon-/);
+  assert.equal(a2.userId, a1.userId, 'the same stand-in id in every game, so their games still add up');
+  assert.equal(a2.avatar, undefined);
+  assert.equal(r.games.find((g) => g.id === g1.id).players.length, g1.players.length, 'their seat is still there');
+});
+
+check('anonymous players: adding someone sends every game again, so copies already downloaded lose their name', () => {
+  const b = loadBackend();
+  const g = clone(games[2]);
+  const p = g.players.find((x) => x.userId && x.username);
+  b.handle({ action: 'record', key: 'write-key', games: [g] }, keys, 1000);
+  const first = b.handle({ action: 'read', key: 'view-pass', since: 0 }, keys, 2000);
+  assert.equal(first.games[0].players.find((x) => x.seat === p.seat).username, p.username);
+  const again = b.handle({ action: 'read', key: 'view-pass', since: first.now }, { ...keys, anonymous: p.username }, 3000);
+  assert.equal(again.full, true, 'everything again');
+  assert.equal(again.games[0].players.find((x) => x.seat === p.seat).username, 'Anonymous');
+  assert.equal(b.handle({ action: 'read', key: 'view-pass', since: again.now }, { ...keys, anonymous: p.username }, 4000).games.length, 0, 'then only what changed, as usual');
+  assert.ok(kept(b, [g.id]).includes(p.username), 'still stored by name');
+});
+
 check('your communities: games only you filed are just for their recorders; Escape/Rhap ones for everyone', () => {
   const { handle: raw } = loadBackend();
   let t = 2000;

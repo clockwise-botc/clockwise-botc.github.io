@@ -99,6 +99,11 @@ function handle_(body, store, keys, now) {
     case 'read': {
       if (!canRead) return deny('see games');
       var since = Number(body.since) || 0;
+      // Someone added to (or taken off) ANONYMOUS_PLAYERS: everyone gets every game again, so copies already
+      // downloaded with their name are replaced.
+      var anon = anonymousList_(store, keys.anonymous);
+      var anonList = anon ? Object.keys(anon.names).sort().join(',') : '';
+      if (anonList !== (store.getValue('anonList') || '')) { store.setValue('anonList', anonList); bumpVisibility_(store, now); }
       // Who sees what changed since then (someone's communities or claim): send everything again.
       var full = since > 0 && since < visibilityAt_(store);
       if (full) since = 0;
@@ -109,9 +114,10 @@ function handle_(body, store, keys, now) {
       var viewer = account && account.claim ? account.claim.player : null;
       ids.forEach(function (id) {
         if (!recs[id]) return;
-        var seen = viewGame_(recs[id], store.getEdit(id), byPlayer, viewer);
+        var seen = anonymizeGame_(viewGame_(recs[id], store.getEdit(id), byPlayer, viewer), anon);
         if (seen) out.push(seen); else hidden.push(id);
       });
+      saveAnonymous_(store, anon);
       var metaInfo = store.getMetaInfo();
       return {
         ok: true, now: now, since: since, full: full,

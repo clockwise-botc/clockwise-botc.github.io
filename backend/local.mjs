@@ -111,7 +111,7 @@ export function loadSheetsBackend() {
   // Each request gets a fresh store, like each Apps Script execution.
   const tableRows = (name) => { const sh = sheets.get(name); return sh && sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().filter((r) => r[0]) : []; };
   const store = { count, get tables() { return { games: tableRows('games'), game_players: tableRows('game_players') }; } };
-  return { handle: (body, keys, now = Date.now()) => ctx.handle_(JSON.parse(JSON.stringify(body)), ctx.sheetStore_(), keys, now), store, sheets };
+  return { handle: (body, keys, now = Date.now()) => ctx.handle_(JSON.parse(JSON.stringify(body)), ctx.sheetStore_(), keys, now), store, sheets, ctx };
 }
 
 // A stand-in for the deployed web app: POST JSON (sent as text/plain, like the real one), CORS open.

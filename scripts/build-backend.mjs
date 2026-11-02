@@ -16,6 +16,7 @@ const parts = [
   ['backend/server.js', read],
   ['backend/accounts.js', read],
   ['backend/visibility.js', read],
+  ['backend/anonymous.js', read],
   ['backend/sheets-store.js', read],
   ['backend/main.js', read],
 ];
@@ -33,6 +34,8 @@ const header = `/**
  *      and optionally:
  *        HIDDEN_PLAYERS botc.app usernames, separated by commas, never named in the dashboard's stats (their games
  *                       still count, and the Games tab still shows them)
+ *        ANONYMOUS_PLAYERS botc.app usernames or user ids, separated by commas, never named anywhere on the site,
+ *                       not even the Games tab (shown as "Anonymous"); the Sheet still keeps their name
  *   3. Deploy → New deployment → type "Web app". Execute as: Me. Who has access: Anyone. Authorize when asked.
  *   4. Copy the web app URL (ends in /exec).
  * To update later: paste the new file, then Deploy → Manage deployments → edit → Version: New version.
