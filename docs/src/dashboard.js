@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js?v=f90cd0b9d3';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=f90cd0b9d3';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=f90cd0b9d3';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=f90cd0b9d3';
-import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=f90cd0b9d3';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=f90cd0b9d3';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=f90cd0b9d3';
-import { playstyles } from './playstyles.js?v=f90cd0b9d3';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=f90cd0b9d3';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=f90cd0b9d3';
-import { renderGrimoire } from './grimoire.js?v=f90cd0b9d3';
-import { makeImages } from './images.js?v=f90cd0b9d3';
-import { characterToken, installTokenStyle } from './tokens.js?v=f90cd0b9d3';
-import { multiSelect } from './multiselect.js?v=f90cd0b9d3';
-import { ALL_CHARACTERS } from './characters.js?v=f90cd0b9d3';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=f90cd0b9d3';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js?v=33a6c77f6f';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=33a6c77f6f';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=33a6c77f6f';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=33a6c77f6f';
+import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=33a6c77f6f';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=33a6c77f6f';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=33a6c77f6f';
+import { playstyles } from './playstyles.js?v=33a6c77f6f';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=33a6c77f6f';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=33a6c77f6f';
+import { renderGrimoire } from './grimoire.js?v=33a6c77f6f';
+import { makeImages } from './images.js?v=33a6c77f6f';
+import { characterToken, installTokenStyle } from './tokens.js?v=33a6c77f6f';
+import { multiSelect } from './multiselect.js?v=33a6c77f6f';
+import { ALL_CHARACTERS } from './characters.js?v=33a6c77f6f';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=33a6c77f6f';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -136,10 +136,12 @@ function dropHidden() {
   if (state.sel.players.some(isHidden)) { state.sel.players = state.sel.players.filter((k) => !isHidden(k)); writeHash(); }
   if (isHidden(state.filters.storyteller)) state.filters.storyteller = '';
 }
+// Anonymous players (the store's ANONYMOUS_PLAYERS) come with an "anon-" id and no name, and are hidden too.
 function findHidden(games, names) {
   const wanted = new Set(names), keys = new Set();
-  if (wanted.size) for (const g of games) for (const p of [...g.players, ...g.storytellers]) {
-    if (p.username && wanted.has(p.username.trim().toLowerCase()) && playerKey(p)) keys.add(playerKey(p));
+  for (const g of games) for (const p of [...g.players, ...g.storytellers]) {
+    const k = playerKey(p);
+    if (k && (k.startsWith('anon-') || (p.username && wanted.has(p.username.trim().toLowerCase())))) keys.add(k);
   }
   return keys;
 }
