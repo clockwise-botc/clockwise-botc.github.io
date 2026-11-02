@@ -105,6 +105,7 @@ async function defaultCommunity(settings, room, who, { self = null, wait = false
 
 async function upsertGame(game) {
   const settings = await getSettings();
+  if (!signedIn(settings)) return;
   const auto = await defaultCommunity(settings, game.room, whoOf(game), { self: game.id, wait: true });
   await locked(async () => {
     const games = await getGames();
@@ -146,6 +147,10 @@ async function voidGame(id) {
 }
 
 // ---------- shared store ----------
+// Games are only recorded and uploaded once someone is signed in to a Clockwise account (the popup asks first).
+// Games played before that aren't kept. Without a shared store (as in tests) there's nothing to sign in to.
+const signedIn = (s) => !(s.backendUrl || BACKEND_URL) || !!s.accountToken;
+
 async function backend() {
   const s = await getSettings();
   return { url: s.backendUrl || BACKEND_URL, writeKey: s.writeKey || WRITE_KEY };
@@ -155,6 +160,7 @@ async function backend() {
 async function syncPending(all = false) {
   const { url, writeKey } = await backend();
   if (!url || !writeKey) return { skipped: true };
+  if (!signedIn(await getSettings())) return { skipped: true, signedOut: true };
   uploadMeta().catch(() => {}); // the art info too, if it changed (it's skipped when it hasn't)
   const games = await getGames();
   const pending = Object.values(games).filter((g) => !g.id.startsWith('sample-') && !g.skipped && (all || !g.syncedAt));
@@ -197,7 +203,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     switch (msg.type) {
       case 'status': {
         await chrome.storage.session.set({ liveStatus: { ...msg.payload, tabId: sender.tab && sender.tab.id } });
-        const badge = msg.payload.inGame ? 'REC' : '';
+        const badge = msg.payload.inGame && signedIn(await getSettings()) ? 'REC' : '';
         await chrome.action.setBadgeText({ text: badge });
         if (badge) await chrome.action.setBadgeBackgroundColor({ color: '#8b1a1a' });
         return { ok: true };
