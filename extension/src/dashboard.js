@@ -5,7 +5,7 @@ import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from '.
 import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js';
 import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js';
 import { renderData, handleDataClick, handleImport } from './dataview.js';
-import { playstyles, awardRate, AWARD_PRIOR_GAMES } from './playstyles.js';
+import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js';
 import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js';
 import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js';
 import { renderGrimoire } from './grimoire.js';
@@ -1487,7 +1487,7 @@ function awardTiles(base) {
   const best = (side, id, counted) => {
     const R = playstyles(base, side);
     if (!R.featureIds.includes(id)) return [];
-    const rated = unhidden(R.players).filter((p) => p.values[id].raw !== null && counted(p) >= R.minGames)
+    const rated = unhidden(R.players).filter((p) => p.values[id].raw !== null && counted(p) >= AWARD_MIN_GAMES)
       .map((p) => ({ ...p, award: awardRate(R, id, p) }));
     if (!rated.length || !(Math.max(...rated.map((p) => p.values[id].raw)) > 0)) return [];
     const top = Math.max(...rated.map((p) => p.award));
@@ -1508,19 +1508,19 @@ function awardTiles(base) {
   const detective = best('good', 'enemyExecs', (p) => p.t.tracked);
   if (detective.length) {
     const p = detective[0];
-    out.push(tile(`Best detective${info('As good: the most evil players executed from their nominations, per game (3+ games as good).')}`, names(detective),
+    out.push(tile(`Best detective${info(`As good: the most evil players executed from their nominations, per game (${AWARD_MIN_GAMES}+ games as good).`)}`, names(detective),
       `${plural(p.t.enemyExecs, 'evil player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
   const framer = best('evil', 'enemyExecs', (p) => p.t.tracked);
   if (framer.length) {
     const p = framer[0];
-    out.push(tile(`Best framer${info('As evil: the most good players executed from their nominations, per game (3+ games as evil).')}`, names(framer),
+    out.push(tile(`Best framer${info(`As evil: the most good players executed from their nominations, per game (${AWARD_MIN_GAMES}+ games as evil).`)}`, names(framer),
       `${plural(p.t.enemyExecs, 'good player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
   const survivor = best('all', 'survived', (p) => p.t.known);
   if (survivor.length) {
     const p = survivor[0], alive = p.t.fates.survivedWon + p.t.fates.survivedLost;
-    out.push(tile(`Best survivor${info('Alive at the end of the largest share of their games (3+ games).')}`, names(survivor),
+    out.push(tile(`Best survivor${info(`Alive at the end of the largest share of their games (${AWARD_MIN_GAMES}+ games).`)}`, names(survivor),
       `alive at the end of ${alive} of ${plural(p.t.known, 'game')}`, 'award feature'));
   }
   return out.length ? `<div class="tiles awards">${out.join('')}</div>` : '';

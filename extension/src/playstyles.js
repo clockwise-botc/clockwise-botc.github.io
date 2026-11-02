@@ -114,6 +114,9 @@ function value(id, t, pooled) {
 // rate (a Bayesian average), (count + k × table rate) / (games + k). Their own games count for half at k games, so a
 // few lucky games can't win outright, while it's still a rate: playing more doesn't earn anything by itself.
 export const AWARD_PRIOR_GAMES = 10;
+// Games an award needs (on that side, and recorded from the start for the nomination awards). Higher than the charts'
+// 3: executions from someone's nominations are rare, so with only a few games a lucky streak still wins.
+export const AWARD_MIN_GAMES = 5;
 export function awardRate(R, id, p, k = AWARD_PRIOR_GAMES) {
   const f = FEATURES[id];
   return (f.count(p.t) + k * R.poolRate[id]) / (p.t[f.of] + k);
