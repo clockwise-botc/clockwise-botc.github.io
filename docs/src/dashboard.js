@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js?v=fae2d94f1a';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=fae2d94f1a';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=fae2d94f1a';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=fae2d94f1a';
-import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=fae2d94f1a';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=fae2d94f1a';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=fae2d94f1a';
-import { playstyles } from './playstyles.js?v=fae2d94f1a';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=fae2d94f1a';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=fae2d94f1a';
-import { renderGrimoire } from './grimoire.js?v=fae2d94f1a';
-import { makeImages } from './images.js?v=fae2d94f1a';
-import { characterToken, installTokenStyle } from './tokens.js?v=fae2d94f1a';
-import { multiSelect } from './multiselect.js?v=fae2d94f1a';
-import { ALL_CHARACTERS } from './characters.js?v=fae2d94f1a';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=fae2d94f1a';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js?v=f90cd0b9d3';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=f90cd0b9d3';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=f90cd0b9d3';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=f90cd0b9d3';
+import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=f90cd0b9d3';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=f90cd0b9d3';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=f90cd0b9d3';
+import { playstyles } from './playstyles.js?v=f90cd0b9d3';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=f90cd0b9d3';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=f90cd0b9d3';
+import { renderGrimoire } from './grimoire.js?v=f90cd0b9d3';
+import { makeImages } from './images.js?v=f90cd0b9d3';
+import { characterToken, installTokenStyle } from './tokens.js?v=f90cd0b9d3';
+import { multiSelect } from './multiselect.js?v=f90cd0b9d3';
+import { ALL_CHARACTERS } from './characters.js?v=f90cd0b9d3';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=f90cd0b9d3';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -1317,7 +1317,9 @@ function gameDetail(g) {
   // Games everyone sees need the editor key to change; games that are only in this browser don't.
   const canEdit = state.shared.canEdit || !!g.local;
   const bySeat = new Map(g.players.map((p) => [p.seat, p]));
-  const who = (seat, name) => { const p = bySeat.get(seat); const k = p && playerKey(p); return k ? playerLink(k, name || p.username || k) : esc(name || `Seat ${seat}`); };
+  // Who nominated, was nominated or voted: by the player recorded with it (players can swap seats mid-game), or else
+  // whoever ended the game in that seat.
+  const who = (seat, name, id) => { const p = id ? { userId: id, username: name } : bySeat.get(seat); const k = p && playerKey(p); return k ? playerLink(k, name || p.username || k) : esc(name || `Seat ${seat}`); };
   const missing = g.players.filter((p) => !p.username);
   const hasReminders = g.players.some((p) => (p.reminders || []).length);
   return `<div class="body">
@@ -1369,9 +1371,9 @@ function gameDetail(g) {
       ${g.nominations.length ? `<div class="table-wrap"><table>
       <thead><tr><th>Day</th><th>Nominator</th><th>Nominee</th><th class="num">Votes</th><th class="num">Needed</th><th>Voters</th></tr></thead>
       <tbody>${g.nominations.map((n) => `<tr>
-        <td>${n.day}</td><td>${who(n.nominatorSeat, n.nominator)}</td><td>${who(n.nomineeSeat, n.nominee)}${n.type === 'exile' ? ' <span class="muted">(exile)</span>' : ''}</td>
+        <td>${n.day}</td><td>${who(n.nominatorSeat, n.nominator, n.nominatorId)}</td><td>${who(n.nomineeSeat, n.nominee, n.nomineeId)}${n.type === 'exile' ? ' <span class="muted">(exile)</span>' : ''}</td>
         <td class="num">${n.votes === null ? '<span class="muted">hidden</span>' : n.votes}${n.completed ? '' : ' <span class="muted">(cancelled)</span>'}</td>
-        <td class="num">${n.majority}</td><td>${(n.voters || []).map((v) => who(v.seat, v.username)).join(', ')}</td>
+        <td class="num">${n.majority}</td><td>${(n.voters || []).map((v) => who(v.seat, v.username, v.userId)).join(', ')}</td>
       </tr>`).join('')}</tbody></table></div>` : '<p class="muted">No nominations were recorded for this game. They\'re captured live, so games joined partway through may be missing some.</p>'}
     </div>
   </div>`;
