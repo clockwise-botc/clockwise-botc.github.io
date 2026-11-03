@@ -1733,7 +1733,7 @@ function render() {
   $('#clear-sel').hidden = scopeOnly ? !scopeOn() : !anyFilter(state.sel);
   document.body.classList.toggle('tab-me', state.tab === 'me');
   const views = { stats: statsView, me: myView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
-  keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab](); });
+  keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() + pickPrompt() : '') + views[state.tab](); });
   // Editors' account list loads the first time Settings is opened.
   mountClaimPicker();
   mountAlwaysPicker();
@@ -1935,6 +1935,18 @@ function signInView() {
 
 
 // In the extension: when sharing is set up but this browser can't read the shared games yet.
+// Signed in without a player yet: ask which player they are, on every page but My stats (which asks anyway) and
+// Settings, until they pick one or say later (for this visit).
+const PICK_LATER = 'clockwise.pickLater';
+function pickPrompt() {
+  if (!state.profile || myPlayer() || state.tab === 'me' || !playerChoices().length) return '';
+  try { if (sessionStorage.getItem(PICK_LATER)) return ''; } catch { /* no storage: ask */ }
+  return `<div class="card pick-prompt"><div><h3>Which player are you?</h3>
+    <p class="sub">Pick yourself to get your own stats page and be included in the rankings. Until then you're only listed in the games you played.</p></div>
+    <div class="toolbar claim-form"><div class="claim-picker" data-claim-picker></div><button class="btn primary" type="button" data-claim>Claim</button><button class="btn" type="button" data-pick-later>Later</button></div>
+    <p class="msg" id="claim-msg"></p></div>`;
+}
+
 function connectCard() {
   if (WEB || !state.shared.on) return '';
   const st = state.shared.status;
@@ -2442,6 +2454,7 @@ document.addEventListener('click', async (e) => {
     if (problem) { const m = $('#claim-msg'); if (m) { m.className = 'msg err'; m.textContent = problem; } }
     return;
   }
+  if (e.target.closest('[data-pick-later]')) { try { sessionStorage.setItem(PICK_LATER, '1'); } catch { /* shown again next render */ } render(); return; }
   const claim = e.target.closest('[data-claim]');
   const un = e.target.closest('[data-unclaim]');
   const remove = e.target.closest('[data-claim-remove]');

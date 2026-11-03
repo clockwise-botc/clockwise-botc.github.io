@@ -129,7 +129,22 @@ async function upsertGame(game) {
     games[game.id] = { ...game, community, communityChosen, communityManual: !!(prev && prev.communityManual), excluded: prev ? !!prev.excluded : false, notes: prev ? prev.notes || '' : '', syncedAt: null, skipped, autoSkipped };
     await chrome.storage.local.set({ games });
   });
+  autoClaim(game.capturedBy).catch(() => {});
   syncPending().catch(recordSyncError);
+}
+
+// Someone recording is playing as the botc.app account logged in here: if their Clockwise account hasn't picked a
+// player yet, pick that one for them (only players with an account are named in the stats). Tried once per Clockwise
+// account, like the popup's, so removing the claim on the website sticks.
+async function autoClaim(who) {
+  const s = await getSettings();
+  const { url } = await backend();
+  if (!who || !who.userId || !url || !s.accountToken || s.autoClaimedFor === s.accountName) return;
+  const r = await call(url, { action: 'ping', token: s.accountToken });
+  if (!r || !r.ok || !r.account) return;
+  if (!r.account.claim) await call(url, { action: 'claim', token: s.accountToken, player: String(who.userId), name: who.username || '' });
+  const { settings = {} } = await chrome.storage.local.get('settings');
+  await chrome.storage.local.set({ settings: { ...settings, autoClaimedFor: s.accountName } });
 }
 
 async function voidGame(id) {
