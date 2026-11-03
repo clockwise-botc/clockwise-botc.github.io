@@ -2506,9 +2506,27 @@ async function checkSignedIn() {
   }
 }
 
-// Show what's cached straight away, then download anything new; check again every few minutes.
+// The website keeps running the version it was opened with, so a tab left open would go on working out stats the old
+// way (and saving its download in the old shape for every other tab). When a newer version is live, reload, unless
+// something is being typed (then the next check). Once per version, in case the server still hands out the old page.
+const BUILD = WEB ? new URL(import.meta.url).searchParams.get('v') : null;
+async function reloadIfNewer() {
+  if (!BUILD || document.visibilityState !== 'visible') return;
+  const html = await fetch(`${location.pathname}?build=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : '')).catch(() => '');
+  const live = (html.match(/src\/dashboard\.js\?v=([\w-]+)/) || [])[1];
+  if (!live || live === BUILD) return;
+  const typing = document.activeElement && document.activeElement.matches('input, textarea, select, [contenteditable]');
+  let tried = null;
+  try { tried = sessionStorage.getItem('clockwise.reloadedFor'); } catch { /* no storage */ }
+  if (typing || tried === live) return;
+  try { sessionStorage.setItem('clockwise.reloadedFor', live); } catch { /* reload anyway */ }
+  location.reload();
+}
+
+// Show what's cached straight away, then download anything new; check again every few minutes, and on coming back.
 load().then(() => checkSignedIn()).then(() => syncShared());
-setInterval(() => { if (document.visibilityState === 'visible') syncShared(); }, 5 * 60e3);
+setInterval(() => { if (document.visibilityState === 'visible') { reloadIfNewer(); syncShared(); } }, 5 * 60e3);
+document.addEventListener('visibilitychange', () => { reloadIfNewer(); });
 
 // Chrome serves this page's files fresh from disk, but keeps running the old background (which records games
 // and fetches botc.app's art) until the extension is reloaded. Spot that and say so.
