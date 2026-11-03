@@ -39,6 +39,26 @@ let NAMES = null;
 export function useDisplayNames(map) { NAMES = map; }
 export const displayName = (key, fallback) => (NAMES && NAMES.get(key)) || cleanName(fallback) || fallback || key;
 // Everyone who storytold a game, as account keys.
+// A game's nominations, votes and deaths carry the seat each person had at that moment, but `players` has the seats
+// at the end. When someone leaves or joins mid-game the seats shift, and a lookup by seat would credit an earlier
+// nomination or vote to whoever ended up in that seat. The recorder also saves each person's account, so this moves
+// every seat to that account's seat at the end (an account that's no longer in the game gets no seat). Records
+// without an account keep their seat.
+export function withCurrentSeats(g) {
+  const seatOf = new Map((g.players || []).filter((p) => p.userId).map((p) => [p.userId, p.seat]));
+  if (!seatOf.size) return g;
+  let changed = false;
+  const at = (seat, id) => {
+    const s = id ? (seatOf.has(id) ? seatOf.get(id) : null) : seat;
+    if (s !== seat) changed = true;
+    return s;
+  };
+  const nominations = (g.nominations || []).map((n) => ({ ...n, nominatorSeat: at(n.nominatorSeat, n.nominatorId), nomineeSeat: at(n.nomineeSeat, n.nomineeId),
+    voters: (n.voters || []).map((v) => ({ ...v, seat: at(v.seat, v.userId) })) }));
+  const deaths = (g.deaths || []).map((d) => ({ ...d, seat: at(d.seat, d.userId) }));
+  return changed ? { ...g, nominations, deaths } : g;
+}
+
 export const storytellerKeys = (g) => (g.storytellers || []).map(playerKey).filter(Boolean);
 
 export function filterGames(all, f = {}) {
