@@ -15,8 +15,8 @@
 //
 // Each community has its own members, so someone can be a member of several. Nothing here is specific to
 // Escape or Rhap: a community made on the website gets members the same way.
-import { playerKey, storytellerKeys } from './stats.js?v=4597ce1548';
-import { communityConfig } from './communities.js?v=4597ce1548';
+import { playerKey, storytellerKeys } from './stats.js?v=2cf6c71fc8';
+import { communityConfig } from './communities.js?v=2cf6c71fc8';
 
 // Low while there are only a few dozen games; worth raising as more games are recorded.
 export const MIN_MEMBER_GAMES = 3;

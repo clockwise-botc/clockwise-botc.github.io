@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys } from './stats.js?v=4597ce1548';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=4597ce1548';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=4597ce1548';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=4597ce1548';
-import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=4597ce1548';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=4597ce1548';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=4597ce1548';
-import { playstyles } from './playstyles.js?v=4597ce1548';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=4597ce1548';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=4597ce1548';
-import { renderGrimoire } from './grimoire.js?v=4597ce1548';
-import { makeImages } from './images.js?v=4597ce1548';
-import { characterToken, installTokenStyle } from './tokens.js?v=4597ce1548';
-import { multiSelect } from './multiselect.js?v=4597ce1548';
-import { ALL_CHARACTERS } from './characters.js?v=4597ce1548';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=4597ce1548';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=2cf6c71fc8';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=2cf6c71fc8';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=2cf6c71fc8';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=2cf6c71fc8';
+import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=2cf6c71fc8';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=2cf6c71fc8';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=2cf6c71fc8';
+import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=2cf6c71fc8';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=2cf6c71fc8';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=2cf6c71fc8';
+import { renderGrimoire } from './grimoire.js?v=2cf6c71fc8';
+import { makeImages } from './images.js?v=2cf6c71fc8';
+import { characterToken, installTokenStyle } from './tokens.js?v=2cf6c71fc8';
+import { multiSelect } from './multiselect.js?v=2cf6c71fc8';
+import { ALL_CHARACTERS } from './characters.js?v=2cf6c71fc8';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=2cf6c71fc8';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -915,17 +915,17 @@ function avatarHtml(key, name, cls = '') {
   return `<span class="avatar ${cls}" aria-hidden="true">${url ? `<img src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<b>${initial}</b></span>`;
 }
 
-// The bars behind Best ally / Worst enemy, for one pair (a row of tabletalk.js `enemies`), in columns of
+// The bars behind Closest ally / Biggest rival, for one pair (a row of tabletalk.js `enemies`), in columns of
 // [heading, nomination label, nominations, vote label, votes]. Nominations: games with one (the bar is out of the
-// games together), next to what random picks would give. Votes: how often one voted when the other was nominated,
-// next to how often the voter usually votes.
+// games together), next to what's expected from both players' habits. Votes: how often one voted when the other was
+// nominated, next to what's expected from how often the voter usually votes and how many votes the other usually draws.
 function relationBars(r, groups) {
   const at = (v) => `${Math.max(0, Math.min(100, v * 100)).toFixed(1)}%`;
   const bar = (label, value, typical, fill, tick) => `<div class="ps-row">
       <div class="ps-head"><span class="ps-label">${label}</span><span class="ps-vals"><b>${value}</b><span class="ps-avg-val">${typical}</span></span></div>
       <div class="ps-track"><i class="ps-fill" style="width:${at(fill)}"></i><b class="ps-dot" style="left:${at(fill)}"></b><s class="ps-avg" style="left:${at(tick)}"></s></div></div>`;
   const nom = (label, x) => bar(label, x.n, `${x.exp.toFixed(1)} expected`, x.n / (r.games || 1), x.exp / (r.games || 1));
-  const vote = (label, x) => x && bar(label, pct(x.rate), `usually ${pct(x.base)}`, x.rate, x.base);
+  const vote = (label, x) => x && bar(label, pct(x.rate), `${pct(x.expRate ?? x.base)} expected`, x.rate, x.expRate ?? x.base);
   return `<div class="rel-bars">${groups.map(([title, nl, n, vl, v]) => { const rows = [nom(nl, n), vote(vl, v)].filter(Boolean); return `<div class="rel-group"><h4>${title}</h4>${rows.join('')}</div>`; }).join('')}</div>`;
 }
 const relLegend = '<div class="ps-legend rel-legend" aria-hidden="true"><span><i class="ps-key-you"></i>Actual</span><span><i class="ps-key-avg"></i>Typical</span></div>';
@@ -940,7 +940,7 @@ function pairRelationCards(base, players) {
     const a = players[i], b = players[j];
     const r = enemies(base, a, { minGames: 1 }).find((x) => x.key === b);
     const A = esc(nameOf(a)), B = esc(nameOf(b));
-    const how = 'Nominations and votes between the two, each next to what\'s typical (the tick). Nominations: how many of their games together had one, next to what random picks would give. Votes: how often one voted when the other was nominated, next to how often they usually vote.';
+    const how = 'Nominations and votes between the two, each next to what\'s typical for both of them (the tick). Nominations: how many of their games together had one, next to what you\'d expect from how much each nominates and how often each usually gets nominated. Votes: how often one voted when the other was nominated, next to what you\'d expect from how often the voter usually votes and how many votes the other usually draws.';
     const head = `<div class="enemy-who"><span class="pair-avatars">${avatarHtml(a, nameOf(a), 'big')}${avatarHtml(b, nameOf(b), 'big')}</span><p class="enemy-name"><span>${playerLink(a, nameOf(a))} <span class="amp">and</span> ${playerLink(b, nameOf(b))}</span> <span class="muted">${r ? `${plural(r.games, 'game')} together` : 'No games together yet'}</span></p>${r ? relLegend : ''}</div>`;
     cards.push(card(`How they treat each other <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, '',
       head + (r ? relationBars(r, [[`How ${A} treats ${B}`, `Nominated ${B}`, r.iNom, `Voted against ${B}`, r.iVote], [`How ${B} treats ${A}`, `Nominated ${A}`, r.theyNom, `Voted against ${A}`, r.theyVote]]) : ''), 'relation-card'));
@@ -948,8 +948,8 @@ function pairRelationCards(base, players) {
   return `<div class="span-all"><div class="grid pair-row">${cards.join('')}</div></div>`;
 }
 
-// Worst enemy and best ally (tabletalk.js `enemies`): the highest friction score and the lowest, with the four
-// things behind it as bars (each with a tick at what's typical), grouped by who did it to whom, and the next two. An enemy needs a score above the
+// Biggest rival and closest ally (tabletalk.js `enemies`): the highest friction score and the lowest, with the four
+// things behind it as bars (each with a tick at what's typical), grouped by who did it to whom, and the next two. A rival needs a score above the
 // middle, an ally one below it.
 function relationCard(base, key, kind) {
   const all = unhidden(enemies(base, key));
@@ -962,9 +962,9 @@ function relationCard(base, key, kind) {
     [`How they treat ${me}`, `Nominated ${me}`, top.theyNom, `Voted against ${me}`, top.theyVote],
     [`How ${me} ${mine ? 'treat' : 'treats'} them`, `${Me} nominated them`, top.iNom, `${Me} voted against them`, top.iVote]]);
   const why = `${kind === 'ally' ? 'Less' : 'More'} likely than usual to nominate ${me} or vote against ${me}.`;
-  const how = `Out of everyone with at least ${ENEMY_MIN_GAMES} games together. Nominations and votes between the two, each next to what's typical (the tick)${kind === 'ally' ? ': the player they clash with least' : ''}. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes. The more games together, the more their numbers count.`;
+  const how = `Out of everyone with at least ${ENEMY_MIN_GAMES} games together. Nominations and votes between the two, each next to what's typical for both of them (the tick)${kind === 'ally' ? ': the player they clash with least in-game' : ': the player they clash with most in-game'}. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes. The more games together, the more their numbers count.`;
   const next = rest.slice(0, 2).map((r) => `<span class="enemy-next">${avatarHtml(r.key, r.name, 'small')}${playerLink(r.key, r.name)}</span>`);
-  return card(`${kind === 'ally' ? 'Best ally' : 'Worst enemy'} <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, '',
+  return card(`${kind === 'ally' ? 'Closest ally' : 'Biggest rival'} <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, '',
     `<div class="enemy-who">${avatarHtml(top.key, top.name, 'big')}<p class="enemy-name">${playerLink(top.key, top.name)} <span class="muted">${why}</span></p>${relLegend}</div>
     ${bars}${next.length ? `<p class="enemy-more"><span class="muted">Next</span>${next.join('')}</p>` : ''}`, 'relation-card');
 }
@@ -1047,7 +1047,7 @@ function playerSections(G, sel, seats, base) {
       <div><b>${noms.votes}</b><span>votes cast</span></div>
       <div><b>${pct(noms.voteAccuracy)}</b><span>of their votes were on evil players</span></div></div>`));
     out.push(talkCard(base, key));
-    // Who with: ally and enemy side by side, then teammates and opponents, then nominations and votes pair by pair.
+    // Who with: ally and rival side by side, then teammates and opponents, then nominations and votes pair by pair.
     const peopleCards = [];
     if (quiet) {
       const byCount = (rows, n) => rows.map((r) => ({ key: r.key, name: r.name, games: n(r) })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
@@ -1064,10 +1064,10 @@ function playerSections(G, sel, seats, base) {
       peopleCards.push(card('Wins most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
         sortable('p-beats', beatCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
     }
-    // Who with, in full-width rows that stay together at any width: ally and enemy, teammates and opponents (above),
+    // Who with, in full-width rows that stay together at any width: ally and rival, teammates and opponents (above),
     // then nominations pair by pair and votes pair by pair.
     const together = (...cards) => { const c = cards.filter(Boolean); return c.length ? `<div class="span-all"><div class="grid pair-row">${c.join('')}</div></div>` : ''; };
-    out.push(together(relationCard(base, key, 'ally'), relationCard(base, key, 'enemy')));
+    out.push(together(relationCard(base, key, 'ally'), relationCard(base, key, 'rival')));
     out.push(together(...peopleCards));
     out.push(together(pairsCards(base, key)));
     out.push(together(votePairCards(base, key)));
@@ -1482,15 +1482,17 @@ function gamesView() {
 // Only games recorded from the start count for the nomination awards.
 function awardTiles(base) {
   // The minimum applies to the games each award is worked out from: games recorded from the start for the nomination
-  // awards, games with a known end for the survivor.
+  // awards, games with a known end for the survivor. Players are ranked by their rate pulled toward the table's
+  // (playstyles.js awardRate), so a few lucky games can't win outright.
   const best = (side, id, counted) => {
     const R = playstyles(base, side);
     if (!R.featureIds.includes(id)) return [];
-    const rated = unhidden(R.players).filter((p) => p.values[id].raw !== null && counted(p) >= R.minGames);
-    const top = Math.max(...rated.map((p) => p.values[id].raw));
-    if (!(top > 0)) return [];
+    const rated = unhidden(R.players).filter((p) => p.values[id].raw !== null && counted(p) >= AWARD_MIN_GAMES)
+      .map((p) => ({ ...p, award: awardRate(R, id, p) }));
+    if (!rated.length || !(Math.max(...rated.map((p) => p.values[id].raw)) > 0)) return [];
+    const top = Math.max(...rated.map((p) => p.award));
     // One winner. A tie goes to whoever has more games behind the rate, then whoever played most recently, then the name.
-    const tied = rated.filter((p) => Math.abs(p.values[id].raw - top) < 1e-9);
+    const tied = rated.filter((p) => Math.abs(p.award - top) < 1e-9);
     return [tied.sort((a, b) => counted(b) - counted(a) || (lastPlayed.get(b.key) || 0) - (lastPlayed.get(a.key) || 0) || a.name.localeCompare(b.name))[0]];
   };
   const lastPlayed = new Map();
@@ -1499,24 +1501,26 @@ function awardTiles(base) {
     const p = ps[0];
     return `<span style="font-size:${Math.min(1, 11 / Math.max(1, [...p.name].length)).toFixed(2)}em">${playerLink(p.key, p.name)}</span>`;
   };
-  const info = (text) => ` <span class="info" data-tip="${esc(text)}" aria-label="${esc(text)}">ⓘ</span>`;
+  // Every award's tip ends with how few games are handled.
+  const fewer = ` With fewer games, a rate counts for less: it's pulled toward the group's (halfway at ${AWARD_PRIOR_GAMES} games).`;
+  const info = (text) => ` <span class="info" data-tip="${esc(text + fewer)}" aria-label="${esc(text + fewer)}">ⓘ</span>`;
   const out = [];
   const detective = best('good', 'enemyExecs', (p) => p.t.tracked);
   if (detective.length) {
     const p = detective[0];
-    out.push(tile(`Best detective${info('As good: the most evil players executed from their nominations, per game (3+ games as good).')}`, names(detective),
+    out.push(tile(`Best detective${info(`As good: the most evil players executed from their nominations, per game (${AWARD_MIN_GAMES}+ games as good).`)}`, names(detective),
       `${plural(p.t.enemyExecs, 'evil player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
   const framer = best('evil', 'enemyExecs', (p) => p.t.tracked);
   if (framer.length) {
     const p = framer[0];
-    out.push(tile(`Best framer${info('As evil: the most good players executed from their nominations, per game (3+ games as evil).')}`, names(framer),
+    out.push(tile(`Best framer${info(`As evil: the most good players executed from their nominations, per game (${AWARD_MIN_GAMES}+ games as evil).`)}`, names(framer),
       `${plural(p.t.enemyExecs, 'good player')} executed from ${plural(p.t.noms, 'nomination')} in ${plural(p.t.tracked, 'game')}`, 'award'));
   }
   const survivor = best('all', 'survived', (p) => p.t.known);
   if (survivor.length) {
     const p = survivor[0], alive = p.t.fates.survivedWon + p.t.fates.survivedLost;
-    out.push(tile(`Best survivor${info('Alive at the end of the largest share of their games (3+ games).')}`, names(survivor),
+    out.push(tile(`Best survivor${info(`Alive at the end of the largest share of their games (${AWARD_MIN_GAMES}+ games).`)}`, names(survivor),
       `alive at the end of ${alive} of ${plural(p.t.known, 'game')}`, 'award feature'));
   }
   return out.length ? `<div class="tiles awards">${out.join('')}</div>` : '';
@@ -1975,7 +1979,8 @@ async function load() {
   const cache = c.url ? await loadShared() : null;
   state.shared = { ...state.shared, on: !!c.url, hasPassword: canReadWith(c), account: c.token ? { username: c.username } : null, canEdit: !c.url || !!c.editorKey, cacheAt: cache && cache.at };
   const map = dropLocalTwins(c.url ? mergeGames(local, cache) : { ...local });
-  state.games = Object.values(map).map((g) => ({ ...g, community: gameCommunity(state.settings, g) }));
+  // Seats in nominations, votes and deaths matched to the players by account (stats.js withCurrentSeats).
+  state.games = Object.values(map).map((g) => ({ ...withCurrentSeats(g), community: gameCommunity(state.settings, g) }));
   // Each community's members (members.js), for the player lists and rankings, and games for an editor to check.
   const counted = state.games.filter((g) => !g.excluded);
   members = communityMembers(counted, state.settings).members;
