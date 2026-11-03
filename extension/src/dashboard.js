@@ -915,17 +915,17 @@ function avatarHtml(key, name, cls = '') {
   return `<span class="avatar ${cls}" aria-hidden="true">${url ? `<img src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<b>${initial}</b></span>`;
 }
 
-// The bars behind Best ally / Worst enemy, for one pair (a row of tabletalk.js `enemies`), in columns of
+// The bars behind Closest ally / Biggest rival, for one pair (a row of tabletalk.js `enemies`), in columns of
 // [heading, nomination label, nominations, vote label, votes]. Nominations: games with one (the bar is out of the
-// games together), next to what random picks would give. Votes: how often one voted when the other was nominated,
-// next to how often the voter usually votes.
+// games together), next to what's expected from both players' habits. Votes: how often one voted when the other was
+// nominated, next to what's expected from how often the voter usually votes and how many votes the other usually draws.
 function relationBars(r, groups) {
   const at = (v) => `${Math.max(0, Math.min(100, v * 100)).toFixed(1)}%`;
   const bar = (label, value, typical, fill, tick) => `<div class="ps-row">
       <div class="ps-head"><span class="ps-label">${label}</span><span class="ps-vals"><b>${value}</b><span class="ps-avg-val">${typical}</span></span></div>
       <div class="ps-track"><i class="ps-fill" style="width:${at(fill)}"></i><b class="ps-dot" style="left:${at(fill)}"></b><s class="ps-avg" style="left:${at(tick)}"></s></div></div>`;
   const nom = (label, x) => bar(label, x.n, `${x.exp.toFixed(1)} expected`, x.n / (r.games || 1), x.exp / (r.games || 1));
-  const vote = (label, x) => x && bar(label, pct(x.rate), `usually ${pct(x.base)}`, x.rate, x.base);
+  const vote = (label, x) => x && bar(label, pct(x.rate), `${pct(x.expRate ?? x.base)} expected`, x.rate, x.expRate ?? x.base);
   return `<div class="rel-bars">${groups.map(([title, nl, n, vl, v]) => { const rows = [nom(nl, n), vote(vl, v)].filter(Boolean); return `<div class="rel-group"><h4>${title}</h4>${rows.join('')}</div>`; }).join('')}</div>`;
 }
 const relLegend = '<div class="ps-legend rel-legend" aria-hidden="true"><span><i class="ps-key-you"></i>Actual</span><span><i class="ps-key-avg"></i>Typical</span></div>';
@@ -940,7 +940,7 @@ function pairRelationCards(base, players) {
     const a = players[i], b = players[j];
     const r = enemies(base, a, { minGames: 1 }).find((x) => x.key === b);
     const A = esc(nameOf(a)), B = esc(nameOf(b));
-    const how = 'Nominations and votes between the two, each next to what\'s typical (the tick). Nominations: how many of their games together had one, next to what random picks would give. Votes: how often one voted when the other was nominated, next to how often they usually vote.';
+    const how = 'Nominations and votes between the two, each next to what\'s typical for both of them (the tick). Nominations: how many of their games together had one, next to what you\'d expect from how much each nominates and how often each usually gets nominated. Votes: how often one voted when the other was nominated, next to what you\'d expect from how often the voter usually votes and how many votes the other usually draws.';
     const head = `<div class="enemy-who"><span class="pair-avatars">${avatarHtml(a, nameOf(a), 'big')}${avatarHtml(b, nameOf(b), 'big')}</span><p class="enemy-name"><span>${playerLink(a, nameOf(a))} <span class="amp">and</span> ${playerLink(b, nameOf(b))}</span> <span class="muted">${r ? `${plural(r.games, 'game')} together` : 'No games together yet'}</span></p>${r ? relLegend : ''}</div>`;
     cards.push(card(`How they treat each other <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, '',
       head + (r ? relationBars(r, [[`How ${A} treats ${B}`, `Nominated ${B}`, r.iNom, `Voted against ${B}`, r.iVote], [`How ${B} treats ${A}`, `Nominated ${A}`, r.theyNom, `Voted against ${A}`, r.theyVote]]) : ''), 'relation-card'));
@@ -948,8 +948,8 @@ function pairRelationCards(base, players) {
   return `<div class="span-all"><div class="grid pair-row">${cards.join('')}</div></div>`;
 }
 
-// Worst enemy and best ally (tabletalk.js `enemies`): the highest friction score and the lowest, with the four
-// things behind it as bars (each with a tick at what's typical), grouped by who did it to whom, and the next two. An enemy needs a score above the
+// Biggest rival and closest ally (tabletalk.js `enemies`): the highest friction score and the lowest, with the four
+// things behind it as bars (each with a tick at what's typical), grouped by who did it to whom, and the next two. A rival needs a score above the
 // middle, an ally one below it.
 function relationCard(base, key, kind) {
   const all = unhidden(enemies(base, key));
@@ -962,9 +962,9 @@ function relationCard(base, key, kind) {
     [`How they treat ${me}`, `Nominated ${me}`, top.theyNom, `Voted against ${me}`, top.theyVote],
     [`How ${me} ${mine ? 'treat' : 'treats'} them`, `${Me} nominated them`, top.iNom, `${Me} voted against them`, top.iVote]]);
   const why = `${kind === 'ally' ? 'Less' : 'More'} likely than usual to nominate ${me} or vote against ${me}.`;
-  const how = `Out of everyone with at least ${ENEMY_MIN_GAMES} games together. Nominations and votes between the two, each next to what's typical (the tick)${kind === 'ally' ? ': the player they clash with least' : ''}. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes. The more games together, the more their numbers count.`;
+  const how = `Out of everyone with at least ${ENEMY_MIN_GAMES} games together. Nominations and votes between the two, each next to what's typical for both of them (the tick)${kind === 'ally' ? ': the player they clash with least in-game' : ': the player they clash with most in-game'}. Being nominated or voted on by them counts more than nominating or voting on them, and nominations count more than votes. The more games together, the more their numbers count.`;
   const next = rest.slice(0, 2).map((r) => `<span class="enemy-next">${avatarHtml(r.key, r.name, 'small')}${playerLink(r.key, r.name)}</span>`);
-  return card(`${kind === 'ally' ? 'Best ally' : 'Worst enemy'} <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, '',
+  return card(`${kind === 'ally' ? 'Closest ally' : 'Biggest rival'} <span class="info" data-tip="${esc(how)}" aria-label="${esc(how)}">ⓘ</span>`, '',
     `<div class="enemy-who">${avatarHtml(top.key, top.name, 'big')}<p class="enemy-name">${playerLink(top.key, top.name)} <span class="muted">${why}</span></p>${relLegend}</div>
     ${bars}${next.length ? `<p class="enemy-more"><span class="muted">Next</span>${next.join('')}</p>` : ''}`, 'relation-card');
 }
@@ -1047,7 +1047,7 @@ function playerSections(G, sel, seats, base) {
       <div><b>${noms.votes}</b><span>votes cast</span></div>
       <div><b>${pct(noms.voteAccuracy)}</b><span>of their votes were on evil players</span></div></div>`));
     out.push(talkCard(base, key));
-    // Who with: ally and enemy side by side, then teammates and opponents, then nominations and votes pair by pair.
+    // Who with: ally and rival side by side, then teammates and opponents, then nominations and votes pair by pair.
     const peopleCards = [];
     if (quiet) {
       const byCount = (rows, n) => rows.map((r) => ({ key: r.key, name: r.name, games: n(r) })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
@@ -1064,10 +1064,10 @@ function playerSections(G, sel, seats, base) {
       peopleCards.push(card('Wins most against', `${esc(nameOf(key))}'s win rate when on the opposite team to each player (at least 3 games against).`,
         sortable('p-beats', beatCols, rel.rivals, { sort: 2, empty: 'Not enough games against each other yet.' })));
     }
-    // Who with, in full-width rows that stay together at any width: ally and enemy, teammates and opponents (above),
+    // Who with, in full-width rows that stay together at any width: ally and rival, teammates and opponents (above),
     // then nominations pair by pair and votes pair by pair.
     const together = (...cards) => { const c = cards.filter(Boolean); return c.length ? `<div class="span-all"><div class="grid pair-row">${c.join('')}</div></div>` : ''; };
-    out.push(together(relationCard(base, key, 'ally'), relationCard(base, key, 'enemy')));
+    out.push(together(relationCard(base, key, 'ally'), relationCard(base, key, 'rival')));
     out.push(together(...peopleCards));
     out.push(together(pairsCards(base, key)));
     out.push(together(votePairCards(base, key)));
