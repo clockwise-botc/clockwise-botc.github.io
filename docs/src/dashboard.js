@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=221e2d9d96';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=221e2d9d96';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=221e2d9d96';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=221e2d9d96';
-import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=221e2d9d96';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=221e2d9d96';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=221e2d9d96';
-import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=221e2d9d96';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=221e2d9d96';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=221e2d9d96';
-import { renderGrimoire } from './grimoire.js?v=221e2d9d96';
-import { makeImages } from './images.js?v=221e2d9d96';
-import { characterToken, installTokenStyle } from './tokens.js?v=221e2d9d96';
-import { multiSelect } from './multiselect.js?v=221e2d9d96';
-import { ALL_CHARACTERS } from './characters.js?v=221e2d9d96';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=221e2d9d96';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=185d432b18';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=185d432b18';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=185d432b18';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=185d432b18';
+import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=185d432b18';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=185d432b18';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=185d432b18';
+import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=185d432b18';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=185d432b18';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=185d432b18';
+import { renderGrimoire } from './grimoire.js?v=185d432b18';
+import { makeImages } from './images.js?v=185d432b18';
+import { characterToken, installTokenStyle } from './tokens.js?v=185d432b18';
+import { multiSelect } from './multiselect.js?v=185d432b18';
+import { ALL_CHARACTERS } from './characters.js?v=185d432b18';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=185d432b18';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -1733,7 +1733,7 @@ function render() {
   $('#clear-sel').hidden = scopeOnly ? !scopeOn() : !anyFilter(state.sel);
   document.body.classList.toggle('tab-me', state.tab === 'me');
   const views = { stats: statsView, me: myView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
-  keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() : '') + views[state.tab](); });
+  keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() + pickPrompt() : '') + views[state.tab](); });
   // Editors' account list loads the first time Settings is opened.
   mountClaimPicker();
   mountAlwaysPicker();
@@ -1935,6 +1935,18 @@ function signInView() {
 
 
 // In the extension: when sharing is set up but this browser can't read the shared games yet.
+// Signed in without a player yet: ask which player they are, on every page but My stats (which asks anyway) and
+// Settings, until they pick one or say later (for this visit).
+const PICK_LATER = 'clockwise.pickLater';
+function pickPrompt() {
+  if (!state.profile || myPlayer() || state.tab === 'me' || !playerChoices().length) return '';
+  try { if (sessionStorage.getItem(PICK_LATER)) return ''; } catch { /* no storage: ask */ }
+  return `<div class="card pick-prompt"><div><h3>Which player are you?</h3>
+    <p class="sub">Pick yourself to get your own stats page and be included in the rankings. Until then you're only listed in the games you played.</p></div>
+    <div class="toolbar claim-form"><div class="claim-picker" data-claim-picker></div><button class="btn primary" type="button" data-claim>Claim</button><button class="btn" type="button" data-pick-later>Later</button></div>
+    <p class="msg" id="claim-msg"></p></div>`;
+}
+
 function connectCard() {
   if (WEB || !state.shared.on) return '';
   const st = state.shared.status;
@@ -2442,6 +2454,7 @@ document.addEventListener('click', async (e) => {
     if (problem) { const m = $('#claim-msg'); if (m) { m.className = 'msg err'; m.textContent = problem; } }
     return;
   }
+  if (e.target.closest('[data-pick-later]')) { try { sessionStorage.setItem(PICK_LATER, '1'); } catch { /* shown again next render */ } render(); return; }
   const claim = e.target.closest('[data-claim]');
   const un = e.target.closest('[data-unclaim]');
   const remove = e.target.closest('[data-claim-remove]');

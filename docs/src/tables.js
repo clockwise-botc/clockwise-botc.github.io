@@ -1,6 +1,6 @@
 // Flattens game records into tidy tables (one row per game / player / nomination / death).
 // Used for CSV export and Google Sheets sync, so both always have identical columns.
-import { gameCommunity, communityName } from './communities.js?v=221e2d9d96';
+import { gameCommunity, communityName } from './communities.js?v=185d432b18';
 
 const iso = (ms) => (ms ? new Date(ms).toISOString() : '');
 const names = (list) => (list || []).map((x) => x.username || x.name || x.userId || x.id).filter(Boolean).join(', ');
