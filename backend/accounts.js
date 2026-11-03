@@ -48,8 +48,8 @@ function privatePlayers_(store) {
   return store.listAccounts().filter(function (a) { return a.claim && a.profile && a.profile.private; }).map(function (a) { return a.claim.player; });
 }
 
-// Players never named in the dashboard's stats (their games still count): the HIDDEN_PLAYERS Script property, as
-// lowercase botc.app usernames. The dashboard matches them to players, so every name they've used is covered.
+// The HIDDEN_PLAYERS Script property, as lowercase botc.app usernames: players dashboards from extension 3.4.2 and
+// older don't name in stats. Newer ones leave out everyone without an account instead (accountPlayers).
 function hiddenPlayers_(list) {
   return String(list || '').split(',').map(function (n) { return n.trim().toLowerCase(); }).filter(function (n) { return n; });
 }

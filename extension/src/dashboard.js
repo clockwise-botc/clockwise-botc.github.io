@@ -105,7 +105,8 @@ function writeHash() {
 
 // ---------- lookups ----------
 let playerNames = new Map(); // account → the name shown (their most-used), for players and storytellers
-let playerKeys = new Set(); // accounts that have played (not only storytold)
+let playerKeys = new Set(); // players with a page: accounts that have played (not only storytold) and are listed
+let everyone = new Set(); // every account that has played, listed or not
 // Each community's members (members.js), and players from games without a community. Rankings and player
 // lists only show members of the communities being looked at, so people from another group's lobby who
 // sat down with one of us don't turn up there (the games they played with us still count for us).
@@ -125,40 +126,33 @@ const iAmQuiet = () => !!(state.profile && state.profile.claim && state.profile.
 const ratesHidden = (key) => iAmQuiet() || quietPlayers.has(key);
 // A ranking of players by win rate, without those who hide theirs (and none at all for someone who hides them).
 const ranked = (rows, keyOf = (r) => r.key) => (iAmQuiet() ? [] : rows.filter((r) => !quietPlayers.has(keyOf(r)) && isMember(keyOf(r))));
-// Players who aren't named in stats (the store's HIDDEN_PLAYERS, matched to every name they've played under): their
-// games count toward everything, but no ranking, list, player page or filter names them. The Games tab still shows
-// them as they played, without a link to a player page.
-let hiddenKeys = new Set();
-const isHidden = (key) => hiddenKeys.has(key);
-const unhidden = (rows, keyOf = (r) => r.key) => rows.filter((r) => !hiddenKeys.has(keyOf(r)));
+// Only players with a Clockwise account (someone who has claimed them) are named in the stats. Everyone else's games
+// count toward everything, and they're named in the simple lists (most frequent players and storytellers, played
+// with most), but they have no player page and aren't in any ranking, player list or filter. The Games tab still
+// shows them as they played, without a link to a player page. Without a shared store (as in tests) everyone is listed.
+let listedKeys = null;
+const isHidden = (key) => listedKeys !== null && !listedKeys.has(key) && key !== myPlayer();
+const unhidden = (rows, keyOf = (r) => r.key) => rows.filter((r) => !isHidden(keyOf(r)));
 // A hidden player or storyteller can't be picked (from an old link, say).
 function dropHidden() {
   if (state.sel.players.some(isHidden)) { state.sel.players = state.sel.players.filter((k) => !isHidden(k)); writeHash(); }
   if (isHidden(state.filters.storyteller)) state.filters.storyteller = '';
 }
-// Anonymous players (the store's ANONYMOUS_PLAYERS) come with an "anon-" id and no name, and are hidden too.
-function findHidden(games, names) {
-  const wanted = new Set(names), keys = new Set();
-  for (const g of games) for (const p of [...g.players, ...g.storytellers]) {
-    const k = playerKey(p);
-    if (k && (k.startsWith('anon-') || (p.username && wanted.has(p.username.trim().toLowerCase())))) keys.add(k);
-  }
-  return keys;
-}
-// A member of any of the communities picked in the filter (all of them when none is picked). You always are.
-// Hidden players never are, so every list of members leaves them out.
-function isMember(key) {
-  if (isHidden(key)) return false;
+// In any of the communities picked in the filter (all of them when none is picked). You always are.
+function inCommunity(key) {
   if (key === myPlayer() || freeKeys.has(key)) return true;
   const ids = state.filters.communities.length ? state.filters.communities : [...members.keys()];
   return ids.some((c) => members.has(c) && members.get(c).has(key));
 }
-const memberRows = (rows, keyOf = (r) => r.key) => rows.filter((r) => isMember(keyOf(r)));
+// A member, as rankings and lists count them: in the communities and listed.
+const isMember = (key) => !isHidden(key) && inCommunity(key);
 const playerLink = (key, name) => (isHidden(key) ? esc(name) : uiPlayerLink(key, name));
 // Everyone who has played, for "Your player": [{ key, name }] by name, with a number added when two share a name.
 function playerChoices() {
   // While setting up a new account (not signed in yet), the players come from the games the community password shows.
-  const list = state.setup ? state.setup.players.map((x) => ({ ...x })) : [...playerKeys].map((key) => ({ key, name: nameOf(key) })).filter((x) => x.name);
+  // Players someone else has claimed aren't offered.
+  const taken = (key) => listedKeys !== null && listedKeys.has(key) && key !== myPlayer();
+  const list = state.setup ? state.setup.players.map((x) => ({ ...x })) : [...everyone].filter((key) => !taken(key)).map((key) => ({ key, name: nameOf(key) })).filter((x) => x.name);
   list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   const seen = new Map();
   for (const x of list) { const n = (seen.get(x.name.toLowerCase()) || 0) + 1; seen.set(x.name.toLowerCase(), n); if (n > 1) x.name = `${x.name} (${n})`; }
@@ -219,7 +213,7 @@ function storytellerTable(games) {
   const m = new Map();
   for (const g of games) for (const s of g.storytellers) {
     const key = playerKey(s);
-    if (!key || isHidden(key)) continue;
+    if (!key) continue;
     const r = m.get(key) || { key, name: nameOf(key), games: 0 };
     r.games++;
     m.set(key, r);
@@ -377,7 +371,7 @@ const gamesCards = {
   balance: (G) => balanceCard(overview(G)),
   playerCount: (G) => playerCountCard(G),
   players: (G) => {
-    const rows = memberRows(playerTable(G)).map((p) => ({ key: p.key, name: p.name, games: p.plays })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
+    const rows = playerTable(G).filter((p) => inCommunity(p.key)).map((p) => ({ key: p.key, name: p.name, games: p.plays })).sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
     return rows.length > 1 ? frequencyCard('freq-players', 'Most frequent players', 'Who has played the most games. Click a name to see their stats.', rows, (r) => playerLink(r.key, r.name)) : '';
   },
   storytellers: (G) => {
@@ -452,7 +446,7 @@ function seatCards(G, sel, seats) {
   const ownPage = sel.players.length === 1 && !sel.characters.length && !sel.types.length && !ratesHidden(sel.players[0]);
   if (sel.players.length && !ownPage) {
     const picked = new Set(sel.players), m = new Map();
-    for (const g of new Set(seats.map((x) => x.g))) for (const p of g.players) { const k = playerKey(p); if (k && !picked.has(k) && !isHidden(k)) { const r = m.get(k) || { key: k, name: nameOf(k), games: 0 }; r.games++; m.set(k, r); } }
+    for (const g of new Set(seats.map((x) => x.g))) for (const p of g.players) { const k = playerKey(p); if (k && !picked.has(k)) { const r = m.get(k) || { key: k, name: nameOf(k), games: 0 }; r.games++; m.set(k, r); } }
     const rows = [...m.values()].sort((a, b) => b.games - a.games || a.name.localeCompare(b.name));
     out.with = rows.length > 1 ? frequencyCard('s-with', 'Played with most', `Who was in the most games with ${esc(listWords(sel.players.map(nameOf)))}.`, rows, (r) => playerLink(r.key, r.name)) : '';
   }
@@ -2004,8 +1998,9 @@ async function load() {
   quietPlayers = new Set((cache && cache.privatePlayers) || []);
   playerNames = displayNames(state.games);
   useDisplayNames(playerNames);
-  hiddenKeys = findHidden(state.games, (cache && cache.hiddenPlayers) || []);
-  playerKeys = new Set(playerTable(state.games).map((p) => p.key).filter((k) => !isHidden(k)));
+  listedKeys = cache && Array.isArray(cache.accountPlayers) ? new Set(cache.accountPlayers) : null;
+  everyone = new Set(playerTable(state.games).map((p) => p.key));
+  playerKeys = new Set([...everyone].filter((k) => !isHidden(k)));
   freeKeys = new Set(playerTable(state.games.filter((g) => !g.community && !g.excluded)).map((p) => p.key));
   charInfo = new Map(characterTable(state.games, null).map((c) => [c.roleId, c]));
   populateFilters();
@@ -2232,8 +2227,8 @@ document.addEventListener('submit', async (e) => {
       const r = await peekGames(state.settings, val('community'));
       if (!r.ok) return fail(r.error === 'not-allowed' ? { error: 'not-allowed', message: 'That community password isn\'t right.' } : r);
       const names = displayNames(r.games || []);
-      const hidden = findHidden(r.games || [], r.hiddenPlayers || []);
-      const players = playerTable(r.games || []).filter((p) => !hidden.has(p.key)).map((p) => ({ key: p.key, name: names.get(p.key) || p.name })).filter((x) => x.name);
+      const taken = new Set(r.accountPlayers || []);
+      const players = playerTable(r.games || []).filter((p) => !taken.has(p.key)).map((p) => ({ key: p.key, name: names.get(p.key) || p.name })).filter((x) => x.name);
       state.setup = { username: val('username'), password: f.password.value, community: val('community'), remember, players };
       state.setupRates = '';
       state.claimPick = null;

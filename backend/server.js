@@ -99,11 +99,9 @@ function handle_(body, store, keys, now) {
     case 'read': {
       if (!canRead) return deny('see games');
       var since = Number(body.since) || 0;
-      // Someone added to (or taken off) ANONYMOUS_PLAYERS: everyone gets every game again, so copies already
-      // downloaded with their name are replaced.
-      var anon = anonymousList_(store, keys.anonymous);
-      var anonList = anon ? Object.keys(anon.names).sort().join(',') : '';
-      if (anonList !== (store.getValue('anonList') || '')) { store.setValue('anonList', anonList); bumpVisibility_(store, now); }
+      // Games used to be sent with ANONYMOUS_PLAYERS' names taken out. Now that they aren't, everyone gets every game
+      // again once, so copies downloaded without those names are replaced.
+      if (store.getValue('anonList')) { store.setValue('anonList', ''); bumpVisibility_(store, now); }
       // Who sees what changed since then (someone's communities or claim): send everything again.
       var full = since > 0 && since < visibilityAt_(store);
       if (full) since = 0;
@@ -114,10 +112,9 @@ function handle_(body, store, keys, now) {
       var viewer = account && account.claim ? account.claim.player : null;
       ids.forEach(function (id) {
         if (!recs[id]) return;
-        var seen = anonymizeGame_(viewGame_(recs[id], store.getEdit(id), byPlayer, viewer), anon);
+        var seen = viewGame_(recs[id], store.getEdit(id), byPlayer, viewer);
         if (seen) out.push(seen); else hidden.push(id);
       });
-      saveAnonymous_(store, anon);
       var metaInfo = store.getMetaInfo();
       return {
         ok: true, now: now, since: since, full: full,
@@ -126,6 +123,9 @@ function handle_(body, store, keys, now) {
         deleted: store.deletedSince(since),
         meta: metaInfo && metaInfo.at > since ? store.getMeta() : null,
         privatePlayers: privatePlayers_(store),
+        // The players someone has claimed: only they get player pages and are ranked or listed in the stats.
+        accountPlayers: Object.keys(byPlayer),
+        // For dashboards from before accountPlayers (extension 3.4.2 and older).
         hiddenPlayers: hiddenPlayers_(keys.hidden),
         canEdit: canEdit,
       };
