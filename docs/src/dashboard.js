@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=185d432b18';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=185d432b18';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=185d432b18';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=185d432b18';
-import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=185d432b18';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=185d432b18';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=185d432b18';
-import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=185d432b18';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=185d432b18';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=185d432b18';
-import { renderGrimoire } from './grimoire.js?v=185d432b18';
-import { makeImages } from './images.js?v=185d432b18';
-import { characterToken, installTokenStyle } from './tokens.js?v=185d432b18';
-import { multiSelect } from './multiselect.js?v=185d432b18';
-import { ALL_CHARACTERS } from './characters.js?v=185d432b18';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=185d432b18';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=f12311c554';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=f12311c554';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=f12311c554';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=f12311c554';
+import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=f12311c554';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=f12311c554';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=f12311c554';
+import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=f12311c554';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=f12311c554';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=f12311c554';
+import { renderGrimoire } from './grimoire.js?v=f12311c554';
+import { makeImages } from './images.js?v=f12311c554';
+import { characterToken, installTokenStyle } from './tokens.js?v=f12311c554';
+import { multiSelect } from './multiselect.js?v=f12311c554';
+import { ALL_CHARACTERS } from './characters.js?v=f12311c554';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=f12311c554';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -2506,9 +2506,27 @@ async function checkSignedIn() {
   }
 }
 
-// Show what's cached straight away, then download anything new; check again every few minutes.
+// The website keeps running the version it was opened with, so a tab left open would go on working out stats the old
+// way (and saving its download in the old shape for every other tab). When a newer version is live, reload, unless
+// something is being typed (then the next check). Once per version, in case the server still hands out the old page.
+const BUILD = WEB ? new URL(import.meta.url).searchParams.get('v') : null;
+async function reloadIfNewer() {
+  if (!BUILD || document.visibilityState !== 'visible') return;
+  const html = await fetch(`${location.pathname}?build=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : '')).catch(() => '');
+  const live = (html.match(/src\/dashboard\.js\?v=([\w-]+)/) || [])[1];
+  if (!live || live === BUILD) return;
+  const typing = document.activeElement && document.activeElement.matches('input, textarea, select, [contenteditable]');
+  let tried = null;
+  try { tried = sessionStorage.getItem('clockwise.reloadedFor'); } catch { /* no storage */ }
+  if (typing || tried === live) return;
+  try { sessionStorage.setItem('clockwise.reloadedFor', live); } catch { /* reload anyway */ }
+  location.reload();
+}
+
+// Show what's cached straight away, then download anything new; check again every few minutes, and on coming back.
 load().then(() => checkSignedIn()).then(() => syncShared());
-setInterval(() => { if (document.visibilityState === 'visible') syncShared(); }, 5 * 60e3);
+setInterval(() => { if (document.visibilityState === 'visible') { reloadIfNewer(); syncShared(); } }, 5 * 60e3);
+document.addEventListener('visibilitychange', () => { reloadIfNewer(); });
 
 // Chrome serves this page's files fresh from disk, but keeps running the old background (which records games
 // and fetches botc.app's art) until the extension is reloaded. Spot that and say so.
