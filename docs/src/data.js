@@ -3,8 +3,8 @@
 //   Extension, sharing: everyone's games from the shared store, plus this browser's games not uploaded yet.
 //   Website (community dashboard): everyone's games, after the community password.
 // Downloads are cached (chrome.storage in the extension, IndexedDB on the website) and topped up incrementally.
-import { BACKEND_URL, SITE_URL } from './config.js?v=2cf6c71fc8';
-import { call, pull, ping, editPatch } from './shared.js?v=2cf6c71fc8';
+import { BACKEND_URL, SITE_URL } from './config.js?v=221e2d9d96';
+import { call, pull, ping, editPatch } from './shared.js?v=221e2d9d96';
 
 // Set by web-config.js on the community website.
 export const WEB = (typeof window !== 'undefined' && window.CLOCKWISE_WEB) || null;
@@ -94,11 +94,11 @@ export async function refreshShared(settings) {
   const removed = [...res.deletedIds, ...((now && now.deleted) || [])];
   res.cache.deleted = [...new Set([...((before && before.deleted) || []), ...removed])];
   for (const id of res.cache.deleted) delete res.cache.games[id];
-  // Who keeps their stats private, or isn't named at all, can change without any game changing.
-  const listed = (c) => JSON.stringify([(c && c.privatePlayers) || [], (c && c.hiddenPlayers) || []]);
+  // Who keeps their stats private, or has an account, can change without any game changing.
+  const listed = (c) => JSON.stringify([(c && c.privatePlayers) || [], (c && c.accountPlayers) || null]);
   const privacy = listed(before) !== listed(res.cache);
   if (res.changed || !before) await cacheSet(res.cache);
-  else await cacheSet({ ...(now || before), since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, hiddenPlayers: res.cache.hiddenPlayers });
+  else await cacheSet({ ...(now || before), since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, accountPlayers: res.cache.accountPlayers });
   return { ok: true, changed: res.changed + (privacy ? 1 : 0), canEdit: res.canEdit };
 }
 
