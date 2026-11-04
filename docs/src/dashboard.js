@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=f12311c554';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=f12311c554';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=f12311c554';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=f12311c554';
-import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=f12311c554';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=f12311c554';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=f12311c554';
-import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=f12311c554';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=f12311c554';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=f12311c554';
-import { renderGrimoire } from './grimoire.js?v=f12311c554';
-import { makeImages } from './images.js?v=f12311c554';
-import { characterToken, installTokenStyle } from './tokens.js?v=f12311c554';
-import { multiSelect } from './multiselect.js?v=f12311c554';
-import { ALL_CHARACTERS } from './characters.js?v=f12311c554';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=f12311c554';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=e4202f8ef4';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=e4202f8ef4';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=e4202f8ef4';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=e4202f8ef4';
+import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js?v=e4202f8ef4';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=e4202f8ef4';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=e4202f8ef4';
+import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=e4202f8ef4';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=e4202f8ef4';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=e4202f8ef4';
+import { renderGrimoire } from './grimoire.js?v=e4202f8ef4';
+import { makeImages } from './images.js?v=e4202f8ef4';
+import { characterToken, installTokenStyle } from './tokens.js?v=e4202f8ef4';
+import { multiSelect } from './multiselect.js?v=e4202f8ef4';
+import { ALL_CHARACTERS } from './characters.js?v=e4202f8ef4';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=e4202f8ef4';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -1334,6 +1334,7 @@ function gameDetail(g) {
       <fieldset class="gm-fields" ${canEdit ? '' : 'disabled'}>
       <div class="gm-grid">
         <div class="gm-field"><span class="field-label">Community</span><div class="toggles">${communityButtons('data-game-community', g.community ? [g.community] : [], `${g.id}|`, gameCommunityOptions())}</div></div>
+        <div class="gm-field"><span class="field-label">Winner</span><div class="toggles">${['good', 'evil'].map((w) => `<button class="toggle" type="button" data-game-winner="${esc(g.id)}|${w}" aria-pressed="${g.winner === w}">${cap(w)}</button>`).join('')}</div></div>
         <label class="gm-field"><span class="field-label">Storyteller</span><input type="text" value="${esc(g.storytellers.map((s) => s.username).filter(Boolean).join(', '))}" placeholder="Not recorded — type a name" data-st="${esc(g.id)}"></label>
         <label class="gm-field gm-wide"><span class="field-label">Notes</span><textarea rows="2" placeholder="Anything to remember about this game" data-notes="${esc(g.id)}">${esc(g.notes || '')}</textarea></label>
       </div>
@@ -2047,12 +2048,13 @@ async function updateLocal(id, patch, resend) {
   const map = await api.get('games', {});
   if (!map[id]) return;
   Object.assign(map[id], patch, resend ? { syncedAt: null } : {});
+  if (patch.winner) for (const p of map[id].players || []) if (p.alignment === 'good' || p.alignment === 'evil') p.won = p.alignment === patch.winner;
   await api.set('games', map);
 }
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-game-community],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-crumb-back],[data-crumb-styles],[data-crumb-games],[data-go-styles],[data-stats-view],[data-confirm-community],#clear-sel');
+  const t = e.target.closest('[data-gview],[data-gmenu],[data-sort-table],[data-game-community],[data-game-winner],[data-add-player],[data-add-char],[data-add-type],[data-expand],[data-more-games],[data-delete],[data-action],[data-export],[data-clear-room],[data-fallback],[data-tab],[data-crumb-back],[data-crumb-styles],[data-crumb-games],[data-go-styles],[data-stats-view],[data-confirm-community],#clear-sel');
   if (!t) return;
   // Under an open game: switch between seat-by-seat and nominations, or show the settings. No full redraw,
   // so the grimoire stays put.
@@ -2079,6 +2081,16 @@ document.addEventListener('click', async (e) => {
     const id = t.dataset.gameCommunity.slice(0, i), c = t.dataset.gameCommunity.slice(i + 1);
     const g = state.games.find((x) => x.id === id);
     await updateGame(id, { community: g && g.community === c ? null : c, communityManual: true });
+    await load();
+    return;
+  }
+  if (t.dataset.gameWinner) {
+    // For when the storyteller picked the wrong side at the reveal. Each player's result follows.
+    const i = t.dataset.gameWinner.lastIndexOf('|');
+    const id = t.dataset.gameWinner.slice(0, i), winner = t.dataset.gameWinner.slice(i + 1);
+    const g = state.games.find((x) => x.id === id);
+    if (!g || g.winner === winner) return;
+    await updateGame(id, { winner });
     await load();
     return;
   }
