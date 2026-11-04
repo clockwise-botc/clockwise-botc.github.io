@@ -10,7 +10,7 @@
 
 // Fields a viewer can change after the fact. Kept separately from the recorded data so a later upload of the same
 // game never undoes a fix.
-var EDITABLE_ = ['community', 'communityManual', 'excluded', 'notes', 'storytellers', 'names'];
+var EDITABLE_ = ['community', 'communityManual', 'excluded', 'notes', 'storytellers', 'names', 'winner'];
 
 function handle_(body, store, keys, now) {
   var key = String((body && body.key) || '');
@@ -82,6 +82,7 @@ function handle_(body, store, keys, now) {
       if (!body.id || !store.getRecord(body.id)) return { ok: false, error: 'not-found' };
       var patch = {};
       EDITABLE_.forEach(function (f) { if (body.patch && f in body.patch) patch[f] = body.patch[f]; });
+      if ('winner' in patch && patch.winner !== 'good' && patch.winner !== 'evil') return { ok: false, error: 'bad-winner' };
       var prev = store.getEdit(body.id) || {};
       if (patch.names) patch.names = Object.assign({}, prev.names || {}, patch.names);
       store.putEdit(body.id, Object.assign({}, prev, patch), now);
@@ -225,6 +226,11 @@ function withEdits_(rec, edit) {
       var n = edit.names[p.seat];
       if (n && n.username) { p.username = n.username; if (n.userId) p.userId = n.userId; }
     });
+  }
+  // The storyteller picked the wrong side at the reveal: who won, and so each player's result.
+  if (edit.winner === 'good' || edit.winner === 'evil') {
+    g.winner = edit.winner;
+    (g.players || []).forEach(function (p) { if (p.alignment === 'good' || p.alignment === 'evil') p.won = p.alignment === edit.winner; });
   }
   return g;
 }

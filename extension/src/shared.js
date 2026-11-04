@@ -39,7 +39,7 @@ export const ping = (url, key, token) => call(url, { action: 'ping', key, token 
 // An editor's fix to a shared game. Turns a dashboard patch into the store's edit fields.
 export function editPatch(game, patch) {
   const out = {};
-  for (const f of ['community', 'communityManual', 'excluded', 'notes', 'storytellers']) if (f in patch) out[f] = patch[f];
+  for (const f of ['community', 'communityManual', 'excluded', 'notes', 'storytellers', 'winner']) if (f in patch) out[f] = patch[f];
   if (patch.players && game) {
     // Only names that were filled in: { seat: { username, userId } }.
     const names = {};

@@ -103,6 +103,21 @@ check('edits show to everyone and survive later uploads', () => {
   assert.equal(handle({ action: 'edit', key: 'editor-key', id: 'nope', patch: {} }, keys).ok, false);
 });
 
+check('an editor can fix who won, and each player\'s result follows', () => {
+  const { handle } = loadBackend();
+  handle({ action: 'record', key: 'write-key', games: [full] }, keys, 1);
+  const flip = full.winner === 'evil' ? 'good' : 'evil';
+  assert.equal(handle({ action: 'edit', key: 'editor-key', id: full.id, patch: { winner: 'nobody' } }, keys, 2).ok, false);
+  assert.equal(handle({ action: 'edit', key: 'write-key', id: full.id, patch: { winner: flip } }, keys, 2).ok, false);
+  handle({ action: 'edit', key: 'editor-key', id: full.id, patch: { winner: flip } }, keys, 2);
+  handle({ action: 'record', key: 'write-key', games: [late] }, keys, 3);
+  const g = handle({ action: 'read', key: 'view-pass' }, keys, 4).games[0];
+  assert.equal(g.winner, flip);
+  const sided = g.players.filter((p) => p.alignment === 'good' || p.alignment === 'evil');
+  assert.ok(sided.length);
+  for (const p of sided) assert.equal(p.won, p.alignment === flip);
+});
+
 check('deleted games stay deleted, and readers are told', () => {
   const { handle, store } = loadBackend();
   handle({ action: 'record', key: 'write-key', games: [full, games[1]] }, keys, 1);
