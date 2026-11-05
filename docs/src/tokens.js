@@ -5,7 +5,7 @@
 //
 // The art and fonts come from botc.app itself (see parseTokenStyle in background.js). Until they've
 // been fetched once, tokens fall back to a plain parchment disc and the dashboard's serif.
-import { esc } from './ui.js?v=e4202f8ef4';
+import { esc } from './ui.js?v=4a05a56d1c';
 
 // Names run along botc.app's own curve: a circle of radius 60 in a 140×140 box, starting top-left and running
 // anticlockwise, so text centred at x=100% sits along the bottom of the token. The path (#ct-circle) is in dashboard.html.

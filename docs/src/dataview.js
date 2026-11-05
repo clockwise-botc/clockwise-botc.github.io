@@ -1,8 +1,8 @@
 // The "Data & settings" view: export (and import), your account and communities, the editor key; in the extension
 // also this browser's uploads and stored games, and its Escape & Rhap rooms.
-import { toTables, toCSV, COLUMNS } from './tables.js?v=e4202f8ef4';
-import { communityConfig, communityName, slug, NONE } from './communities.js?v=e4202f8ef4';
-import { esc, fmtDate, fmtTime, plural } from './ui.js?v=e4202f8ef4';
+import { toTables, toCSV, COLUMNS } from './tables.js?v=4a05a56d1c';
+import { communityConfig, communityName, slug, NONE } from './communities.js?v=4a05a56d1c';
+import { esc, fmtDate, fmtTime, plural } from './ui.js?v=4a05a56d1c';
 
 export function renderData(ctx, filteredGames) {
   const { state } = ctx;
