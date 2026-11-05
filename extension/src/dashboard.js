@@ -2,7 +2,7 @@ import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNam
 import { predictOutcome, tuneOutcomeModel } from './insights.js';
 import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js';
 import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js';
-import { communityMembers, communityHistory, suggestCommunity, setByChoice, whoOf, MIN_MEMBER_GAMES } from './members.js';
+import { communityMembers } from './members.js';
 import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js';
 import { renderData, handleDataClick, handleImport } from './dataview.js';
 import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js';
@@ -1295,18 +1295,27 @@ function gamesList(G) {
   </div>`;
 }
 
-// Games an editor should check (members.js): filed under a community nobody picked by hand, outside its own rooms,
-// where neither the storyteller nor half the table has played in that community before. Only editors see the flag;
-// they can confirm the community (it's then picked by hand) or exclude or delete the game.
+// Games an editor should check: the storyteller has no Clockwise account, or at least half the seated players
+// don't. Only editors see the flag; they can say it looks right (the game's community is then picked by hand, which
+// clears it) or exclude or delete the game.
 const reviewing = (g) => !!g.review && state.shared.on && state.shared.canEdit;
-const aOrAn = (word) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
+function reviewFor(g) {
+  if (!listedKeys || g.excluded || g.communityManual) return null;
+  const has = (p) => { const k = playerKey(p); return !!k && listedKeys.has(k); };
+  const stNone = !g.storytellers.some(has);
+  const without = g.players.filter((p) => !has(p)).length;
+  const halfNone = g.players.length > 0 && without * 2 >= g.players.length;
+  return stNone || halfNone ? { stNone, without, seated: g.players.length } : null;
+}
 function reviewWhy(g) {
-  const name = communityName(state.settings, g.community);
-  return `This may not be ${aOrAn(name)} ${name} game: its storyteller hasn't played ${MIN_MEMBER_GAMES}+ ${name} games, and fewer than half the players have played another ${name} game.`;
+  const r = g.review;
+  const st = r.stNone ? (g.storytellers.some((s) => s.username) ? 'its storyteller doesn\'t have a Clockwise account' : 'its storyteller wasn\'t recorded') : '';
+  const table = r.without * 2 >= r.seated ? `${r.without} of ${r.seated} players don't have Clockwise accounts` : '';
+  const why = [st, table].filter(Boolean).join(', and ');
+  return `This may not be a game from your community: ${why}.`;
 }
 function reviewBox(g) {
-  const name = esc(communityName(state.settings, g.community));
-  return `<div class="gm-review"><p><b>Check this game</b> ${esc(reviewWhy(g))} If it isn't, exclude it from stats or delete it.</p><button class="btn small" data-confirm-community="${esc(g.id)}">Yes, it's ${aOrAn(name)} ${name} game</button></div>`;
+  return `<div class="gm-review"><p><b>Check this game</b> ${esc(reviewWhy(g))} If it isn't one of yours, exclude it from stats or delete it.</p><button class="btn small" data-confirm-community="${esc(g.id)}">Looks right</button></div>`;
 }
 
 function gameDetail(g) {
@@ -1988,14 +1997,9 @@ async function load() {
   const map = dropLocalTwins(c.url ? mergeGames(local, cache) : { ...local });
   // Seats in nominations, votes and deaths matched to the players by account (stats.js withCurrentSeats).
   state.games = Object.values(map).map((g) => ({ ...withCurrentSeats(g), community: gameCommunity(state.settings, g) }));
-  // Each community's members (members.js), for the player lists and rankings, and games for an editor to check.
+  // Each community's members (members.js), for the player lists and rankings.
   const counted = state.games.filter((g) => !g.excluded);
   members = communityMembers(counted, state.settings).members;
-  const cfg = communityConfig(state.settings), hist = communityHistory(counted);
-  for (const g of state.games) {
-    const c = cfg.communities.find((x) => x.id === g.community);
-    g.review = !!c && !setByChoice(cfg, g) && !suggestCommunity({ communities: [c] }, whoOf(g), hist, { self: g.id });
-  }
   state.lastSync = WEB ? null : await api.get('lastSync', null);
   // botc.app's art: the extension reads it itself; the website gets it from the shared store.
   const meta = (cache && cache.meta) || {};
@@ -2012,6 +2016,7 @@ async function load() {
   playerNames = displayNames(state.games);
   useDisplayNames(playerNames);
   listedKeys = cache && Array.isArray(cache.accountPlayers) ? new Set(cache.accountPlayers) : null;
+  for (const g of state.games) g.review = reviewFor(g);
   everyone = new Set(playerTable(state.games).map((p) => p.key));
   playerKeys = new Set([...everyone].filter((k) => !isHidden(k)));
   freeKeys = new Set(playerTable(state.games.filter((g) => !g.community && !g.excluded)).map((p) => p.key));
