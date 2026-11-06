@@ -1964,7 +1964,7 @@ function connectCard() {
     return st && st.error ? `<p class="sync-note err">Couldn't update everyone's games: ${esc(st.message || st.error)}. Showing what was downloaded ${state.shared.cacheAt ? `on ${fmtDate(state.shared.cacheAt)} ${fmtTime(state.shared.cacheAt)}` : 'before'}.</p>` : '';
   }
   return `<div class="card connect"><div><h3>See everyone's games</h3>
-    <p class="sub">Click the Clockwise icon in Chrome's toolbar and sign in to see the games everyone has recorded. You only need to do it once. Until then this shows only the games recorded in this browser.</p></div></div>`;
+    <p class="sub">Click the Clockwise icon in your browser's toolbar and sign in to see the games everyone has recorded. You only need to do it once. Until then this shows only the games recorded in this browser.</p></div></div>`;
 }
 
 // Download what's new from the shared store; the dashboard redraws if anything changed.

@@ -51,7 +51,7 @@ function sharedCard(ctx) {
     : 'Enter the community password to see everyone\'s games.';
   if (!tools.WEB && !sh.account) {
     return `<div class="card account"><h3>Your account</h3>
-      <p class="sub">${sh.on ? 'Not signed in. Click the Clockwise icon in Chrome\'s toolbar to sign in; you only need to do it once.' : 'This copy of Clockwise isn\'t set up to share games, so they stay in this browser.'}</p></div>`;
+      <p class="sub">${sh.on ? 'Not signed in. Click the Clockwise icon in your browser\'s toolbar to sign in; you only need to do it once.' : 'This copy of Clockwise isn\'t set up to share games, so they stay in this browser.'}</p></div>`;
   }
   const who = sh.account
     ? `<p class="sub">Signed in as <b>${esc(sh.account.username)}</b>.</p>

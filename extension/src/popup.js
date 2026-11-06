@@ -3,7 +3,6 @@ import { call } from './shared.js';
 import { BACKEND_URL, SITE_URL } from './config.js';
 
 const $ = (id) => document.getElementById(id);
-const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // One dropdown: the communities, then "Don't record". It starts on the community the game looks like it's from (its
 // room, or who's at the table: see members.js), or on "Don't record" when it fits none. "Don't record" is about the
@@ -29,9 +28,8 @@ async function showCommunity(room) {
   // A room switched off in an older version: recorded, without a community.
   const legacyNone = !current && def.why === 'chosen';
   const sel = $('community-select');
-  sel.innerHTML = cfg.communities.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')
-    + (legacyNone ? '<option value="">No community</option>' : '')
-    + '<hr><option value="skip">Don\'t record</option>';
+  sel.replaceChildren(...cfg.communities.map((c) => new Option(c.name, c.id)), ...(legacyNone ? [new Option('No community', '')] : []),
+    document.createElement('hr'), new Option('Don\'t record', 'skip'));
   sel.value = skipped ? 'skip' : current || (legacyNone ? '' : 'skip');
   sel.onchange = async () => {
     const wanted = sel.value;
@@ -247,15 +245,14 @@ async function showSetup(draft) {
   document.querySelectorAll('[data-rates]').forEach((b) => { b.onclick = () => setRates(b.dataset.rates); });
   setRates('');
   const select = $('setup-player');
-  select.innerHTML = '<option value="">Loading players…</option>';
+  select.replaceChildren(new Option('Loading players…', ''));
   // Continue also waits for who's on botc.app (picked to begin with), so the answer is never sent half-loaded.
   const list = playerList(draft.games);
   const me = await botcUser();
   loaded = true;
   setRates(setupRates);
   if (me && me.id && !list.some((x) => x.key === me.id)) list.unshift({ key: me.id, name: me.username || me.id, label: `${me.username || me.id} (on botc.app now)` });
-  select.innerHTML = `<option value="">${list.length ? 'Choose your player…' : 'No players recorded yet'}</option>`
-    + list.map((x) => `<option value="${esc(x.key)}">${esc(x.label || x.name)}</option>`).join('');
+  select.replaceChildren(new Option(list.length ? 'Choose your player…' : 'No players recorded yet', ''), ...list.map((x) => new Option(x.label || x.name, x.key)));
   if (me && me.id) select.value = me.id;
   // Back to the form, as it was filled in.
   $('setup-back').onclick = () => { $('setup').hidden = true; $('gate').hidden = false; $('signin-msg').textContent = ''; };

@@ -1,5 +1,7 @@
 // Packages the extension for the Chrome Web Store: dist/clockwise-<version>.zip
 //   node scripts/pack.mjs
+// or for Firefox Add-ons (addons.mozilla.org): dist/clockwise-<version>-firefox.zip
+//   node scripts/pack.mjs --firefox
 // Refuses to package a build that isn't set up to share games (empty BACKEND_URL / WRITE_KEY), since everyone
 // who installs it would then only keep games to themselves.
 import fs from 'node:fs';
@@ -18,7 +20,8 @@ if (!process.argv.includes('--allow-unshared') && !(value('BACKEND_URL') && valu
 }
 const dist = path.join(root, 'dist');
 fs.mkdirSync(dist, { recursive: true });
-const zip = path.join(dist, `clockwise-${version}.zip`);
+const firefox = process.argv.includes('--firefox');
+const zip = path.join(dist, `clockwise-${version}${firefox ? '-firefox' : ''}.zip`);
 fs.rmSync(zip, { force: true });
 // The dashboard is the community website (built from these same files by build-web.mjs), so the extension itself
 // doesn't ship it: only what the manifest loads (the popup, the background, the content scripts) and everything
@@ -41,5 +44,29 @@ const follow = (file) => {
 scripts.forEach(follow);
 // Besides scripts: the icons, and the popup's fonts and images.
 const assets = ['icons', 'fonts', 'images'].filter((d) => fs.existsSync(path.join(ext, d)));
-execFileSync('zip', ['-r', '-X', '-q', zip, 'manifest.json', ...pages, ...needed, ...assets, '-x', '*.DS_Store'], { cwd: ext, stdio: 'inherit' });
+execFileSync('zip', ['-r', '-X', '-q', zip, ...(firefox ? [] : ['manifest.json']), ...pages, ...needed, ...assets, '-x', '*.DS_Store'], { cwd: ext, stdio: 'inherit' });
+if (firefox) {
+  const tmp = fs.mkdtempSync(path.join(dist, '.firefox-'));
+  fs.writeFileSync(path.join(tmp, 'manifest.json'), JSON.stringify(firefoxManifest(manifest), null, 2) + '\n');
+  execFileSync('zip', ['-X', '-q', zip, 'manifest.json'], { cwd: tmp, stdio: 'inherit' });
+  fs.rmSync(tmp, { recursive: true });
+}
 console.log(`wrote ${path.relative(root, zip)} (${Math.round(fs.statSync(zip).size / 1024)} KB)`);
+
+// Firefox runs the background as an event page rather than a service worker, needs a fixed add-on id, and asks
+// add-ons to declare what they send elsewhere (shown to people when they install it). 128 is the first version
+// that runs content scripts in the page's own world (page-hook.js), and 140 the first that shows the declaration.
+function firefoxManifest(m) {
+  const { service_worker, ...background } = m.background;
+  return {
+    ...m,
+    background: { ...background, scripts: [service_worker] },
+    browser_specific_settings: {
+      gecko: {
+        id: 'clockwise@myclockwise.com',
+        strict_min_version: '140.0',
+        data_collection_permissions: { required: ['websiteContent', 'personallyIdentifyingInfo', 'authenticationInfo'] },
+      },
+    },
+  };
+}
