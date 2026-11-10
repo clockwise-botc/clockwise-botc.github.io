@@ -1318,6 +1318,21 @@ function reviewBox(g) {
   return `<div class="gm-review"><p><b>Check this game</b> ${esc(reviewWhy(g))} If it isn't one of yours, exclude it from stats or delete it.</p><button class="btn small" data-confirm-community="${esc(g.id)}">Looks right</button></div>`;
 }
 
+// Who recorded a game, by botc.app name. Editors also see each one's Clockwise account, which can have another name.
+function recordedBy(g) {
+  const names = g.recorders && g.recorders.length ? g.recorders : g.capturedBy && g.capturedBy.username ? [g.capturedBy.username] : [];
+  if (!names.length) return 'unknown';
+  const accounts = Array.isArray(state.accounts) ? state.accounts : null;
+  return names.map((name) => {
+    if (!accounts) return esc(name);
+    const n = String(name).toLowerCase();
+    const seat = [g.capturedBy, ...g.storytellers, ...g.players].find((p) => p && p.userId && String(p.username || '').toLowerCase() === n);
+    const id = seat ? String(seat.userId) : knownId(name);
+    const acct = id && accounts.find((a) => a.claim && String(a.claim.player) === id);
+    return !acct ? `${esc(name)} <span class="muted">(no account)</span>` : acct.username.toLowerCase() === n ? esc(name) : `${esc(name)} (${esc(acct.username)})`;
+  }).join(', ');
+}
+
 function gameDetail(g) {
   // Games everyone sees need the editor key to change; games that are only in this browser don't.
   const canEdit = state.shared.canEdit || !!g.local;
@@ -1351,7 +1366,7 @@ function gameDetail(g) {
       <label class="gm-check"><input type="checkbox" data-exclude="${esc(g.id)}" ${g.excluded ? 'checked' : ''}><span><b>Exclude from stats</b><span>The game stays in this list but doesn't count towards any stats.</span></span></label>
       </fieldset>
       <div class="gm-foot">
-        <span class="muted">Room “${esc(g.room)}” · recorded by ${esc((g.recorders && g.recorders.length ? g.recorders.join(', ') : (g.capturedBy && g.capturedBy.username)) || 'unknown')}${g.pending ? ' · not uploaded yet' : ''}</span>
+        <span class="muted">Room “${esc(g.room)}” · recorded by <span data-recorded-by="${esc(g.id)}">${recordedBy(g)}</span>${g.pending ? ' · not uploaded yet' : ''}</span>
         ${canEdit ? `<button class="btn danger" data-delete="${esc(g.id)}">Delete game</button>` : ''}
       </div>
     </div>
@@ -1753,7 +1768,7 @@ function render() {
   if (sc && Math.abs(Number(sc.getAttribute('width')) - $('#sc-body').clientWidth) > 2) refreshScatter();
   fillRows();
   fitLists();
-  if (state.tab === 'data' && state.accounts === undefined && state.shared.on && state.shared.canEdit && creds(state.settings).editorKey) { state.accounts = null; loadAccounts(); }
+  if ((state.tab === 'data' || state.tab === 'games') && state.accounts === undefined && state.shared.on && state.shared.canEdit && creds(state.settings).editorKey) { state.accounts = null; loadAccounts(); }
 }
 
 // Every row of cards should be full. The page brings spare cards (data-spare, hidden); this shows as many as the last
@@ -2315,7 +2330,9 @@ document.addEventListener('submit', async (e) => {
 async function loadAccounts() {
   const r = await listAccounts(state.settings).catch((err) => ({ ok: false, message: err.message }));
   state.accounts = r.ok ? r.accounts : { error: r.message || 'Couldn\'t load the accounts.' };
+  // On the Games tab only the recorder lines change: redraw just those, so open games stay as they are.
   if (state.tab === 'data') render();
+  else if (state.tab === 'games') document.querySelectorAll('[data-recorded-by]').forEach((el) => { const g = state.games.find((x) => x.id === el.dataset.recordedBy); if (g) el.innerHTML = recordedBy(g); });
 }
 
 // "Change password" opens the form in place; Cancel closes and clears it.
