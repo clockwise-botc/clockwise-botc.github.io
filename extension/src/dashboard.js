@@ -1484,6 +1484,18 @@ function crumbs(G, base, sel) {
   return `<nav class="crumbs" aria-label="Where you are">${back}${sep}<span class="crumb-here">${esc(phrase)}</span></nav>`;
 }
 
+// The first download failed, so there's nothing to show yet (rather than "No games recorded yet").
+function loadFailed() {
+  const st = state.shared.status;
+  return `<div class="empty card load-failed"><h2>Couldn't load the games</h2><p>${esc(st.message || st.error)}</p><button class="btn primary" type="button" data-retry-sync>Try again</button></div>`;
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-retry-sync]')) return;
+  state.shared.status = null;
+  render();
+  syncShared();
+});
+
 function noGames() {
   return `<div class="empty card"><h2>No games recorded yet</h2><p>Keep botc.app open in a tab while you play. Each game is saved automatically when the storyteller reveals the grimoire.</p><p class="muted">Already have data? Import it from Settings.</p></div>`;
 }
@@ -1737,9 +1749,39 @@ function addTo(kind, value) {
 }
 
 // ---------- render ----------
+// While the games download: the tab's own layout, its cards shimmering at about the height they'll have (measured
+// at desktop width), so little moves when the games arrive. A number is a card's height; w is a wide card, a one
+// across the whole row, and [classes, cards] a row of its own (like My stats' four cards). dashboard.html starts out
+// with the Community one.
+const SKELETONS = {
+  stats: [['tiles', [167, 167, 167]], ['tiles', [167, 167, 167]], ['grid two', [403, 403, 403, 'w328', 328, 338, 338, 338, 317, 317, 317, 402, 'w402']]],
+  styles: [['tiles awards', [167, 167]], ['grid stack', ['a420', 'a480']]],
+  me: [['tiles', [167, 167, 167]], ['grid two', [['grid four', [417, 417, 417, 417]], 459, 459, 459, 'a250', 421, 421, 421, 'w374', 'a175', 'a154', 'a175', 374]]],
+};
+function skeleton(tab) {
+  const card = (h) => {
+    if (Array.isArray(h)) return `<div class="span-all"><div class="${h[0]}">${h[1].map(card).join('')}</div></div>`;
+    const [cls, px] = typeof h === 'string' ? [{ w: ' wide', a: ' span-all' }[h[0]], h.slice(1)] : ['', h];
+    return `<div class="card skel${cls}" style="height:${px}px"></div>`;
+  };
+  // A game in the list: when (two lines), the script and its details, the community and result pills.
+  const two = (a, b) => `<span><i style="width:${a}px"></i><i class="small" style="width:${b}px"></i></span>`;
+  const row = `<div class="skel-row">${two(86, 62)}${two(260, 120)}<span class="end"><i class="pill" style="width:58px"></i><i class="pill" style="width:82px"></i></span></div>`;
+  const body = tab === 'games'
+    ? `<nav class="crumbs"><i class="skel-bar" style="width:120px;height:30px"></i></nav><div class="card games-card"><span class="skel-intro"><i></i><i></i><i></i><i></i></span>${row.repeat(14)}</div>`
+    : (SKELETONS[tab] || SKELETONS.stats).map(([cls, cards]) => `<div class="${cls}">${cards.map(card).join('')}</div>`).join('');
+  return `<div class="loader" data-tab="${tab}" role="status"><span class="sr-only">Loading the games…</span>${body}</div>`;
+}
+
 function render() {
   // The website shows nothing but the sign-in until someone signs in (or an older visit saved the community password).
   const gate = WEB && (!state.shared.hasPassword || state.signin.open);
+  // Able to see everyone's games but none here yet, and the first download hasn't finished: still loading, not empty.
+  const waiting = !gate && !state.setup && !state.games.length && state.shared.on && state.shared.hasPassword;
+  const loading = waiting && !state.shared.status && state.tab !== 'data';
+  const failed = waiting && !!state.shared.status && !!state.shared.status.error && state.tab !== 'data';
+  // Nothing to filter after a failed download, so no filters (while loading they stay, so nothing moves).
+  document.body.classList.toggle('load-failed', failed);
   // Creating an account: the setup questions after the form (shown like the sign-in, without the tabs and filters).
   document.body.classList.toggle('signed-out', gate || !!state.setup);
   if (state.setup) { $('#filters').hidden = true; $('#view').innerHTML = setupView(); mountClaimPicker(); return; }
@@ -1757,6 +1799,9 @@ function render() {
   const scopeOnly = state.tab === 'styles' || state.tab === 'me';
   $('#clear-sel').hidden = scopeOnly ? !scopeOn() : !anyFilter(state.sel);
   document.body.classList.toggle('tab-me', state.tab === 'me');
+  // Left in place if it's already showing for this tab, so the shimmer runs on smoothly.
+  if (loading) { const tab = state.tab === 'styles' ? 'styles' : state.tab; if (!$(`#view .loader[data-tab="${tab}"]`)) $('#view').innerHTML = skeleton(tab); return; }
+  if (failed) { $('#view').innerHTML = loadFailed(); return; }
   const views = { stats: statsView, me: myView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
   keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() + pickPrompt() : '') + views[state.tab](); });
   // Editors' account list loads the first time Settings is opened.

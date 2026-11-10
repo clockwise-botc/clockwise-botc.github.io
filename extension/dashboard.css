@@ -202,6 +202,35 @@ details.game .body { padding: 8px 4px 22px; display: grid; gap: 16px; }
 .empty { text-align: center; padding: 64px 20px; color: var(--ink-2); }
 .empty h2 { margin-bottom: 8px; }
 
+/* Loading: the tab's layout with its cards shimmering (dashboard.js skeleton()). The highlight is fixed to the window,
+   so one sweep runs across every card together. */
+body.load-failed #filters { display: none; }
+.card.skel, .skel-bar, .skel-row i, .skel-intro i { background-image: linear-gradient(100deg, transparent 35%, var(--wash) 50%, transparent 65%);
+  background-attachment: fixed; background-size: 300% 100%; animation: shimmer 1.8s ease-in-out infinite; }
+.card.skel { padding: 0; background-color: var(--surface); }
+.skel-bar, .skel-row i, .skel-intro i { display: block; border-radius: 999px; background-color: var(--surface-2); }
+/* The games list's intro (one line, four on a phone) and rows, laid out like details.game summary. */
+.skel-intro { display: grid; gap: 7px; margin: 3px 0 18px; }
+.skel-intro i { width: min(62%, 640px); height: 14px; }
+.skel-intro i + i { display: none; }
+.games-card .skel-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 14px; align-items: center; height: 77px; padding: 0 12px; border-bottom: 1px solid var(--grid); }
+.games-card .skel-row:last-child { border-bottom: 0; }
+.skel-row > span { display: grid; gap: 9px; min-width: 0; }
+.skel-row i { height: 14px; max-width: 100%; }
+.skel-row i.small { height: 11px; }
+.skel-row .end { display: flex; gap: 8px; }
+.skel-row i.pill { height: 24px; }
+@media (max-width: 640px) {
+  .tiles > .card.skel { height: 154px !important; }
+  .skel-intro i { width: 100%; }
+  .skel-intro i + i { display: block; }
+  .skel-intro i:last-child { width: 30%; }
+  .games-card .skel-row { grid-template-columns: 1fr; align-content: center; gap: 12px; height: 154px; }
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .card.skel, .skel-bar, .skel-row i, .skel-intro i { animation: none; } }
+.load-failed .btn { margin-top: 14px; }
+
 #tooltip { position: fixed; z-index: 50; pointer-events: none; background: var(--hero-2); color: #f6ecd9; border-radius: 10px; padding: 7px 11px; font-size: 12.5px; max-width: 300px; white-space: pre-line; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
 
 @media (max-width: 640px) {

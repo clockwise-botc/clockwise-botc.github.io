@@ -28,10 +28,13 @@ const idb = (mode, fn) => new Promise((resolve, reject) => {
   open.onupgradeneeded = () => open.result.createObjectStore('kv');
   open.onerror = () => reject(open.error);
   open.onsuccess = () => {
-    const tx = open.result.transaction('kv', mode);
-    const req = fn(tx.objectStore('kv'));
-    tx.oncomplete = () => resolve(req && req.result);
-    tx.onerror = () => reject(tx.error);
+    // A database without the store (made by something else) throws here: go without the saved copy rather than hang.
+    try {
+      const tx = open.result.transaction('kv', mode);
+      const req = fn(tx.objectStore('kv'));
+      tx.oncomplete = () => resolve(req && req.result);
+      tx.onerror = () => reject(tx.error);
+    } catch (e) { reject(e); }
   };
 });
 
