@@ -2,8 +2,8 @@
 // seats in a circle with botc.app's character tokens, death shrouds, nameplates, and the
 // storyteller's reminder tokens. Images come from botc.app (see images.js); if one can't load,
 // the token falls back to its name on a plain disc.
-import { esc, cap, teamOne, phaseLabel } from './ui.js?v=f648e9c783';
-import { characterToken, reminderToken } from './tokens.js?v=f648e9c783';
+import { esc, cap, teamOne, phaseLabel } from './ui.js?v=d47edf916c';
+import { characterToken, reminderToken } from './tokens.js?v=d47edf916c';
 
 const GOOD_TEAMS = ['townsfolk', 'outsider'];
 const EVIL_TEAMS = ['minion', 'demon'];
