@@ -1,8 +1,8 @@
 // The "Data & settings" view: export (and import), your account and communities, the editor key; in the extension
 // also this browser's uploads and stored games, and its Escape & Rhap rooms.
-import { toTables, toCSV, COLUMNS } from './tables.js?v=4a05a56d1c';
-import { communityConfig, communityName, slug, NONE } from './communities.js?v=4a05a56d1c';
-import { esc, fmtDate, fmtTime, plural } from './ui.js?v=4a05a56d1c';
+import { toTables, toCSV, COLUMNS } from './tables.js?v=3e586c05f0';
+import { communityConfig, communityName, slug, NONE } from './communities.js?v=3e586c05f0';
+import { esc, fmtDate, fmtTime, plural } from './ui.js?v=3e586c05f0';
 
 export function renderData(ctx, filteredGames) {
   const { state } = ctx;
@@ -51,7 +51,7 @@ function sharedCard(ctx) {
     : 'Enter the community password to see everyone\'s games.';
   if (!tools.WEB && !sh.account) {
     return `<div class="card account"><h3>Your account</h3>
-      <p class="sub">${sh.on ? 'Not signed in. Click the Clockwise icon in Chrome\'s toolbar to sign in; you only need to do it once.' : 'This copy of Clockwise isn\'t set up to share games, so they stay in this browser.'}</p></div>`;
+      <p class="sub">${sh.on ? 'Not signed in. Click the Clockwise icon in your browser\'s toolbar to sign in; you only need to do it once.' : 'This copy of Clockwise isn\'t set up to share games, so they stay in this browser.'}</p></div>`;
   }
   const who = sh.account
     ? `<p class="sub">Signed in as <b>${esc(sh.account.username)}</b>.</p>
