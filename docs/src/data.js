@@ -3,8 +3,8 @@
 //   Extension, sharing: everyone's games from the shared store, plus this browser's games not uploaded yet.
 //   Website (community dashboard): everyone's games, after the community password.
 // Downloads are cached (chrome.storage in the extension, IndexedDB on the website) and topped up incrementally.
-import { BACKEND_URL, SITE_URL } from './config.js?v=3e586c05f0';
-import { call, pull, ping, editPatch } from './shared.js?v=3e586c05f0';
+import { BACKEND_URL, SITE_URL } from './config.js?v=0563a3ea68';
+import { call, pull, ping, editPatch } from './shared.js?v=0563a3ea68';
 
 // Set by web-config.js on the community website.
 export const WEB = (typeof window !== 'undefined' && window.CLOCKWISE_WEB) || null;
@@ -28,10 +28,13 @@ const idb = (mode, fn) => new Promise((resolve, reject) => {
   open.onupgradeneeded = () => open.result.createObjectStore('kv');
   open.onerror = () => reject(open.error);
   open.onsuccess = () => {
-    const tx = open.result.transaction('kv', mode);
-    const req = fn(tx.objectStore('kv'));
-    tx.oncomplete = () => resolve(req && req.result);
-    tx.onerror = () => reject(tx.error);
+    // A database without the store (made by something else) throws here: go without the saved copy rather than hang.
+    try {
+      const tx = open.result.transaction('kv', mode);
+      const req = fn(tx.objectStore('kv'));
+      tx.oncomplete = () => resolve(req && req.result);
+      tx.onerror = () => reject(tx.error);
+    } catch (e) { reject(e); }
   };
 });
 

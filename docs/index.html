@@ -6,7 +6,7 @@
   <title>Clockwise</title>
   <meta name="robots" content="noindex">
   <link rel="icon" href="icons/icon-32.png">
-  <link rel="stylesheet" href="dashboard.css?v=3e586c05f0">
+  <link rel="stylesheet" href="dashboard.css?v=0563a3ea68">
 </head>
 <body>
   <!-- The curve token names run along (same as botc.app's), shared by every token on the page. -->
@@ -45,9 +45,16 @@
   </section>
 
   <p class="update-banner" id="update-banner" hidden></p>
-  <main id="view"></main>
+  <!-- What shows until the games are in: the Community tab's loading skeleton (dashboard.js skeleton('stats')). -->
+  <main id="view">
+    <div class="loader" data-tab="stats" role="status"><span class="sr-only">Loading the games…</span>
+      <div class="tiles"><div class="card skel" style="height:167px"></div><div class="card skel" style="height:167px"></div><div class="card skel" style="height:167px"></div></div>
+      <div class="tiles"><div class="card skel" style="height:167px"></div><div class="card skel" style="height:167px"></div><div class="card skel" style="height:167px"></div></div>
+      <div class="grid two"><div class="card skel" style="height:403px"></div><div class="card skel" style="height:403px"></div><div class="card skel" style="height:403px"></div><div class="card skel wide" style="height:328px"></div><div class="card skel" style="height:328px"></div><div class="card skel" style="height:338px"></div><div class="card skel" style="height:338px"></div><div class="card skel" style="height:338px"></div><div class="card skel" style="height:317px"></div><div class="card skel" style="height:317px"></div><div class="card skel" style="height:317px"></div><div class="card skel" style="height:402px"></div><div class="card skel wide" style="height:402px"></div></div>
+    </div>
+  </main>
   <div id="tooltip" role="tooltip" hidden></div>
-  <script src="web-config.js?v=3e586c05f0"></script>
-  <script type="module" src="src/dashboard.js?v=3e586c05f0"></script>
+  <script src="web-config.js?v=0563a3ea68"></script>
+  <script type="module" src="src/dashboard.js?v=0563a3ea68"></script>
 </body>
 </html>
