@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=0563a3ea68';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=0563a3ea68';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=0563a3ea68';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=0563a3ea68';
-import { communityMembers } from './members.js?v=0563a3ea68';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=0563a3ea68';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=0563a3ea68';
-import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=0563a3ea68';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=0563a3ea68';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=0563a3ea68';
-import { renderGrimoire } from './grimoire.js?v=0563a3ea68';
-import { makeImages } from './images.js?v=0563a3ea68';
-import { characterToken, installTokenStyle } from './tokens.js?v=0563a3ea68';
-import { multiSelect } from './multiselect.js?v=0563a3ea68';
-import { ALL_CHARACTERS } from './characters.js?v=0563a3ea68';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=0563a3ea68';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=f648e9c783';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=f648e9c783';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=f648e9c783';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=f648e9c783';
+import { communityMembers } from './members.js?v=f648e9c783';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=f648e9c783';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=f648e9c783';
+import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=f648e9c783';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=f648e9c783';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=f648e9c783';
+import { renderGrimoire } from './grimoire.js?v=f648e9c783';
+import { makeImages } from './images.js?v=f648e9c783';
+import { characterToken, installTokenStyle } from './tokens.js?v=f648e9c783';
+import { multiSelect } from './multiselect.js?v=f648e9c783';
+import { ALL_CHARACTERS } from './characters.js?v=f648e9c783';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=f648e9c783';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -224,16 +224,25 @@ function storytellerTable(games) {
 // A name as a tile's big value, shrunk to fit long names.
 const tileName = (key, name) => `<span style="font-size:${Math.min(1, 11 / Math.max(1, [...name].length)).toFixed(2)}em">${playerLink(key, name)}</span>`;
 
-// Whoever drew the most evil tokens (Minion or Demon, the character they started with) in these games. A tie goes to
-// whoever drew them in fewer games, then the name.
+// "about 4 more than the odds", from how many more evil tokens they drew than their games' setups would give.
+function aboutOver(r) {
+  const n = Math.round(r.over);
+  return n >= 1 ? `about ${n} more than the odds` : 'a little more than the odds';
+}
+
+// Whoever drew the most evil tokens (Minion or Demon, the character they started with) beyond the odds in these games:
+// how many they drew, less how many the setups of their games would give them on average. So playing more games
+// doesn't win it by itself, and nor do a few lucky draws. Nobody, if no one drew more than the odds. A tie goes to
+// whoever did it in fewer games, then the name.
 function mostEvilDrawn(base) {
   const seats = new Map();
   for (const g of base) for (const p of g.players) { const k = playerKey(p); if (k && isMember(k)) (seats.get(k) || seats.set(k, []).get(k)).push({ g, p }); }
   let best = null;
   for (const [key, list] of seats) {
     const d = tokenDraws(list);
-    const r = { key, name: nameOf(key), n: d.evil.n, games: d.games };
-    if (r.n > 0 && (!best || r.n > best.n || (r.n === best.n && (r.games < best.games || (r.games === best.games && r.name.localeCompare(best.name) < 0))))) best = r;
+    const expected = d.evil.chance * d.games;
+    const r = { key, name: nameOf(key), n: d.evil.n, games: d.games, expected, over: d.evil.n - expected };
+    if (r.over > 0.05 && (!best || r.over > best.over + 1e-9 || (Math.abs(r.over - best.over) <= 1e-9 && (r.games < best.games || (r.games === best.games && r.name.localeCompare(best.name) < 0))))) best = r;
   }
   return best;
 }
@@ -1659,7 +1668,7 @@ function statsView() {
     // Without the win rate spotlights (for someone who hides win rates), the highlight goes on the games.
     tile('Games', o.n, G.length ? `${fmtDate(G[G.length - 1].endedAt)} – ${fmtDate(G[0].endedAt)}` : '', iAmQuiet() ? 'hero feature' : 'hero'),
     lengthTile(G, o),
-    evilDrawn ? tile('Most evil tokens drawn', tileName(evilDrawn.key, evilDrawn.name), `${plural(evilDrawn.n, 'evil token')} in ${plural(evilDrawn.games, 'game')}`, 'highlight') : '',
+    evilDrawn ? tile('Most evil tokens drawn', tileName(evilDrawn.key, evilDrawn.name), `${plural(evilDrawn.n, 'evil token')} in ${plural(evilDrawn.games, 'game')}, ${aboutOver(evilDrawn)}`, 'highlight') : '',
   ];
   const pr = wantsPrediction(G, base, sel) ? predictOutcome(base, sel.characters, { tune: tunedFor(base) }) : null;
   if (pr) {
