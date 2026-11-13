@@ -232,7 +232,7 @@ function aboutOver(r) {
 
 // Whoever drew the most evil tokens (Minion or Demon, the character they started with) beyond the odds: how many they
 // drew, less how many the setups of their games would give them on average. Like the win rate spotlights, over the
-// last SPOTLIGHT_DAYS, among players with enough games in that time (SPOTLIGHT_MIN.all, or 30% of the most anyone
+// last SPOTLIGHT_DAYS, among players with enough games in that time (EVIL_DRAWN_MIN, or 30% of the most anyone
 // played, whichever is more). { best, min }: best is nobody if no one drew more than the odds. A tie goes to whoever
 // did it in fewer games, then the name.
 function mostEvilDrawn(base) {
@@ -246,7 +246,7 @@ function mostEvilDrawn(base) {
     const d = tokenDraws(list);
     return { key, name: nameOf(key), n: d.evil.n, games: d.games, over: d.evil.n - d.evil.chance * d.games };
   });
-  const min = Math.max(SPOTLIGHT_MIN.all, Math.ceil(0.3 * Math.max(0, ...rows.map((r) => r.games))));
+  const min = Math.max(EVIL_DRAWN_MIN, Math.ceil(0.3 * Math.max(0, ...rows.map((r) => r.games))));
   let best = null;
   for (const r of rows) {
     if (r.games < min || !(r.over > 0.05)) continue;
@@ -262,39 +262,50 @@ function evilDrawnTile({ best, min }) {
     : tile(title, '–', `no one with ${min}+ games drew evil beyond the odds in the last ${SPOTLIGHT_DAYS} days`, 'highlight');
 }
 
-// The win rate spotlights: the best record over the last 30 days, overall, as good and as evil, among players with
-// enough games in that time: at least SPOTLIGHT_MIN (fewer as evil, since evil comes up less often), or 30% of the
-// most anyone played on that side in the window, whichever is more. The window moves with each day,
-// so who's featured changes over time. A tie goes to whoever has more games behind the rate, then whoever played
-// most recently, then the name. Players who hide their win rates, and players who aren't members of the communities
-// being looked at (members.js), are left out; someone who hides theirs sees none.
+// The win rate spotlights: the best record over the last 30 days, overall, as good and as evil. The window moves with
+// each day, so who's featured changes over time. Players need SPOTLIGHT_MIN games on that side in the window (fewer as
+// good and as evil, in line with how often each comes up), and are ranked by their win rate pulled toward the group's
+// on that side by SPOTLIGHT_PRIOR pretend games at the group's rate, (wins + k × group rate) / (games + k): their own
+// games count for half at k games. So a short hot streak can't win outright and a rate kept up over more games counts
+// for more, while it's still a rate: playing more doesn't earn anything by itself. The tile shows the winner's own
+// win rate, not the pulled one. A tie goes to whoever has more games behind the rate, then whoever played most
+// recently, then the name. Players who hide their win rates, and players who aren't members of the communities
+// being looked at (members.js), are left out (their seats still count towards the group's rate); someone who hides
+// theirs sees none.
 const SPOTLIGHT_DAYS = 30;
-const SPOTLIGHT_MIN = { all: 5, good: 4, evil: 3 };
+const SPOTLIGHT_MIN = { all: 10, good: 7, evil: 3 };
+const SPOTLIGHT_PRIOR = { all: 20, good: 15, evil: 10 };
+// Most evil tokens drawn keeps its own minimum.
+const EVIL_DRAWN_MIN = 5;
 function spotlightTiles(base) {
   if (iAmQuiet()) return '';
   const since = Date.now() - SPOTLIGHT_DAYS * 864e5;
   const recs = new Map();
+  // Everyone's seats in the window, for the group's rate on each side.
+  const group = { all: { plays: 0, wins: 0 }, good: { plays: 0, wins: 0 }, evil: { plays: 0, wins: 0 } };
   for (const g of base) {
     if (!(g.endedAt >= since)) continue;
     for (const p of g.players) {
+      if (p.won !== true && p.won !== false) continue;
+      for (const side of ['all', p.alignment]) if (group[side]) { group[side].plays++; if (p.won) group[side].wins++; }
       const k = playerKey(p);
-      if (!k || quietPlayers.has(k) || !isMember(k) || (p.won !== true && p.won !== false)) continue;
+      if (!k || quietPlayers.has(k) || !isMember(k)) continue;
       const r = recs.get(k) || recs.set(k, { key: k, name: nameOf(k), last: 0, all: { plays: 0, wins: 0 }, good: { plays: 0, wins: 0 }, evil: { plays: 0, wins: 0 } }).get(k);
       r.last = Math.max(r.last, g.endedAt);
       for (const side of ['all', p.alignment]) if (r[side]) { r[side].plays++; if (p.won) r[side].wins++; }
     }
   }
-  const minFor = (side) => Math.max(SPOTLIGHT_MIN[side], Math.ceil(0.3 * Math.max(0, ...[...recs.values()].map((r) => r[side].plays))));
-  const best = (side) => [...recs.values()].filter((r) => r[side].plays >= minFor(side) && r[side].wins > 0)
-    .sort((a, b) => b[side].wins / b[side].plays - a[side].wins / a[side].plays || b[side].plays - a[side].plays || b.last - a.last || a.name.localeCompare(b.name))[0];
+  const score = (side, r) => (r[side].wins + SPOTLIGHT_PRIOR[side] * (group[side].wins / group[side].plays)) / (r[side].plays + SPOTLIGHT_PRIOR[side]);
+  const best = (side) => [...recs.values()].filter((r) => r[side].plays >= SPOTLIGHT_MIN[side] && r[side].wins > 0)
+    .sort((a, b) => score(side, b) - score(side, a) || b[side].plays - a[side].plays || b.last - a.last || a.name.localeCompare(b.name))[0];
   // The overall one carries the page's highlight.
   const spot = (side, label, as) => {
     const r = best(side);
     const cls = `highlight spot spot-${side}${side === 'all' ? ' feature' : ''}`;
-    const tip = `Over the last ${SPOTLIGHT_DAYS} days, among players with at least ${minFor(side)} games${as ? ` ${as}` : ''} in that time.`;
+    const tip = `Over the last ${SPOTLIGHT_DAYS} days, among players with at least ${SPOTLIGHT_MIN[side]} games${as ? ` ${as}` : ''} in that time. With fewer games, a rate counts for less: it's pulled toward the group's (halfway at ${SPOTLIGHT_PRIOR[side]} games).`;
     const title = `${label} <span class="info" data-tip="${esc(tip)}" aria-label="${esc(tip)}">ⓘ</span>`;
     return r ? tile(title, tileName(r.key, r.name), `won ${pct(r[side].wins / r[side].plays)} of ${plural(r[side].plays, 'game')}${as ? ` ${as}` : ''} · last ${SPOTLIGHT_DAYS} days`, cls)
-      : tile(title, '–', `no one with ${minFor(side)}+ games${as ? ` ${as}` : ''} in the last ${SPOTLIGHT_DAYS} days`, cls);
+      : tile(title, '–', `no one with ${SPOTLIGHT_MIN[side]}+ games${as ? ` ${as}` : ''} in the last ${SPOTLIGHT_DAYS} days`, cls);
   };
   return `<div class="tiles spotlights">${spot('all', 'Highest win rate', '')}${spot('good', 'Highest win rate as good', 'as good')}${spot('evil', 'Highest win rate as evil', 'as evil')}</div>`;
 }
