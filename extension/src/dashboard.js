@@ -274,8 +274,8 @@ function evilDrawnTile({ best, min }) {
 // being looked at (members.js), are left out (their seats still count towards the group's rate); someone who hides
 // theirs sees none.
 const SPOTLIGHT_DAYS = 30;
-const SPOTLIGHT_MIN = { all: 10, good: 7, evil: 3 };
-const SPOTLIGHT_PRIOR = { all: 15, good: 10, evil: 7 };
+const SPOTLIGHT_MIN = { all: 10, good: 7, evil: 5 };
+const SPOTLIGHT_PRIOR = { all: 20, good: 15, evil: 10 };
 // Most evil tokens drawn keeps its own minimum.
 const EVIL_DRAWN_MIN = 5;
 function spotlightTiles(base) {
