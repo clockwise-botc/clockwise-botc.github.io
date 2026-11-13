@@ -268,7 +268,7 @@ function evilDrawnTile({ best, min }) {
 // on that side by SPOTLIGHT_PRIOR pretend games at the group's rate, (wins + k × group rate) / (games + k): their own
 // games count for half at k games. So a short hot streak can't win outright and a rate kept up over more games counts
 // for more, while it's still a rate: playing more doesn't earn anything by itself. The tile shows the winner's own
-// win rate, not the pulled one. A tie goes to whoever has more games behind the rate, then whoever played most
+// win rate, not the pulled one, and the tip says it in plain words (no numbers for the pull). A tie goes to whoever has more games behind the rate, then whoever played most
 // recently, then the name. Players who hide their win rates, and players who aren't members of the communities
 // being looked at (members.js), are left out (their seats still count towards the group's rate); someone who hides
 // theirs sees none.
@@ -302,7 +302,7 @@ function spotlightTiles(base) {
   const spot = (side, label, as) => {
     const r = best(side);
     const cls = `highlight spot spot-${side}${side === 'all' ? ' feature' : ''}`;
-    const tip = `Over the last ${SPOTLIGHT_DAYS} days, among players with at least ${SPOTLIGHT_MIN[side]} games${as ? ` ${as}` : ''} in that time. With fewer games, a rate counts for less: it's pulled toward the group's (halfway at ${SPOTLIGHT_PRIOR[side]} games).`;
+    const tip = `Over the last ${SPOTLIGHT_DAYS} days, among players with at least ${SPOTLIGHT_MIN[side]} games${as ? ` ${as}` : ''} in that time. A win rate over more games counts for more, so a short hot streak doesn't take the award.`;
     const title = `${label} <span class="info" data-tip="${esc(tip)}" aria-label="${esc(tip)}">ⓘ</span>`;
     return r ? tile(title, tileName(r.key, r.name), `won ${pct(r[side].wins / r[side].plays)} of ${plural(r[side].plays, 'game')}${as ? ` ${as}` : ''} · last ${SPOTLIGHT_DAYS} days`, cls)
       : tile(title, '–', `no one with ${SPOTLIGHT_MIN[side]}+ games${as ? ` ${as}` : ''} in the last ${SPOTLIGHT_DAYS} days`, cls);
