@@ -266,7 +266,7 @@ function evilDrawnTile({ best, min }) {
 // each day, so who's featured changes over time. Players need SPOTLIGHT_MIN games on that side in the window (fewer as
 // good and as evil, in line with how often each comes up), and are ranked by their win rate pulled toward the group's
 // on that side by SPOTLIGHT_PRIOR pretend games at the group's rate, (wins + k × group rate) / (games + k): their own
-// games count for half at k games. So a short hot streak can't win outright and a rate kept up over more games counts
+// games count for half at k games (k = 10 on every side, the same as the other awards). So a short hot streak can't win outright and a rate kept up over more games counts
 // for more, while it's still a rate: playing more doesn't earn anything by itself. The tile shows the winner's own
 // win rate, not the pulled one, and the tip says it in plain words (no numbers for the pull). A tie goes to whoever has more games behind the rate, then whoever played most
 // recently, then the name. Players who hide their win rates, and players who aren't members of the communities
@@ -274,7 +274,7 @@ function evilDrawnTile({ best, min }) {
 // theirs sees none.
 const SPOTLIGHT_DAYS = 30;
 const SPOTLIGHT_MIN = { all: 10, good: 7, evil: 3 };
-const SPOTLIGHT_PRIOR = { all: 20, good: 15, evil: 10 };
+const SPOTLIGHT_PRIOR = 10;
 // Most evil tokens drawn keeps its own minimum.
 const EVIL_DRAWN_MIN = 5;
 function spotlightTiles(base) {
@@ -295,7 +295,7 @@ function spotlightTiles(base) {
       for (const side of ['all', p.alignment]) if (r[side]) { r[side].plays++; if (p.won) r[side].wins++; }
     }
   }
-  const score = (side, r) => (r[side].wins + SPOTLIGHT_PRIOR[side] * (group[side].wins / group[side].plays)) / (r[side].plays + SPOTLIGHT_PRIOR[side]);
+  const score = (side, r) => (r[side].wins + SPOTLIGHT_PRIOR * (group[side].wins / group[side].plays)) / (r[side].plays + SPOTLIGHT_PRIOR);
   const best = (side) => [...recs.values()].filter((r) => r[side].plays >= SPOTLIGHT_MIN[side] && r[side].wins > 0)
     .sort((a, b) => score(side, b) - score(side, a) || b[side].plays - a[side].plays || b.last - a.last || a.name.localeCompare(b.name))[0];
   // The overall one carries the page's highlight.
