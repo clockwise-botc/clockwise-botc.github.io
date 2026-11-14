@@ -138,6 +138,9 @@
       try { return JSON.parse(sessionStorage.getItem(SAVE_KEY)) || null; } catch { return null; }
     }
 
+    // A public lobby (the storyteller listed it on botc.app for anyone to join).
+    const lobbyPublic = () => !!(S.session.meta && S.session.meta.isPublic);
+
     function status() {
       const g = S.game;
       emit('status', {
@@ -158,6 +161,7 @@
         // Who's at the table (seated, not travellers) and storytelling: the popup works out the community from them.
         seated: S.players.players.filter((p) => p.id && !(current && current.travellers && current.travellers[p.id])).map((p) => p.id),
         storytellers: S.players.storytellers.map((st) => st.id).filter(Boolean),
+        publicLobby: lobbyPublic() || !!(current && current.publicLobby),
         nominations: current ? current.nominations.length : 0,
         at: Date.now(),
       });
@@ -280,6 +284,8 @@
 
       if (!current || current.key !== startKeyOf(start)) newGame(start);
       adoptRoom();
+      // Public at any point while we watched it counts as a public game.
+      if (lobbyPublic() && !current.publicLobby) { current.publicLobby = true; persist(); }
       const hasEnd = history.some((h) => h.type === 'end');
       if (current.alreadyOver) {
         if (hasEnd) { persist(); status(); return; }
@@ -422,6 +428,7 @@
         departedTravellers: departed,
         nominations: current.nominations,
         deaths: current.deaths.map((d) => ({ ...d, username: username(d.userId) })),
+        publicLobby: !!(current.publicLobby || lobbyPublic()),
         capturedBy: { userId: me.id || null, username: me.username || null, asStoryteller: hasGrimoireAccess() },
         capturedAt: Date.now(),
       };

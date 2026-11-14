@@ -118,6 +118,20 @@ check('an editor can fix who won, and each player\'s result follows', () => {
   for (const p of sided) assert.equal(p.won, p.alignment === flip);
 });
 
+check('public players: editors keep the list, and every read carries it', () => {
+  const { handle } = loadBackend();
+  assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, keys, 1).publicPlayers, []);
+  assert.equal(handle({ action: 'set-public-players', key: 'write-key', players: [{ name: 'x' }] }, keys, 2).ok, false);
+  assert.equal(handle({ action: 'set-public-players', key: 'view-pass', players: [{ name: 'x' }] }, keys, 2).ok, false);
+  const r = handle({ action: 'set-public-players', key: 'editor-key', players: [{ id: '9064878604442', name: 'Nannerz ' }, { name: 'LoganTheTacoman' }, { name: 'nannerz' }, {}] }, keys, 3);
+  assert.ok(r.ok);
+  assert.deepEqual(r.publicPlayers, [{ id: '9064878604442', name: 'Nannerz' }, { id: '', name: 'LoganTheTacoman' }]);
+  assert.deepEqual(handle({ action: 'read', key: 'view-pass', since: 5 }, keys, 6).publicPlayers, r.publicPlayers);
+  assert.equal(handle({ action: 'set-public-players', key: 'editor-key', players: 'nope' }, keys, 7).ok, false);
+  handle({ action: 'set-public-players', key: 'editor-key', players: [] }, keys, 8);
+  assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, keys, 9).publicPlayers, []);
+});
+
 check('deleted games stay deleted, and readers are told', () => {
   const { handle, store } = loadBackend();
   handle({ action: 'record', key: 'write-key', games: [full, games[1]] }, keys, 1);

@@ -95,18 +95,31 @@ async function history(settings, { wait = false } = {}) {
 // For a room and who's at the table: { community, why } where why is 'chosen' (picked by hand for the room), 'room'
 // (the community's own room), 'storyteller' or 'players' (who's there, members.js), or null with no community:
 // the game isn't recorded unless someone picks one.
-async function defaultCommunity(settings, room, who, { self = null, wait = false } = {}) {
+// A game in a public lobby (anyone on botc.app could join), or with one of the public players in it (a list editors
+// keep on the website, which comes with the shared games), is only matched by who's there to the recorder's own
+// communities, not the shared ones like Rhap: their regulars turn up in public games too. Picked by hand, or played in
+// a community's own room, still counts. `players`: everyone in the game as { id, name }, travellers too (the popup
+// only knows the ids of who's seated). Matched by botc.app account id or by name.
+async function defaultCommunity(settings, room, who, { self = null, wait = false, publicLobby = false, players = (who.seated || []).map((id) => ({ id })) } = {}) {
   if (isManual(settings, room)) return { community: communityForRoom(settings, room), why: 'chosen' };
   const own = automaticCommunity(settings, room);
   if (own) return { community: own, why: 'room' };
-  const fit = suggestCommunity(communityConfig(settings), who, await history(settings, { wait }), { self });
-  return fit ? { community: fit.id, why: fit.why } : { community: null, why: null };
+  const hist = await history(settings, { wait });
+  const list = ((await loadShared()) || {}).publicPlayers || [];
+  const isPublic = (p) => list.some((x) => (x.id && String(p.id || '') === x.id) || (x.name && String(p.name || '').toLowerCase() === x.name.toLowerCase()));
+  const cfg = communityConfig(settings);
+  publicLobby = publicLobby || players.some(isPublic);
+  const among = publicLobby ? { ...cfg, communities: cfg.communities.filter((c) => c.own) } : cfg;
+  const fit = suggestCommunity(among, who, hist, { self });
+  return fit ? { community: fit.id, why: fit.why } : { community: null, why: publicLobby ? 'public' : null };
 }
 
 async function upsertGame(game) {
+  await Promise.race([refreshAccount(), new Promise((r) => setTimeout(r, 5000))]).catch(() => {});
   const settings = await getSettings();
   if (!signedIn(settings)) return;
-  const auto = await defaultCommunity(settings, game.room, whoOf(game), { self: game.id, wait: true });
+  const players = (game.players || []).map((p) => ({ id: p.userId, name: p.username }));
+  const auto = await defaultCommunity(settings, game.room, whoOf(game), { self: game.id, wait: true, publicLobby: !!game.publicLobby, players });
   await locked(async () => {
     const games = await getGames();
     const prev = games[game.id];
@@ -145,6 +158,23 @@ async function autoClaim(who) {
   if (!r.account.claim) await call(url, { action: 'claim', token: s.accountToken, player: String(who.userId), name: who.username || '' });
   const { settings = {} } = await chrome.storage.local.get('settings');
   await chrome.storage.local.set({ settings: { ...settings, autoClaimedFor: s.accountName } });
+}
+
+// The communities on your account (made on the website) are copied here when you sign in. Fetch them again when
+// that copy is more than a few minutes old, so one made since then counts for the next game. Gives up quietly offline.
+const ACCOUNT_MAX_AGE = 10 * 60e3;
+let accountAt = 0;
+async function refreshAccount() {
+  const s = await getSettings();
+  const { url } = await backend();
+  if (!url || !s.accountToken || Date.now() - accountAt < ACCOUNT_MAX_AGE) return;
+  accountAt = Date.now();
+  const r = await call(url, { action: 'ping', token: s.accountToken }).catch(() => null);
+  if (!r || !r.ok || !r.account) return;
+  const { settings = {} } = await chrome.storage.local.get('settings');
+  if (settings.accountToken !== s.accountToken) return; // signed in or out meanwhile
+  const communities = r.account.communities || [];
+  if (JSON.stringify(communities) !== JSON.stringify(settings.accountCommunities || [])) await chrome.storage.local.set({ settings: { ...settings, accountCommunities: communities } });
 }
 
 async function voidGame(id) {
@@ -246,8 +276,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return refreshAssetMap(!!msg.force);
       case 'community:get': {
         // What the popup's dropdown starts on: the game being played (or the next one), from who's at the table.
+        await Promise.race([refreshAccount(), new Promise((r) => setTimeout(r, 2500))]).catch(() => {});
         const settings = await getSettings();
-        return { ok: true, ...(await defaultCommunity(settings, msg.room, { seated: msg.seated || [], storytellers: msg.storytellers || [] })) };
+        return { ok: true, ...(await defaultCommunity(settings, msg.room, { seated: msg.seated || [], storytellers: msg.storytellers || [] }, { publicLobby: !!msg.publicLobby })) };
       }
       case 'skip:get':
         return { ok: true, ...(await skipState(msg.room, msg.gameId, msg.inGame)) };

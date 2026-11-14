@@ -23,7 +23,7 @@ async function showCommunity(room) {
   const kind = (st && st.kind) || (ask.inGame ? 'current' : 'next');
   // The game that just ended: what it was saved with. Otherwise: who's at the table now.
   const def = st && st.kind === 'last' ? { community: st.community || null, why: st.autoSkipped ? null : 'saved' }
-    : await chrome.runtime.sendMessage({ type: 'community:get', room, seated: (liveTab && liveTab.seated) || [], storytellers: (liveTab && liveTab.storytellers) || [] }).catch(() => ({ community: communityForRoom(settings, room), why: 'room' }));
+    : await chrome.runtime.sendMessage({ type: 'community:get', room, seated: (liveTab && liveTab.seated) || [], storytellers: (liveTab && liveTab.storytellers) || [], publicLobby: !!(liveTab && liveTab.publicLobby) }).catch(() => ({ community: communityForRoom(settings, room), why: 'room' }));
   const current = def.community || null;
   // A room switched off in an older version: recorded, without a community.
   const legacyNone = !current && def.why === 'chosen';

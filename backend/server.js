@@ -128,8 +128,18 @@ function handle_(body, store, keys, now) {
         accountPlayers: Object.keys(byPlayer),
         // For dashboards from before accountPlayers (extension 3.4.2 and older).
         hiddenPlayers: hiddenPlayers_(keys.hidden),
+        // Players whose games recorders treat like a public lobby's (extension 3.4.6 and newer).
+        publicPlayers: publicPlayers_(store),
         canEdit: canEdit,
       };
+    }
+
+    case 'set-public-players': {
+      if (!canEdit) return deny('change that list');
+      var cleaned = cleanPublicPlayers_(body.players);
+      if (cleaned.error) return { ok: false, error: 'invalid', message: cleaned.error };
+      store.setValue('publicPlayers', JSON.stringify(cleaned.players));
+      return { ok: true, publicPlayers: cleaned.players };
     }
 
     default:
@@ -233,4 +243,26 @@ function withEdits_(rec, edit) {
     (g.players || []).forEach(function (p) { if (p.alignment === 'good' || p.alignment === 'evil') p.won = p.alignment === edit.winner; });
   }
   return g;
+}
+
+// Players whose games recorders treat like a public lobby's: a game with one of them in it isn't filed under a shared
+// community like Rhap unless the recorder picks one (their own communities still can be). Editors keep the list on the
+// website. [{ id: botc.app account id, name: username as typed (matched ignoring case) }], either may be empty.
+var MAX_PUBLIC_PLAYERS_ = 200;
+function publicPlayers_(store) {
+  try { var list = JSON.parse(store.getValue('publicPlayers') || '[]'); return Array.isArray(list) ? list : []; } catch (e) { return []; }
+}
+
+function cleanPublicPlayers_(list) {
+  if (!Array.isArray(list)) return { error: 'Something went wrong with that list.' };
+  if (list.length > MAX_PUBLIC_PLAYERS_) return { error: 'That list can have up to ' + MAX_PUBLIC_PLAYERS_ + ' players.' };
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    var p = list[i] || {};
+    var id = String(p.id || '').trim().slice(0, 40), name = String(p.name || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!id && !name) continue;
+    if (out.some(function (o) { return (id && o.id === id) || (name && o.name.toLowerCase() === name.toLowerCase()); })) continue;
+    out.push({ id: id, name: name });
+  }
+  return { players: out };
 }
