@@ -578,6 +578,9 @@ body.setting-up .tabs, body.setting-up #filters { display: none !important; }
 .card.pick-prompt .msg { flex-basis: 100%; margin: 0; }
 .card.pick-prompt .msg:empty { display: none; }
 .sync-note { margin: 0 0 14px; font-size: 13px; color: var(--ink-2); }
+.card.store-problem { border-color: var(--down); margin-bottom: 18px; }
+.card.store-problem h3 { color: var(--down); margin: 0 0 6px; }
+.card.store-problem p { margin: 0; color: var(--ink-2); }
 .sync-note.err, .msg.err, .sub .err { color: var(--down); }
 details.advanced { margin-top: 16px; }
 details.advanced summary { cursor: pointer; color: var(--ink-2); font-weight: 600; }

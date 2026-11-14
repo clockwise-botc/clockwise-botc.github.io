@@ -172,6 +172,17 @@ function sheetStore_() {
     // Small settings the store keeps for itself, in Script properties.
     getValue: function (k) { return PropertiesService.getScriptProperties().getProperty('CW_' + k); },
     setValue: function (k, v) { PropertiesService.getScriptProperties().setProperty('CW_' + k, String(v)); },
+    deleteValue: function (k) { PropertiesService.getScriptProperties().deleteProperty('CW_' + k); },
+    // For the backup of uploads while the Sheet can't be written (overflow.js): one packed value, the lock on its own
+    // (batch() also saves the Sheet, which is what's failing), and saving the Sheet.
+    packValue: function (obj) { return Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(obj), 'application/json')).getBytes()); },
+    unpackValue: function (s) { return unpack([s]); },
+    locked: function (fn) {
+      var lock = LockService.getScriptLock();
+      lock.waitLock(30000);
+      try { return fn(); } finally { lock.releaseLock(); }
+    },
+    flushSheet: function () { SpreadsheetApp.flush(); },
     hmac: function (key, value) { return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(String(value), String(key))); },
     randomId: function () { return Utilities.getUuid(); },
     // Wrong-password counts, kept for up to an hour in Apps Script's cache.

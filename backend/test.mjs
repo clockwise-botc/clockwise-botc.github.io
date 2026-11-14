@@ -132,6 +132,64 @@ check('public players: editors keep the list, and every read carries it', () => 
   assert.deepEqual(handle({ action: 'read', key: 'view-pass' }, keys, 9).publicPlayers, []);
 });
 
+check('backup: uploads the Sheet can\'t take are kept, shown to everyone, and moved in once it can', () => {
+  const b = loadBackend();
+  const { handle } = b;
+  const readOnly = (on) => (b.setReadOnly ? b.setReadOnly(on) : (b.store.failWrites = on));
+  const other = { ...games[1], capturedBy: { userId: 'u_other', username: 'other' } };
+  handle({ action: 'record', key: 'write-key', games: [games[0]] }, keys, 1000);
+  readOnly(true);
+  const up = handle({ action: 'record', key: 'write-key', games: [games[1]] }, keys, 2000);
+  assert.ok(up.ok);
+  assert.deepEqual(up.saved, []); // not saved, so the extension keeps its copy and tries again too
+  assert.deepEqual(up.queued, [games[1].id]);
+  handle({ action: 'record', key: 'write-key', games: [other] }, keys, 3000);
+  assert.equal(b.store.count(), 1);
+  // Everyone sees the waiting game, with both recordings merged, even on a read that only asks what's new.
+  const seen = handle({ action: 'read', key: 'view-pass', since: 2500 }, keys, 4000);
+  const g = seen.games.find((x) => x.id === games[1].id);
+  assert.ok(g, 'waiting game is shown');
+  assert.deepEqual(g.recorders.sort(), [games[1].capturedBy.username, 'other'].sort());
+  assert.equal(seen.storeProblem, null, 'only editors are told');
+  const ed = handle({ action: 'read', key: 'editor-key' }, keys, 5000).storeProblem;
+  assert.equal(ed.games, 1);
+  assert.ok(ed.bytes > 0 && ed.bytes < ed.maxBytes);
+  assert.equal(ed.since, 2000);
+  assert.match(ed.error, /permission/);
+  // Too big for the backup: refused, so the extension keeps it.
+  const huge = { ...games[2], background: { note: 'x'.repeat(200000).replace(/x/g, () => Math.random().toString(36)[2]) } };
+  const r = handle({ action: 'record', key: 'write-key', games: [huge] }, keys, 5500);
+  assert.deepEqual(r.refused, [games[2].id]);
+  // Writable again: a read within 10 minutes of the last try leaves it waiting; after that it's moved in.
+  readOnly(false);
+  handle({ action: 'read', key: 'view-pass' }, keys, 6000);
+  assert.equal(b.store.count(), 1);
+  const later = 3000 + 11 * 60e3;
+  const after = handle({ action: 'read', key: 'editor-key' }, keys, later);
+  assert.equal(after.storeProblem, null);
+  assert.equal(b.store.count(), 2);
+  const saved = handle({ action: 'read', key: 'view-pass' }, keys, later + 1).games.find((x) => x.id === games[1].id);
+  assert.deepEqual(saved.recorders.sort(), g.recorders.sort());
+  // Uploading the same game again later (the extension's retry) changes nothing.
+  handle({ action: 'record', key: 'write-key', games: [games[1], other] }, keys, later + 2);
+  assert.equal(b.store.count(), 2);
+});
+
+check('backup: the next upload that works moves in everything waiting straight away', () => {
+  const b = loadBackend();
+  const { handle } = b;
+  const readOnly = (on) => (b.setReadOnly ? b.setReadOnly(on) : (b.store.failWrites = on));
+  handle({ action: 'read', key: 'view-pass' }, keys, 500); // a Sheet that's been set up (its tabs exist)
+  readOnly(true);
+  handle({ action: 'record', key: 'write-key', games: [games[0], games[1]] }, keys, 1000);
+  assert.equal(b.store.count(), 0);
+  readOnly(false);
+  const up = handle({ action: 'record', key: 'write-key', games: [games[2]] }, keys, 2000);
+  assert.deepEqual(up.saved, [games[2].id]);
+  assert.equal(b.store.count(), 3);
+  assert.equal(handle({ action: 'read', key: 'editor-key' }, keys, 3000).storeProblem, null);
+});
+
 check('deleted games stay deleted, and readers are told', () => {
   const { handle, store } = loadBackend();
   handle({ action: 'record', key: 'write-key', games: [full, games[1]] }, keys, 1);

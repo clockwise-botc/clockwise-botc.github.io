@@ -14,15 +14,22 @@ export function memoryStore() {
   const records = new Map(), edits = new Map(), gone = new Map();
   let meta = null, metaAt = 0;
   const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
+  // failWrites: act like a Sheet that can't be written (Google storage full), for the backup's tests.
+  const writing = () => { if (store.failWrites) throw new Error('You do not have permission to access the requested document.'); };
   const store = {
     tables: null,
+    failWrites: false,
     batch: (fn) => fn(),
+    locked: (fn) => fn(),
+    flushSheet: () => writing(),
+    packValue: (obj) => JSON.stringify(obj),
+    unpackValue: (s) => JSON.parse(s),
     isDeleted: (id) => gone.has(id),
     getRecord: (id) => clone((records.get(id) || {}).rec || null),
     getRecords: (ids) => Object.fromEntries(ids.filter((id) => records.has(id)).map((id) => [id, clone(records.get(id).rec)])),
-    putRecord: (id, rec, now) => { records.set(id, { rec: clone(rec), at: now }); },
+    putRecord: (id, rec, now) => { writing(); records.set(id, { rec: clone(rec), at: now }); },
     getEdit: (id) => clone((edits.get(id) || {}).edit || null),
-    putEdit: (id, edit, now) => { edits.set(id, { edit: clone(edit), at: now }); },
+    putEdit: (id, edit, now) => { writing(); edits.set(id, { edit: clone(edit), at: now }); },
     markDeleted: (id, now) => { gone.set(id, now); records.delete(id); },
     removeRecord: (id) => { records.delete(id); },
     changedSince: (since) => [...new Set([...[...records].filter(([, r]) => r.at > since).map(([id]) => id),
@@ -54,6 +61,7 @@ function accountStore() {
     setTries: (k, v) => { if (v) tries.set(k, v); else tries.delete(k); },
     getValue: (k) => (values.has(k) ? values.get(k) : null),
     setValue: (k, v) => { values.set(k, String(v)); },
+    deleteValue: (k) => { values.delete(k); },
   };
 }
 
@@ -70,6 +78,9 @@ export function loadBackend(store = memoryStore()) {
 // Utilities and LockService for sheets-store.js), so the storage code is tested too.
 export function loadSheetsBackend() {
   const sheets = new Map();
+  // readOnly: every write fails the way a Sheet does when its owner's Google storage is full.
+  let readOnly = false;
+  const refuse = () => { if (readOnly) throw new Error('You do not have permission to access the requested document.'); };
   const makeSheet = (name) => {
     const cells = []; // cells[r][c], 0-based
     let maxCols = 26;
@@ -77,13 +88,13 @@ export function loadSheetsBackend() {
     const lastCol = () => cells.reduce((m, row) => { for (let c = (row || []).length - 1; c >= 0; c--) if (row[c] !== '' && row[c] != null) return Math.max(m, c + 1); return m; }, 0);
     const range = (r, c, nr = 1, nc = 1) => ({
       getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => { const v = (cells[r - 1 + i] || [])[c - 1 + j]; return v == null ? '' : v; })),
-      setValues: (vals) => { if (vals.length !== nr || vals.some((row) => row.length !== nc)) throw new Error(`setValues size mismatch on ${name}`);
+      setValues: (vals) => { refuse(); if (vals.length !== nr || vals.some((row) => row.length !== nc)) throw new Error(`setValues size mismatch on ${name}`);
         vals.forEach((row, i) => row.forEach((v, j) => { cells[r - 1 + i] = cells[r - 1 + i] || []; if (typeof v === 'string' && v.length > 50000) throw new Error('cell over 50000 characters'); cells[r - 1 + i][c - 1 + j] = v; })); return range(r, c, nr, nc); },
-      clearContent: () => { for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) if (cells[r - 1 + i]) cells[r - 1 + i][c - 1 + j] = ''; },
+      clearContent: () => { refuse(); for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) if (cells[r - 1 + i]) cells[r - 1 + i][c - 1 + j] = ''; },
       setFontWeight: () => range(r, c, nr, nc),
     });
     const sh = { getRange: range, getLastRow: lastRow, getLastColumn: lastCol, getMaxColumns: () => maxCols,
-      insertColumnsAfter: (_, n) => { maxCols += n; }, setFrozenRows: () => {}, appendRow: (row) => range(lastRow() + 1, 1, 1, row.length).setValues([row]) };
+      insertColumnsAfter: (_, n) => { refuse(); maxCols += n; }, setFrozenRows: () => {}, appendRow: (row) => range(lastRow() + 1, 1, 1, row.length).setValues([row]) };
     sheets.set(name, sh);
     return sh;
   };
@@ -91,7 +102,7 @@ export function loadSheetsBackend() {
   const props = new Map(), cacheMap = new Map();
   const ctx = vm.createContext({
     console, JSON, Math, Date, Object, Array, String, Number, encodeURIComponent, decodeURIComponent,
-    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) || null, setProperty: (k, v) => props.set(k, v) }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) || null, setProperty: (k, v) => props.set(k, v), deleteProperty: (k) => props.delete(k) }) },
     CacheService: { getScriptCache: () => ({ get: (k) => cacheMap.get(k) || null, put: (k, v) => cacheMap.set(k, v), remove: (k) => cacheMap.delete(k) }) },
     SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: (n) => sheets.get(n) || null, insertSheet: makeSheet }), flush: () => {} },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
@@ -111,7 +122,8 @@ export function loadSheetsBackend() {
   // Each request gets a fresh store, like each Apps Script execution.
   const tableRows = (name) => { const sh = sheets.get(name); return sh && sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().filter((r) => r[0]) : []; };
   const store = { count, get tables() { return { games: tableRows('games'), game_players: tableRows('game_players') }; } };
-  return { handle: (body, keys, now = Date.now()) => ctx.handle_(JSON.parse(JSON.stringify(body)), ctx.sheetStore_(), keys, now), store, sheets, ctx };
+  return { handle: (body, keys, now = Date.now()) => ctx.handle_(JSON.parse(JSON.stringify(body)), ctx.sheetStore_(), keys, now), store, sheets, ctx,
+    setReadOnly: (on) => { readOnly = !!on; }, props };
 }
 
 // A stand-in for the deployed web app: POST JSON (sent as text/plain, like the real one), CORS open.

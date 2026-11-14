@@ -98,10 +98,10 @@ export async function refreshShared(settings) {
   res.cache.deleted = [...new Set([...((before && before.deleted) || []), ...removed])];
   for (const id of res.cache.deleted) delete res.cache.games[id];
   // Who keeps their stats private, has an account, or is on the public players list can change without any game changing.
-  const listed = (c) => JSON.stringify([(c && c.privatePlayers) || [], (c && c.accountPlayers) || null, (c && c.publicPlayers) || []]);
+  const listed = (c) => JSON.stringify([(c && c.privatePlayers) || [], (c && c.accountPlayers) || null, (c && c.publicPlayers) || [], (c && c.storeProblem) || null]);
   const privacy = listed(before) !== listed(res.cache);
   if (res.changed || !before) await cacheSet(res.cache);
-  else await cacheSet({ ...(now || before), since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, accountPlayers: res.cache.accountPlayers, publicPlayers: res.cache.publicPlayers });
+  else await cacheSet({ ...(now || before), since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, accountPlayers: res.cache.accountPlayers, publicPlayers: res.cache.publicPlayers, storeProblem: res.cache.storeProblem });
   return { ok: true, changed: res.changed + (privacy ? 1 : 0), canEdit: res.canEdit };
 }
 

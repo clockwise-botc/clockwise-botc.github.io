@@ -1840,7 +1840,7 @@ function render() {
   if (loading) { const tab = state.tab === 'styles' ? 'styles' : state.tab; if (!$(`#view .loader[data-tab="${tab}"]`)) $('#view').innerHTML = skeleton(tab); return; }
   if (failed) { $('#view').innerHTML = loadFailed(); return; }
   const views = { stats: statsView, me: myView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
-  keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() + pickPrompt() : '') + views[state.tab](); });
+  keepOpenForms(() => { $('#view').innerHTML = storeProblemNote() + (state.tab !== 'data' ? connectCard() + pickPrompt() : '') + views[state.tab](); });
   // Editors' account list loads the first time Settings is opened.
   mountClaimPicker();
   mountAlwaysPicker();
@@ -2054,6 +2054,19 @@ function pickPrompt() {
     <p class="msg" id="claim-msg"></p></div>`;
 }
 
+// Editors, on every page: the store can't save to its Google Sheet, so uploads are being kept in its backup
+// (backend/overflow.js). They're shown to everyone meanwhile and move into the Sheet by themselves once it can be saved.
+function storeProblemNote() {
+  const p = state.storeProblem;
+  if (!p || !state.shared.canEdit || !creds(state.settings).editorKey) return '';
+  const full = Math.min(100, Math.round((100 * p.bytes) / p.maxBytes));
+  const storage = /permission|storage|quota/i.test(p.error || '');
+  const why = storage ? 'The Google account that owns the store is out of storage, so its Sheet can\'t be saved to.' : `The store can't save to its Google Sheet${p.error ? ` (${esc(p.error)})` : ''}.`;
+  const fix = storage ? 'Free up space on that Google account (Drive, Gmail and Photos all count) and they\'ll move into the Sheet by themselves.' : 'They\'ll move into the Sheet by themselves once it can be saved to again.';
+  return `<div class="card store-problem" role="alert"><h3>New games aren't being saved to the Sheet</h3>
+    <p>${why} Since ${fmtDate(p.since)} ${fmtTime(p.since)}, ${plural(p.games, 'game')} ${p.games === 1 ? 'is' : 'are'} being kept in a backup instead (${full}% full), and everyone can still see ${p.games === 1 ? 'it' : 'them'}. ${fix}${full >= 80 ? ' Once the backup is full, recorders\' extensions keep new games themselves until there\'s room.' : ''}</p></div>`;
+}
+
 function connectCard() {
   if (WEB || !state.shared.on) return '';
   const st = state.shared.status;
@@ -2114,6 +2127,7 @@ async function load() {
   useDisplayNames(playerNames);
   listedKeys = cache && Array.isArray(cache.accountPlayers) ? new Set(cache.accountPlayers) : null;
   state.publicPlayers = (cache && cache.publicPlayers) || [];
+  state.storeProblem = (cache && cache.storeProblem) || null;
   for (const g of state.games) g.review = reviewFor(g);
   everyone = new Set(playerTable(state.games).map((p) => p.key));
   playerKeys = new Set([...everyone].filter((k) => !isHidden(k)));

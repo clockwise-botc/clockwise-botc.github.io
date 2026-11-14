@@ -35,18 +35,28 @@ function handle_(body, store, keys, now) {
     case 'record': {
       if (!canWrite) return deny('upload games');
       var games = Array.isArray(body.games) ? body.games : [];
-      var saved = [], skipped = [];
-      store.batch(function () {
-        games.forEach(function (raw) {
-          var g = cleanGame_(raw);
-          if (!g || !g.id) return;
-          if (store.isDeleted(g.id)) { skipped.push(g.id); return; }
-          var merged = mergeGame_(store.getRecord(g.id), g);
-          store.putRecord(g.id, merged, now);
-          saved.push(g.id);
-        });
-        if (saved.length) store.refreshTables(saved);
+      var saved = [], skipped = [], cleaned = [];
+      games.forEach(function (raw) {
+        var g = cleanGame_(raw);
+        if (!g || !g.id) return;
+        if (store.isDeleted(g.id)) skipped.push(g.id); else cleaned.push(g);
       });
+      try {
+        store.batch(function () {
+          cleaned.forEach(function (g) {
+            store.putRecord(g.id, mergeGame_(store.getRecord(g.id), g), now);
+            saved.push(g.id);
+          });
+          if (saved.length) store.refreshTables(saved);
+        });
+      } catch (err) {
+        // The Sheet can't be written: keep the uploads in the backup instead (overflow.js). They aren't reported as
+        // saved, so the recorder's extension keeps its copy and tries again later too.
+        var kept = overflowPut_(store, cleaned, now, err);
+        return { ok: true, saved: [], skipped: skipped, queued: kept.queued, refused: kept.refused, now: now };
+      }
+      // It works again: move in anything the backup was holding.
+      if (saved.length) { try { overflowFlush_(store, now, true); } catch (e) { /* tried again later */ } }
       return { ok: true, saved: saved, skipped: skipped, now: now };
     }
 
@@ -116,10 +126,22 @@ function handle_(body, store, keys, now) {
         var seen = viewGame_(recs[id], store.getEdit(id), byPlayer, viewer);
         if (seen) out.push(seen); else hidden.push(id);
       });
+      // Games waiting in the backup while the Sheet can't be written (overflow.js): try moving them in now and then,
+      // and send whatever's still waiting, every time, so everyone sees them meanwhile.
+      try { overflowFlush_(store, now, false); } catch (e) { /* tried again later */ }
+      var waiting = overflowView_(store, byPlayer, viewer);
+      if (waiting) {
+        var waitingIds = {};
+        waiting.games.forEach(function (g) { waitingIds[g.id] = true; });
+        out = out.filter(function (g) { return !waitingIds[g.id]; }).concat(waiting.games);
+        hidden = hidden.filter(function (id) { return !waitingIds[id]; });
+      }
       var metaInfo = store.getMetaInfo();
       return {
         ok: true, now: now, since: since, full: full,
         games: out,
+        // For editors: games are being kept in the backup because the Sheet can't be written.
+        storeProblem: waiting && canEdit ? waiting.status : null,
         hidden: hidden,
         deleted: store.deletedSince(since),
         meta: metaInfo && metaInfo.at > since ? store.getMeta() : null,
