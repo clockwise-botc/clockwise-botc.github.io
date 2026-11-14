@@ -28,7 +28,9 @@ export async function pull(url, auth, cache) {
   const next = { games: res.full ? {} : { ...((cache && cache.games) || {}) }, since: res.now, meta: (cache && cache.meta) || null, at: Date.now(),
     privatePlayers: Array.isArray(res.privatePlayers) ? res.privatePlayers : (cache && cache.privatePlayers) || [],
     accountPlayers: Array.isArray(res.accountPlayers) ? res.accountPlayers : (cache && cache.accountPlayers) || null,
-    publicPlayers: Array.isArray(res.publicPlayers) ? res.publicPlayers : (cache && cache.publicPlayers) || [] };
+    publicPlayers: Array.isArray(res.publicPlayers) ? res.publicPlayers : (cache && cache.publicPlayers) || [],
+    // For editors, while uploads are being kept in the store's backup (the Sheet can't be written). Sent on every read.
+    storeProblem: res.storeProblem || null };
   for (const g of res.games || []) next.games[g.id] = g;
   for (const id of [...(res.deleted || []), ...(res.hidden || [])]) delete next.games[id];
   if (res.meta) next.meta = res.meta;

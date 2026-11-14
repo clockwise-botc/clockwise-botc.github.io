@@ -3,8 +3,8 @@
 //   Extension, sharing: everyone's games from the shared store, plus this browser's games not uploaded yet.
 //   Website (community dashboard): everyone's games, after the community password.
 // Downloads are cached (chrome.storage in the extension, IndexedDB on the website) and topped up incrementally.
-import { BACKEND_URL, SITE_URL } from './config.js?v=efdfdae177';
-import { call, pull, ping, editPatch } from './shared.js?v=efdfdae177';
+import { BACKEND_URL, SITE_URL } from './config.js?v=6ead18c787';
+import { call, pull, ping, editPatch } from './shared.js?v=6ead18c787';
 
 // Set by web-config.js on the community website.
 export const WEB = (typeof window !== 'undefined' && window.CLOCKWISE_WEB) || null;
@@ -98,10 +98,10 @@ export async function refreshShared(settings) {
   res.cache.deleted = [...new Set([...((before && before.deleted) || []), ...removed])];
   for (const id of res.cache.deleted) delete res.cache.games[id];
   // Who keeps their stats private, has an account, or is on the public players list can change without any game changing.
-  const listed = (c) => JSON.stringify([(c && c.privatePlayers) || [], (c && c.accountPlayers) || null, (c && c.publicPlayers) || []]);
+  const listed = (c) => JSON.stringify([(c && c.privatePlayers) || [], (c && c.accountPlayers) || null, (c && c.publicPlayers) || [], (c && c.storeProblem) || null]);
   const privacy = listed(before) !== listed(res.cache);
   if (res.changed || !before) await cacheSet(res.cache);
-  else await cacheSet({ ...(now || before), since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, accountPlayers: res.cache.accountPlayers, publicPlayers: res.cache.publicPlayers });
+  else await cacheSet({ ...(now || before), since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, accountPlayers: res.cache.accountPlayers, publicPlayers: res.cache.publicPlayers, storeProblem: res.cache.storeProblem });
   return { ok: true, changed: res.changed + (privacy ? 1 : 0), canEdit: res.canEdit };
 }
 

@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=efdfdae177';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=efdfdae177';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=efdfdae177';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=efdfdae177';
-import { communityMembers } from './members.js?v=efdfdae177';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=efdfdae177';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=efdfdae177';
-import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=efdfdae177';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=efdfdae177';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=efdfdae177';
-import { renderGrimoire } from './grimoire.js?v=efdfdae177';
-import { makeImages } from './images.js?v=efdfdae177';
-import { characterToken, installTokenStyle } from './tokens.js?v=efdfdae177';
-import { multiSelect } from './multiselect.js?v=efdfdae177';
-import { ALL_CHARACTERS } from './characters.js?v=efdfdae177';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities, setPublicPlayers } from './data.js?v=efdfdae177';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=6ead18c787';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=6ead18c787';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=6ead18c787';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=6ead18c787';
+import { communityMembers } from './members.js?v=6ead18c787';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=6ead18c787';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=6ead18c787';
+import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=6ead18c787';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=6ead18c787';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=6ead18c787';
+import { renderGrimoire } from './grimoire.js?v=6ead18c787';
+import { makeImages } from './images.js?v=6ead18c787';
+import { characterToken, installTokenStyle } from './tokens.js?v=6ead18c787';
+import { multiSelect } from './multiselect.js?v=6ead18c787';
+import { ALL_CHARACTERS } from './characters.js?v=6ead18c787';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities, setPublicPlayers } from './data.js?v=6ead18c787';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -1840,7 +1840,7 @@ function render() {
   if (loading) { const tab = state.tab === 'styles' ? 'styles' : state.tab; if (!$(`#view .loader[data-tab="${tab}"]`)) $('#view').innerHTML = skeleton(tab); return; }
   if (failed) { $('#view').innerHTML = loadFailed(); return; }
   const views = { stats: statsView, me: myView, styles: stylesView, games: gamesView, data: () => renderData(ctx, selectGames(baseGames(), state.sel)) };
-  keepOpenForms(() => { $('#view').innerHTML = (state.tab !== 'data' ? connectCard() + pickPrompt() : '') + views[state.tab](); });
+  keepOpenForms(() => { $('#view').innerHTML = storeProblemNote() + (state.tab !== 'data' ? connectCard() + pickPrompt() : '') + views[state.tab](); });
   // Editors' account list loads the first time Settings is opened.
   mountClaimPicker();
   mountAlwaysPicker();
@@ -2054,6 +2054,19 @@ function pickPrompt() {
     <p class="msg" id="claim-msg"></p></div>`;
 }
 
+// Editors, on every page: the store can't save to its Google Sheet, so uploads are being kept in its backup
+// (backend/overflow.js). They're shown to everyone meanwhile and move into the Sheet by themselves once it can be saved.
+function storeProblemNote() {
+  const p = state.storeProblem;
+  if (!p || !state.shared.canEdit || !creds(state.settings).editorKey) return '';
+  const full = Math.min(100, Math.round((100 * p.bytes) / p.maxBytes));
+  const storage = /permission|storage|quota/i.test(p.error || '');
+  const why = storage ? 'The Google account that owns the store is out of storage, so its Sheet can\'t be saved to.' : `The store can't save to its Google Sheet${p.error ? ` (${esc(p.error)})` : ''}.`;
+  const fix = storage ? 'Free up space on that Google account (Drive, Gmail and Photos all count) and they\'ll move into the Sheet by themselves.' : 'They\'ll move into the Sheet by themselves once it can be saved to again.';
+  return `<div class="card store-problem" role="alert"><h3>New games aren't being saved to the Sheet</h3>
+    <p>${why} Since ${fmtDate(p.since)} ${fmtTime(p.since)}, ${plural(p.games, 'game')} ${p.games === 1 ? 'is' : 'are'} being kept in a backup instead (${full}% full), and everyone can still see ${p.games === 1 ? 'it' : 'them'}. ${fix}${full >= 80 ? ' Once the backup is full, recorders\' extensions keep new games themselves until there\'s room.' : ''}</p></div>`;
+}
+
 function connectCard() {
   if (WEB || !state.shared.on) return '';
   const st = state.shared.status;
@@ -2114,6 +2127,7 @@ async function load() {
   useDisplayNames(playerNames);
   listedKeys = cache && Array.isArray(cache.accountPlayers) ? new Set(cache.accountPlayers) : null;
   state.publicPlayers = (cache && cache.publicPlayers) || [];
+  state.storeProblem = (cache && cache.storeProblem) || null;
   for (const g of state.games) g.review = reviewFor(g);
   everyone = new Set(playerTable(state.games).map((p) => p.key));
   playerKeys = new Set([...everyone].filter((k) => !isHidden(k)));
