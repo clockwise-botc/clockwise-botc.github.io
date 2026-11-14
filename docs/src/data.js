@@ -3,8 +3,8 @@
 //   Extension, sharing: everyone's games from the shared store, plus this browser's games not uploaded yet.
 //   Website (community dashboard): everyone's games, after the community password.
 // Downloads are cached (chrome.storage in the extension, IndexedDB on the website) and topped up incrementally.
-import { BACKEND_URL, SITE_URL } from './config.js?v=d47edf916c';
-import { call, pull, ping, editPatch } from './shared.js?v=d47edf916c';
+import { BACKEND_URL, SITE_URL } from './config.js?v=4202f2af5f';
+import { call, pull, ping, editPatch } from './shared.js?v=4202f2af5f';
 
 // Set by web-config.js on the community website.
 export const WEB = (typeof window !== 'undefined' && window.CLOCKWISE_WEB) || null;
@@ -97,11 +97,11 @@ export async function refreshShared(settings) {
   const removed = [...res.deletedIds, ...((now && now.deleted) || [])];
   res.cache.deleted = [...new Set([...((before && before.deleted) || []), ...removed])];
   for (const id of res.cache.deleted) delete res.cache.games[id];
-  // Who keeps their stats private, or has an account, can change without any game changing.
-  const listed = (c) => JSON.stringify([(c && c.privatePlayers) || [], (c && c.accountPlayers) || null]);
+  // Who keeps their stats private, has an account, or is on the public players list can change without any game changing.
+  const listed = (c) => JSON.stringify([(c && c.privatePlayers) || [], (c && c.accountPlayers) || null, (c && c.publicPlayers) || []]);
   const privacy = listed(before) !== listed(res.cache);
   if (res.changed || !before) await cacheSet(res.cache);
-  else await cacheSet({ ...(now || before), since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, accountPlayers: res.cache.accountPlayers });
+  else await cacheSet({ ...(now || before), since: res.cache.since, at: res.cache.at, privatePlayers: res.cache.privatePlayers, accountPlayers: res.cache.accountPlayers, publicPlayers: res.cache.publicPlayers });
   return { ok: true, changed: res.changed + (privacy ? 1 : 0), canEdit: res.canEdit };
 }
 
@@ -151,6 +151,8 @@ export const unclaimPlayer = (settings) => accountCall(settings, { action: 'uncl
 export const saveCommunities = (settings, communities) => accountCall(settings, { action: 'save-communities', token: creds(settings).token, communities });
 export const setPrivate = (settings, on) => accountCall(settings, { action: 'set-private', token: creds(settings).token, private: on });
 export const removeClaim = (settings, username) => accountCall(settings, { action: 'remove-claim', key: creds(settings).editorKey, username });
+// Players whose games are treated like a public lobby's ([{ id, name }]): editors change the whole list at once.
+export const setPublicPlayers = (settings, players) => accountCall(settings, { action: 'set-public-players', key: creds(settings).editorKey, players });
 
 // ---------- editing (editor key) ----------
 export async function sharedEdit(settings, game, patch) {

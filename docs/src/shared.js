@@ -27,7 +27,8 @@ export async function pull(url, auth, cache) {
   // full: who sees what changed, so this is everything you can see now. hidden: games you can no longer see.
   const next = { games: res.full ? {} : { ...((cache && cache.games) || {}) }, since: res.now, meta: (cache && cache.meta) || null, at: Date.now(),
     privatePlayers: Array.isArray(res.privatePlayers) ? res.privatePlayers : (cache && cache.privatePlayers) || [],
-    accountPlayers: Array.isArray(res.accountPlayers) ? res.accountPlayers : (cache && cache.accountPlayers) || null };
+    accountPlayers: Array.isArray(res.accountPlayers) ? res.accountPlayers : (cache && cache.accountPlayers) || null,
+    publicPlayers: Array.isArray(res.publicPlayers) ? res.publicPlayers : (cache && cache.publicPlayers) || [] };
   for (const g of res.games || []) next.games[g.id] = g;
   for (const id of [...(res.deleted || []), ...(res.hidden || [])]) delete next.games[id];
   if (res.meta) next.meta = res.meta;

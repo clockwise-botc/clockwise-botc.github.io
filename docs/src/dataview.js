@@ -1,8 +1,8 @@
 // The "Data & settings" view: export (and import), your account and communities, the editor key; in the extension
 // also this browser's uploads and stored games, and its Escape & Rhap rooms.
-import { toTables, toCSV, COLUMNS } from './tables.js?v=d47edf916c';
-import { communityConfig, communityName, slug, NONE } from './communities.js?v=d47edf916c';
-import { esc, fmtDate, fmtTime, plural } from './ui.js?v=d47edf916c';
+import { toTables, toCSV, COLUMNS } from './tables.js?v=4202f2af5f';
+import { communityConfig, communityName, slug, NONE } from './communities.js?v=4202f2af5f';
+import { esc, fmtDate, fmtTime, plural } from './ui.js?v=4202f2af5f';
 
 export function renderData(ctx, filteredGames) {
   const { state } = ctx;
@@ -83,7 +83,28 @@ function sharedCard(ctx) {
       <div class="toolbar"><button class="btn primary" data-action="save-editor-key">Save editor key</button></div>
       <p class="msg" id="shared-msg"></p></div>
   </div>
-  ${accountsCard(ctx)}`;
+  ${accountsCard(ctx)}
+  ${publicPlayersCard(ctx)}`;
+}
+
+// Editors: the players whose games the extension treats like a public lobby's (not filed under Escape or Rhap unless
+// the recorder picks one). Kept in the shared store, so a change reaches everyone's extension with its next download.
+function publicPlayersCard({ state, tools }) {
+  if (!(state.shared.on && state.shared.canEdit && tools.creds(state.settings).editorKey)) return '';
+  const list = state.publicPlayers || [];
+  const shown = (p) => (p.id ? tools.nameOf(p.id, p.name) : p.name);
+  const names = [...new Set(tools.knownPlayers().map((p) => p.name))].sort((a, b) => a.localeCompare(b));
+  return `<div class="card span-all">
+    <h3>Players whose games aren't recorded</h3>
+    <p class="sub">Only editors see this. A game with one of these players in it is treated like a public lobby: Clockwise doesn't record it for Escape or Rhap unless the recorder picks one in the extension's menu, though it can still go to one of the recorder's own communities. Changes reach everyone's extension the next time it downloads games, within about 10 minutes.</p>
+    ${list.length ? `<ul class="public-players">${list.map((p, i) => `<li><span>${esc(shown(p))}</span><button class="btn small" type="button" data-public-remove="${i}">Remove</button></li>`).join('')}</ul>` : '<p class="sub">Nobody yet.</p>'}
+    <form class="toolbar" data-public-add>
+      <input type="text" list="public-player-names" placeholder="botc.app username" aria-label="botc.app username" autocomplete="off">
+      <datalist id="public-player-names">${names.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+      <button class="btn" type="submit">Add</button>
+    </form>
+    <p class="msg ${state.publicMsg && state.publicMsg.ok ? 'ok' : 'err'}" id="public-msg">${esc((state.publicMsg && state.publicMsg.text) || '')}</p>
+  </div>`;
 }
 
 // "Your player": which player in the games is you. People pick themselves; editors can remove a wrong claim.

@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=d47edf916c';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=d47edf916c';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=d47edf916c';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=d47edf916c';
-import { communityMembers } from './members.js?v=d47edf916c';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=d47edf916c';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=d47edf916c';
-import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=d47edf916c';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=d47edf916c';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=d47edf916c';
-import { renderGrimoire } from './grimoire.js?v=d47edf916c';
-import { makeImages } from './images.js?v=d47edf916c';
-import { characterToken, installTokenStyle } from './tokens.js?v=d47edf916c';
-import { multiSelect } from './multiselect.js?v=d47edf916c';
-import { ALL_CHARACTERS } from './characters.js?v=d47edf916c';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities } from './data.js?v=d47edf916c';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=4202f2af5f';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=4202f2af5f';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=4202f2af5f';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=4202f2af5f';
+import { communityMembers } from './members.js?v=4202f2af5f';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=4202f2af5f';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=4202f2af5f';
+import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=4202f2af5f';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=4202f2af5f';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=4202f2af5f';
+import { renderGrimoire } from './grimoire.js?v=4202f2af5f';
+import { makeImages } from './images.js?v=4202f2af5f';
+import { characterToken, installTokenStyle } from './tokens.js?v=4202f2af5f';
+import { multiSelect } from './multiselect.js?v=4202f2af5f';
+import { ALL_CHARACTERS } from './characters.js?v=4202f2af5f';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities, setPublicPlayers } from './data.js?v=4202f2af5f';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
@@ -81,7 +81,8 @@ const withMyCommunities = (settings) => (WEB ? { ...settings, communities: [...D
 const communityButtons = (attr, on, extra = '', options = communityOptions()) => options.map((o) => `<button class="toggle" ${attr}="${esc(extra + o.value)}" aria-pressed="${on.includes(o.value)}">${esc(o.name)}</button>`).join('');
 const $ = (sel) => document.querySelector(sel);
 const ctx = { state, api, load: () => load(), communityOptions,
-  tools: { WEB, creds, siteUrl, checkKey, webAuth, cacheClear, forgetAccount: () => forgetAccount(), syncShared: () => syncShared(), nameOf: (key, fallback) => (playerNames.has(key) ? playerNames.get(key) : fallback || key), playerChoices: () => playerChoices() },
+  tools: { WEB, creds, siteUrl, checkKey, webAuth, cacheClear, forgetAccount: () => forgetAccount(), syncShared: () => syncShared(), nameOf: (key, fallback) => (playerNames.has(key) ? playerNames.get(key) : fallback || key), playerChoices: () => playerChoices(),
+    knownPlayers: () => [...everyone].map((key) => ({ key, name: nameOf(key) })) },
   // For Settings: is botc.app's token art in use, and if not, why.
   art: () => ({ loaded: !!images.tokenStyle, fonts: document.documentElement.classList.contains('token-font'), roles: Object.keys(roleMeta).length, error: state.artError || (images.styleError || '') }) };
 
@@ -2100,6 +2101,7 @@ async function load() {
   playerNames = displayNames(state.games);
   useDisplayNames(playerNames);
   listedKeys = cache && Array.isArray(cache.accountPlayers) ? new Set(cache.accountPlayers) : null;
+  state.publicPlayers = (cache && cache.publicPlayers) || [];
   for (const g of state.games) g.review = reviewFor(g);
   everyone = new Set(playerTable(state.games).map((p) => p.key));
   playerKeys = new Set([...everyone].filter((k) => !isHidden(k)));
@@ -2394,6 +2396,40 @@ document.addEventListener('submit', async (e) => {
   f.hidden = true;
   f.closest('.card').querySelector('[data-pw-open]').hidden = false;
   say('Password changed. Your other devices are signed out.', true);
+});
+
+// Settings: add or remove a player whose games aren't recorded for Escape or Rhap (publicPlayersCard). The whole list is
+// saved each time. A name is matched to its botc.app account from the games, where there's one.
+// The message under the list is kept in state.publicMsg, so the redraw after the next download doesn't wipe it.
+const sayPublic = (text, ok) => { state.publicMsg = { text, ok }; const m = $('#public-msg'); if (m) { m.className = `msg ${ok ? 'ok' : 'err'}`; m.textContent = text; } };
+async function savePublicPlayers(players, done) {
+  const r = await setPublicPlayers(state.settings, players).catch((err) => ({ ok: false, message: err.message }));
+  if (!r.ok) return sayPublic(r.message || 'Couldn\'t save the list.', false);
+  state.publicPlayers = r.publicPlayers;
+  state.publicMsg = { text: done ? 'Added.' : 'Removed.', ok: true };
+  if (done) done();
+  render();
+  syncShared();
+}
+document.addEventListener('submit', (e) => {
+  const form = e.target.closest('[data-public-add]');
+  if (!form) return;
+  e.preventDefault();
+  const input = form.querySelector('input');
+  const name = input.value.trim();
+  if (!name) return;
+  const n = name.toLowerCase();
+  const known = [...everyone].find((k) => !k.startsWith('name:') && nameOf(k).toLowerCase() === n);
+  const list = state.publicPlayers || [];
+  if (list.some((p) => (known && p.id === known) || p.name.toLowerCase() === n)) return sayPublic(`${name} is already on the list.`, false);
+  savePublicPlayers([...list, { id: known || '', name: known ? nameOf(known) : name }], () => { input.value = ''; });
+});
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-public-remove]');
+  if (!b) return;
+  const list = [...(state.publicPlayers || [])];
+  list.splice(Number(b.dataset.publicRemove), 1);
+  savePublicPlayers(list);
 });
 
 async function loadAccounts() {
