@@ -1,19 +1,19 @@
-import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=6ead18c787';
-import { predictOutcome, tuneOutcomeModel } from './insights.js?v=6ead18c787';
-import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=6ead18c787';
-import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=6ead18c787';
-import { communityMembers } from './members.js?v=6ead18c787';
-import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=6ead18c787';
-import { renderData, handleDataClick, handleImport } from './dataview.js?v=6ead18c787';
-import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=6ead18c787';
-import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=6ead18c787';
-import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=6ead18c787';
-import { renderGrimoire } from './grimoire.js?v=6ead18c787';
-import { makeImages } from './images.js?v=6ead18c787';
-import { characterToken, installTokenStyle } from './tokens.js?v=6ead18c787';
-import { multiSelect } from './multiselect.js?v=6ead18c787';
-import { ALL_CHARACTERS } from './characters.js?v=6ead18c787';
-import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities, setPublicPlayers } from './data.js?v=6ead18c787';
+import { filterGames, overview, distinct, playerKey, displayNames, useDisplayNames, storytellerKeys, withCurrentSeats } from './stats.js?v=9b448fc93a';
+import { predictOutcome, tuneOutcomeModel } from './insights.js?v=9b448fc93a';
+import { TYPES, emptySelection, hasSelection, selectGames, holds, focusSeats, outcome, seatStats, characterTable, companions, countEffect, relations, groupRelations, nominationStats, playerTable, tokenDraws } from './insights.js?v=9b448fc93a';
+import { communityConfig, communityName, gameCommunity, NONE, DEFAULTS } from './communities.js?v=9b448fc93a';
+import { communityMembers } from './members.js?v=9b448fc93a';
+import { esc, pct, cap, plural, fmtDate, fmtTime, phaseLabel, teamLabel, teamOne, asType, isEvilTeam, playerLink as uiPlayerLink, charLink, typeLink, rateCell, delta, splitBars, legendGE, tile, card, table, pie, rings, rangeBar, fitted } from './ui.js?v=9b448fc93a';
+import { renderData, handleDataClick, handleImport } from './dataview.js?v=9b448fc93a';
+import { playstyles, awardRate, AWARD_PRIOR_GAMES, AWARD_MIN_GAMES } from './playstyles.js?v=9b448fc93a';
+import { tableTalk, nominationPairs, votePairs, enemies, allies, ENEMY_MIN_GAMES, MEASURES } from './tabletalk.js?v=9b448fc93a';
+import { talkCell, playstyleBars, talkChartCard, talkChartBody, talkChartSub, talkCandidates, TOP_N, scatterCard, scatterSvg, scatterPick, SCATTER_MAX, SCATTER_DEFAULT, madlib, ASKED_SIDES } from './tabletalkview.js?v=9b448fc93a';
+import { renderGrimoire } from './grimoire.js?v=9b448fc93a';
+import { makeImages } from './images.js?v=9b448fc93a';
+import { characterToken, installTokenStyle } from './tokens.js?v=9b448fc93a';
+import { multiSelect } from './multiselect.js?v=9b448fc93a';
+import { ALL_CHARACTERS } from './characters.js?v=9b448fc93a';
+import { WEB, hasChrome, kv, creds, siteUrl, loadShared, refreshShared, mergeGames, dropLocalTwins, checkKey, sharedEdit, sharedDelete, webAuth, cacheClear, canReadWith, signUp, signIn, peekGames, whoAmI, changePassword, listAccounts, resetPassword, deleteAccount, claimPlayer, unclaimPlayer, removeClaim, setPrivate, saveCommunities, setPublicPlayers } from './data.js?v=9b448fc93a';
 
 // ---------- storage adapter (chrome.storage in the extension; localStorage on the website) ----------
 const api = {
