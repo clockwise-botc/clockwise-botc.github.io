@@ -233,8 +233,11 @@ export function scatterSvg(talk, view, h) {
       break;
     }
   }
+  // A dot's tip leads with the player's own rate, which is what its counts work out to; the weighted rate the dot is
+  // placed by comes after (the card's ⓘ says what "weighted" means).
+  const tipLine = (m, r, t) => `${m.label}: ${r.raw === null ? '–' : m.fmt(r.raw)} (${m.counts(t)}; weighted ${m.fmt(r.value)})`;
   for (const q of P) {
-    const tip = `${q.p.name}${q.me ? ' (you)' : ''}${view.side === 'all' ? '' : `, ${sideWords(view.side)}`}\n${mx.label}: ${mx.fmt(q.p.rates[S.x].value)} (${mx.counts(q.p.t)})\n${my.label}: ${my.fmt(q.p.rates[S.y].value)} (${my.counts(q.p.t)})\n${plural(q.p.games, 'game')}${q.p.listed ? '' : ', few games'}`;
+    const tip = `${q.p.name}${q.me ? ' (you)' : ''}${view.side === 'all' ? '' : `, ${sideWords(view.side)}`}\n${tipLine(mx, q.p.rates[S.x], q.p.t)}\n${tipLine(my, q.p.rates[S.y], q.p.t)}\n${plural(q.p.games, 'game')}${q.p.listed ? '' : ', few games'}`;
     dots += `<g class="sc-pt${q.me ? ' me' : ''}" data-add-player="${esc(q.p.key)}" data-tip="${esc(tip)}"><circle cx="${f1(q.x)}" cy="${f1(q.y)}" r="${13 * k}" fill="transparent"/><circle cx="${f1(q.x)}" cy="${f1(q.y)}" r="${f1((q.me ? 8 : 6.5) * k)}"/></g>`;
   }
   const aria = `${S.xTitle} against ${S.yTitle.toLowerCase()} for ${plural(pts.length, 'player')}${view.side === 'all' ? '' : ` ${sideWords(view.side)}`}`;
@@ -245,11 +248,14 @@ export function scatterCard(talk, view, h) {
   const sub = view.kind === 'noms'
     ? 'Each dot represents a player. Further right means they nominate more often; higher means a larger share of their nominations target the opposing team.'
     : 'Each dot represents a player. Further right means they vote more often; higher means a larger share of their votes target the opposing team.';
+  // What "weighted" in a dot's tip means, once, at the end of the sentence saying what the chart shows.
+  const weighted = "Dots are placed by a weighted rate: each player's own rate blended with the group average. The less data a player has, the closer their dot sits to the average, so a few votes or nominations can't put someone at the edge of the chart. Hover over a dot for their own numbers.";
+  const info = ` <span class="info" data-tip="${esc(weighted)}" aria-label="${esc(weighted)}">ⓘ</span>`;
   // "Show players": one dropdown with 20 across the chart, all of them, or "Choose players…" (the same dropdown
   // then lists players to tick).
   const control = '<div class="ctl-row"><span class="ctl-label">Show</span><div class="ctl-ms wide" data-ms-scatter></div></div>';
   // "How often do players [nominate] the opposing team [across all games]?"
   const sides = [['all', 'across all games'], ['good', 'when good'], ['evil', 'when evil']];
   const question = `How often do players ${madlib('data-scatter-kind', [['noms', 'nominate'], ['votes', 'vote for']], view.kind, 'Nominations or votes')} the opposing team ${madlib('data-scatter-side', sides, view.side, 'Which games')}?`;
-  return card(question, sub, `${control}<p class="tt-note small muted" id="sc-note" hidden></p><div class="sc-wrap" id="sc-body">${scatterSvg(talk, view, h)}</div>`, 'wide sc-card');
+  return card(question, sub + info, `${control}<p class="tt-note small muted" id="sc-note" hidden></p><div class="sc-wrap" id="sc-body">${scatterSvg(talk, view, h)}</div>`, 'wide sc-card');
 }
