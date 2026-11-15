@@ -377,6 +377,7 @@ details.game .body > * { min-width: 0; }
 .token-card h3 { align-self: stretch; text-align: left; }
 /* The ⓘ after a card's heading: small, muted, the same on every card. */
 .token-card .info, .card > h3 .info { cursor: help; color: var(--muted); font-family: var(--sans); font-size: 14px; font-weight: 400; vertical-align: 2px; }
+.card > .sub .info { cursor: help; color: var(--muted); }
 .token-card p { margin: 14px 0 0; color: var(--ink-2); }
 .tok-body { flex: 1; align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-bottom: 8px; }
 .toggle.small { padding: 3px 10px; font-size: 12px; }
