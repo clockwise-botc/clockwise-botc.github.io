@@ -69,7 +69,9 @@ function sheetStore_() {
   var store = {
     batch: function (fn) {
       var lock = LockService.getScriptLock();
-      lock.waitLock(30000);
+      // Waited too long for another upload to finish (several recorders sending the same game at once): marked busy,
+      // so the backup keeps the upload without telling editors the Sheet can't be written.
+      try { lock.waitLock(30000); } catch (e) { var busy = new Error(String((e && e.message) || e)); busy.busy = true; throw busy; }
       try { fn(); SpreadsheetApp.flush(); } finally { lock.releaseLock(); }
     },
     isDeleted: function (id) { return id in gone; },

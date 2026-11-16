@@ -19,7 +19,9 @@ export function memoryStore() {
   const store = {
     tables: null,
     failWrites: false,
-    batch: (fn) => fn(),
+    // busy: act like another upload holding the lock for too long, for this many waits.
+    busy: 0,
+    batch: (fn) => { if (store.busy > 0 && store.busy--) throw Object.assign(new Error('Lock timeout: another process was holding the lock for too long.'), { busy: true }); return fn(); },
     locked: (fn) => fn(),
     flushSheet: () => writing(),
     packValue: (obj) => JSON.stringify(obj),
@@ -105,7 +107,8 @@ export function loadSheetsBackend() {
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) || null, setProperty: (k, v) => props.set(k, v), deleteProperty: (k) => props.delete(k) }) },
     CacheService: { getScriptCache: () => ({ get: (k) => cacheMap.get(k) || null, put: (k, v) => cacheMap.set(k, v), remove: (k) => cacheMap.delete(k) }) },
     SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: (n) => sheets.get(n) || null, insertSheet: makeSheet }), flush: () => {} },
-    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    // store.busy: another upload holds the lock for too long, for this many waits.
+    LockService: { getScriptLock: () => ({ waitLock: () => { if (store.busy > 0 && store.busy--) throw new Error('Lock timeout: another process was holding the lock for too long.'); }, releaseLock: () => {} }) },
     Utilities: {
       newBlob: (data, type) => blob(typeof data === 'string' ? Buffer.from(data, 'utf8') : data, type),
       gzip: (b) => blob(zlib.gzipSync(b.bytes), 'application/x-gzip'),
@@ -121,7 +124,7 @@ export function loadSheetsBackend() {
   const count = () => { const sh = sheets.get('records'); return sh ? sh.getRange(2, 1, Math.max(sh.getLastRow() - 1, 1), 1).getValues().filter((r) => r[0]).length : 0; };
   // Each request gets a fresh store, like each Apps Script execution.
   const tableRows = (name) => { const sh = sheets.get(name); return sh && sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().filter((r) => r[0]) : []; };
-  const store = { count, get tables() { return { games: tableRows('games'), game_players: tableRows('game_players') }; } };
+  const store = { busy: 0, count, get tables() { return { games: tableRows('games'), game_players: tableRows('game_players') }; } };
   return { handle: (body, keys, now = Date.now()) => ctx.handle_(JSON.parse(JSON.stringify(body)), ctx.sheetStore_(), keys, now), store, sheets, ctx,
     setReadOnly: (on) => { readOnly = !!on; }, props };
 }

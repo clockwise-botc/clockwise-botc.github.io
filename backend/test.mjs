@@ -190,6 +190,29 @@ check('backup: the next upload that works moves in everything waiting straight a
   assert.equal(handle({ action: 'read', key: 'editor-key' }, keys, 3000).storeProblem, null);
 });
 
+check('backup: an upload that waited too long for others is kept and moved in, without telling editors', () => {
+  const b = loadBackend();
+  const { handle, store } = b;
+  const readOnly = (on) => (b.setReadOnly ? b.setReadOnly(on) : (b.store.failWrites = on));
+  handle({ action: 'record', key: 'write-key', games: [games[0]] }, keys, 1000);
+  store.busy = 1; // the next upload waits too long, then it's free
+  const up = handle({ action: 'record', key: 'write-key', games: [games[1]] }, keys, 2000);
+  assert.deepEqual(up.queued, [games[1].id]);
+  const read = handle({ action: 'read', key: 'editor-key' }, keys, 3000);
+  assert.ok(read.games.find((x) => x.id === games[1].id), 'waiting game is shown');
+  assert.equal(read.storeProblem, null, 'no banner for a busy moment');
+  handle({ action: 'read', key: 'editor-key' }, keys, 2000 + 11 * 60e3);
+  assert.equal(store.count(), 2);
+  // A real write failure on top of it still tells editors.
+  store.busy = 1; // the next upload waits too long, then it's free
+  handle({ action: 'record', key: 'write-key', games: [games[1]] }, keys, 3e6);
+  readOnly(true);
+  handle({ action: 'record', key: 'write-key', games: [games[0]] }, keys, 3e6 + 1);
+  const ed = handle({ action: 'read', key: 'editor-key' }, keys, 3e6 + 2).storeProblem;
+  assert.equal(ed.games, 2);
+  assert.match(ed.error, /permission/);
+});
+
 check('deleted games stay deleted, and readers are told', () => {
   const { handle, store } = loadBackend();
   handle({ action: 'record', key: 'write-key', games: [full, games[1]] }, keys, 1);

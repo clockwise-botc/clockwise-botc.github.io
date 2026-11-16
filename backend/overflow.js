@@ -1,7 +1,8 @@
 // A backup for uploads while the Google Sheet can't be written (say the owner's Google storage is full, which makes
 // it read-only). Each upload that can't be saved is kept in Script properties, which don't count towards Google
 // storage: as it arrived, one per game and recorder (the latest). Reads include those games meanwhile, so nobody misses
-// them, and editors are told. Once the Sheet takes writes again (the next upload that works, or a read at most every
+// them, and editors are told (unless the only trouble was waiting too long for other uploads of the same moment: `busy`,
+// which sorts itself out). Once the Sheet takes writes again (the next upload that works, or a read at most every
 // OVERFLOW_RETRY_MS_), the uploads are replayed into it in the order they came, as if they'd arrived then, and the
 // backup is cleared. Script properties hold 500 KB in all and 9 KB each; a game is 2–4 KB packed.
 
@@ -9,7 +10,8 @@ var OVERFLOW_MAX_BYTES_ = 400000;
 var OVERFLOW_MAX_ITEM_ = 8500;
 var OVERFLOW_RETRY_MS_ = 10 * 60 * 1000;
 
-// { since: when the first upload was kept, triedAt: last try at the Sheet, error, items: { key: { id, bytes, at } } }
+// { since: when the first upload was kept, triedAt: last try at the Sheet, error (the last one that wasn't busy),
+//   items: { key: { id, bytes, at, busy } } }
 function overflowIndex_(store) {
   try { var ix = JSON.parse(store.getValue('overflow') || '{}'); ix.items = ix.items || {}; return ix; } catch (e) { return { items: {} }; }
 }
@@ -27,13 +29,14 @@ function overflowPut_(store, games, now, error) {
       var packed = store.packValue(g), before = ix.items[key] ? ix.items[key].bytes : 0;
       if (packed.length > OVERFLOW_MAX_ITEM_ || total - before + packed.length > OVERFLOW_MAX_BYTES_) { refused.push(g.id); return; }
       store.setValue(key, packed);
-      ix.items[key] = { id: g.id, bytes: packed.length, at: now };
+      var wasProblem = ix.items[key] && !ix.items[key].busy;
+      ix.items[key] = { id: g.id, bytes: packed.length, at: now, busy: !!(error && error.busy) && !wasProblem };
       total += packed.length - before;
       queued.push(g.id);
     });
     if (!ix.since) ix.since = now;
     ix.triedAt = now;
-    ix.error = String((error && error.message) || error || '').slice(0, 200);
+    if (!(error && error.busy)) ix.error = String((error && error.message) || error || '').slice(0, 200);
     store.setValue('overflow', JSON.stringify(ix));
     return { queued: queued, refused: refused };
   });
@@ -74,7 +77,10 @@ function overflowFlush_(store, now, force) {
       if (ids.length) store.refreshTables(ids);
       store.flushSheet();
     } catch (e) {
-      ix.error = String((e && e.message) || e).slice(0, 200);
+      if (!(e && e.busy)) {
+        ix.error = String((e && e.message) || e).slice(0, 200);
+        Object.keys(ix.items).forEach(function (key) { ix.items[key].busy = false; });
+      }
       store.setValue('overflow', JSON.stringify(ix));
       return false;
     }
@@ -84,7 +90,8 @@ function overflowFlush_(store, now, force) {
   });
 }
 
-// What a read adds: the waiting games as this viewer would see them, and (for editors) how full the backup is.
+// What a read adds: the waiting games as this viewer would see them, and (for editors) how full the backup is: only
+// when something's waiting because the Sheet couldn't be written, not just because it was busy (status null).
 function overflowView_(store, byPlayer, viewer) {
   var ix = overflowIndex_(store);
   if (!Object.keys(ix.items).length) return null;
@@ -94,8 +101,9 @@ function overflowView_(store, byPlayer, viewer) {
     var seen = viewGame_(overflowRecord_(store, id, uploads[id]), store.getEdit(id), byPlayer, viewer);
     if (seen) games.push(seen);
   });
+  var problem = Object.keys(ix.items).some(function (key) { return !ix.items[key].busy; });
   return {
     games: games,
-    status: { games: Object.keys(uploads).length, bytes: overflowBytes_(ix), maxBytes: OVERFLOW_MAX_BYTES_, since: ix.since || null, error: ix.error || '' },
+    status: !problem ? null : { games: Object.keys(uploads).length, bytes: overflowBytes_(ix), maxBytes: OVERFLOW_MAX_BYTES_, since: ix.since || null, error: ix.error || '' },
   };
 }
